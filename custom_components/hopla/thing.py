@@ -78,6 +78,11 @@ class HoplaThingBase(Entity):
             "model": "Things",
         }
 
+    async def async_added_to_hass(self) -> None:
+        """Re-read the state whenever Hopla reports changes."""
+        self.async_on_remove(self._coordinator.async_add_listener(
+            lambda: self.async_schedule_update_ha_state(True)))
+
     async def async_update(self) -> None:
         """Update the entity state."""
         try:

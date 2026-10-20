@@ -174,6 +174,9 @@ class HoplaTask:
     timer_updated_at: Optional[datetime] = None
     assignee_ids: Optional[List[int]] = None
     points: Optional[int] = None
+    notification: bool = False
+    # Reminder offsets from the due date: [{"value": -30, "unit": "m"}, ...]
+    reminder_templates: Optional[List[dict]] = None
 
     @property
     def interval_type(self) -> Optional[str]:
@@ -183,6 +186,12 @@ class HoplaTask:
         unit = self.frequency_metadata.get("unit")
         return unit if isinstance(unit, str) and unit else None
     
+    @staticmethod
+    def reminder_templates_from(metadata: Any) -> List[dict]:
+        """Return a task's reminder offsets, ignoring malformed metadata."""
+        templates = metadata.get("templates") if isinstance(metadata, dict) else None
+        return [template for template in templates or [] if isinstance(template, dict)]
+
     @classmethod
     def from_json(cls, data: dict) -> "HoplaTask":
         """Create a HoplaTask from JSON data."""
@@ -217,6 +226,8 @@ class HoplaTask:
             start_time=_parse_datetime(data.get("startTime")),
             timer_updated_at=_parse_datetime(data.get("timerUpdatedAt")),
             points=data.get("points"),
+            notification=bool(data.get("notification")),
+            reminder_templates=cls.reminder_templates_from(data.get("notificationMetadata")),
         )
     
     @classmethod

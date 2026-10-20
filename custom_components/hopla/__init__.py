@@ -2,22 +2,26 @@
 import logging
 from datetime import timedelta
 import voluptuous as vol
-from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
+from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse, callback
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.exceptions import HomeAssistantError
-from .const import DOMAIN, CONF_URL, CONF_TOKEN, CONF_SHOW_DUE_IN, CONF_REFRESH_INTERVAL, DEFAULT_REFRESH_INTERVAL
+from .const import DOMAIN, CONF_URL, CONF_TOKEN, CONF_SHOW_DUE_IN, LIVE_REFRESH_INTERVAL, OFFLINE_REFRESH_INTERVAL
 from .api import HoplaApiClient
 from .frontend import async_setup_frontend
 from .completion_history import async_completed_occurrences
-from .approval import ApprovalTracker, STATUS_PENDING_APPROVAL, pending_approvals
+from .approval import ApprovalTracker, STATUS_PENDING_APPROVAL, pending_approvals, member_name
+from .realtime import RealtimeListener
+from .reminders import ReminderScheduler
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.TODO, Platform.SENSOR, Platform.SWITCH, Platform.NUMBER, Platform.TEXT, Platform.CALENDAR]
 
+EVENT_TASK_COMPLETED = "hopla_task_completed"
 
 SERVICE_COMPLETE_TASK = "complete_task"
 SERVICE_CREATE_TASK = "create_task"
@@ -98,10 +102,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         session,
     )
 
-    refresh_interval_seconds = entry.data.get(CONF_REFRESH_INTERVAL, DEFAULT_REFRESH_INTERVAL)
     # Updated in place so entities holding this list see points and photos change.
     circle_members = []
     approvals = ApprovalTracker(hass.bus.async_fire)
+    reminders = ReminderScheduler(
+        lambda when, action: async_track_point_in_utc_time(hass, callback(action), when),
+        hass.bus.async_fire,
+    )
+    entry.async_on_unload(reminders.cancel_all)
 
     async def async_update_tasks():
         tasks = await client.async_get_tasks()
@@ -117,6 +125,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.debug("Failed to refresh rewards: %s", err)
         coordinator.pending_approvals = pending_approvals(tasks, history, circle_members)
         approvals.update(coordinator.pending_approvals, entry.entry_id)
+        reminders.update(tasks, circle_members, entry.entry_id)
         return tasks
 
     coordinator = DataUpdateCoordinator(
@@ -124,11 +133,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER,
         name=f"{DOMAIN}_chores",
         update_method=async_update_tasks,
-        update_interval=timedelta(seconds=refresh_interval_seconds),
+        update_interval=timedelta(seconds=OFFLINE_REFRESH_INTERVAL),
     )
     coordinator.rewards = None
     coordinator.pending_approvals = []
     await coordinator.async_config_entry_first_refresh()
+
+    @callback
+    def live_status_changed(connected: bool) -> None:
+        coordinator.update_interval = timedelta(
+            seconds=LIVE_REFRESH_INTERVAL if connected else OFFLINE_REFRESH_INTERVAL)
+
+    @callback
+    def task_completed(details: dict) -> None:
+        hass.bus.async_fire(EVENT_TASK_COMPLETED, {
+            **details,
+            "completed_by_name": member_name(circle_members, details["completed_by"]),
+            "config_entry_id": entry.entry_id,
+        })
+
+    listener = RealtimeListener(
+        session, entry.data[CONF_URL], entry.data[CONF_TOKEN],
+        coordinator.async_request_refresh, live_status_changed, task_completed,
+    )
+    # Cancelled automatically when the entry unloads.
+    entry.async_create_background_task(hass, listener.run(), f"{DOMAIN}_live_updates")
 
     hass.data[DOMAIN][entry.entry_id] = {
         CONF_URL: entry.data[CONF_URL],
@@ -137,6 +166,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinator": coordinator,
         "client": client,
         "circle_members": circle_members,
+        "listener": listener,
     }
     
     # Register services before setting up platforms
