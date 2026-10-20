@@ -1,0 +1,14 @@
+{
+  "domain": "hopla",
+  "name": "Hopla",
+  "version": "0.1.0",
+  "documentation": "https://github.com/Nico87LBS/hopla-ha",
+  "issue_tracker": "https://github.com/Nico87LBS/hopla-ha/issues",
+  "dependencies": ["frontend"],
+  "codeowners": [
+    "@Nico87LBS"
+  ],
+  "requirements": [],
+  "iot_class": "local_polling",
+  "config_flow": true
+}

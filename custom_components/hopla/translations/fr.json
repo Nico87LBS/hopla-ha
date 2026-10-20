@@ -1,0 +1,47 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connexion à Hopla",
+        "description": "Configurer l'intégration Hopla",
+        "data": {
+          "url": "Adresse du serveur Hopla",
+          "token": "Jeton d'API"
+        }
+      },
+      "options": {
+        "title": "Organisation des tâches",
+        "description": "Choisissez comment afficher vos tâches Hopla dans Home Assistant",
+        "data": {
+          "show_due_in": "Nombre de jours de tâches à venir à afficher",
+          "show_no_due_date": "Afficher les tâches sans échéance",
+          "create_unified_list": "Créer la liste « Toutes les tâches »",
+          "create_project_lists": "Créer une liste par projet",
+          "create_assignee_lists": "Créer une liste par personne",
+          "refresh_interval": "Intervalle d'actualisation"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossible de se connecter à Hopla",
+      "invalid_auth": "Authentification invalide",
+      "unknown": "Erreur inattendue"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options Hopla",
+        "description": "Ajuster les réglages de l'intégration Hopla",
+        "data": {
+          "show_due_in": "Nombre de jours de tâches à venir à afficher",
+          "show_no_due_date": "Afficher les tâches sans échéance",
+          "create_unified_list": "Créer la liste « Toutes les tâches »",
+          "create_project_lists": "Créer une liste par projet",
+          "create_assignee_lists": "Créer une liste par personne",
+          "refresh_interval": "Intervalle d'actualisation"
+        }
+      }
+    }
+  }
+}
