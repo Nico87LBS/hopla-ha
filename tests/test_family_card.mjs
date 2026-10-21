@@ -158,9 +158,15 @@ const withProgress = {...hass, states: {...hass.states,
   ]}}}};
 const progress = boardData(withProgress, {members: [2, 3]}, now);
 const elenaProgress = progress.members.find(m => m.id === 2);
-assert.deepEqual(elenaProgress.rank, {name: 'Hop Hop', icon: '🐸', level: 2, from: 100, next: {name: 'Super Hop', icon: '🦘', points: 300},
+assert.deepEqual(elenaProgress.rank, {name: 'Hop Hop', icon: '🐸', image: null, level: 2, from: 100, next: {name: 'Super Hop', icon: '🦘', points: 300},
   stars: 0, points: 140, starAt: 0});
 assert.equal(elenaProgress.earned, 140);
+// A drawn badge is kept only when the integration ships it.
+const withBadge = image => boardData({...withProgress, states: {...withProgress.states, 'sensor.hopla_points_elena': {
+  ...withProgress.states['sensor.hopla_points_elena'], attributes: {...withProgress.states['sensor.hopla_points_elena'].attributes, rank_image: image}}}},
+  {members: [2, 3]}, now).members.find(m => m.id === 2).rank.image;
+assert.equal(withBadge('hopla-2'), 'hopla-2');
+assert.equal(withBadge('../evil'), null);
 assert.deepEqual(elenaProgress.quests, [quest]);
 assert.equal(progress.members.find(m => m.id === 3).rank, null);
 assert.deepEqual(progress.challenges.map(c => c.id), [1], 'ended challenges and other members’ ones are left out');

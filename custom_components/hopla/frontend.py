@@ -13,9 +13,11 @@ CARD_FILE = FRONTEND_DIR / "hopla-user-todo-card.js"
 FAMILY_CARD_URL = "/hopla/hopla-family-card.js"
 FAMILY_CARD_FILE = FRONTEND_DIR / "hopla-family-card.js"
 CARDS = ((CARD_URL, CARD_FILE), (FAMILY_CARD_URL, FAMILY_CARD_FILE))
-# Shared by both cards: the translation helper and one text file per language.
+# Shared by both cards: the translation helper, one text file per language and
+# the drawn rank badges.
 SHARED = (("/hopla/hopla-i18n.js", FRONTEND_DIR / "hopla-i18n.js"),
-          ("/hopla/locales", FRONTEND_DIR / "locales"))
+          ("/hopla/locales", FRONTEND_DIR / "locales"),
+          ("/hopla/ranks", FRONTEND_DIR / "ranks"))
 DATA_FRONTEND = "hopla_frontend"
 
 
