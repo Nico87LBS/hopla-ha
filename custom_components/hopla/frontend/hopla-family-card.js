@@ -103,13 +103,17 @@ export function boardData(hass, config, now = new Date()) {
   let presetsEntry = null;
   let surprise = null;
   let period = null;
+  let challenges = [];
   for (const [id, state] of Object.entries(hass.states)) {
     if (!id.startsWith('sensor.') || !isHopla(hass, id)) continue;
     const a = state.attributes;
     if (a.hopla_member_id !== undefined) {
       members.push({id: a.hopla_member_id, name: a.display_name || a.friendly_name, role: a.role,
         picture: a.entity_picture || null, points: Number(state.state) || 0, recent: a.recent_completions || [],
-        streak: Number(a.streak) || 0, streakToday: a.streak_done_today === true});
+        streak: Number(a.streak) || 0, streakToday: a.streak_done_today === true,
+        rank: a.rank ? {name: a.rank, icon: a.rank_icon || '', level: Number(a.rank_level) || 1, from: Number(a.rank_points) || 0,
+          next: a.next_rank ? {name: a.next_rank, icon: a.next_rank_icon || '', points: Number(a.next_rank_points) || 0} : null} : null,
+        earned: Number(a.total_points) || 0, quests: Array.isArray(a.quests) ? a.quests : []});
     } else if (a.task_id !== undefined && a.is_active !== false) {
       // The state is the bare task name; friendly_name may carry the device name.
       tasks.push({id: a.task_id, entity: id, name: state.state || a.friendly_name, points: a.points,
@@ -118,6 +122,7 @@ export function boardData(hass, config, now = new Date()) {
     } else if (a.hopla_games) {
       surprise = a.surprise || null;
       period = a.bonus_period || null;
+      challenges = Array.isArray(a.challenges) ? a.challenges : [];
     } else if (Array.isArray(a.points_presets)) {
       presets = a.points_presets;
       presetsEntry = a.config_entry_id || null;
@@ -146,7 +151,9 @@ export function boardData(hass, config, now = new Date()) {
     .map(item => ({...item, member})))
     .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
   return {members: shown, tasks: visible, rows: taskRows(visible, done, shown), done, rewards: rewards || [], requests,
-    presets, presetsEntry, surprise, period};
+    presets, presetsEntry, surprise, period,
+    // Running challenges, and finished ones until their end date, for the members shown.
+    challenges: challenges.filter(c => new Date(c.ends_at) > now && c.members.some(id => shown.some(m => m.id === id)))};
 }
 
 const icon = {
@@ -161,6 +168,8 @@ const icon = {
   flame: '<path d="M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-5 3-6 0 2 1 3 2 3 0-4-1-6 1-9z" fill="currentColor"/>',
   sparkle: '<path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5l-2.2-6.3L3.5 10l6.3-1.7zM19 15l.9 2.6 2.6.9-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9z" fill="currentColor"/>',
   bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="currentColor"/>',
+  trophy: '<path d="M7 3h10v5a5 5 0 0 1-10 0zM7 5H3v2a4 4 0 0 0 4 4M17 5h4v2a4 4 0 0 1-4 4M12 13v4M8 21h8M9 17h6v4H9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+  flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>',
   hourglass: '<path d="M6 2h12M6 22h12M7 2c0 5 10 5 10 10S7 17 7 22M17 2c0 5-10 5-10 10s10 5 10 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
   cross: '<path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>',
   unlock: '<rect x="5" y="11" width="14" height="10" rx="2" fill="currentColor"/><path d="M8 11V8a4 4 0 0 1 7.5-2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
@@ -194,7 +203,7 @@ class HoplaFamilyCard extends HTMLElement {
     if (config.due && !['today', 'all'].includes(config.due)) throw new Error(this.t('errors.due'));
     if (config.members !== undefined && !Array.isArray(config.members)) throw new Error(this.t('errors.members'));
     if (config.labels !== undefined && !Array.isArray(config.labels)) throw new Error(this.t('errors.labels'));
-    this._config = {due: 'today', show_points: true, show_todo: true, show_done: true, show_rewards: true, show_approval: false, allow_redeem: false, show_bonus: true, ...config};
+    this._config = {due: 'today', show_points: true, show_todo: true, show_done: true, show_rewards: true, show_approval: false, allow_redeem: false, show_bonus: true, show_goals: true, ...config};
     this.render();
   }
   set hass(hass) {
@@ -310,7 +319,7 @@ class HoplaFamilyCard extends HTMLElement {
     const step = (group, rank) => {
       const size = rank === 0 ? 76 : 60;
       const faces = group.length
-        ? group.map(m => `<div class="podium-member">${rank === 0 && m.points > 0 ? `<span class="crown">${svg('crown', 30)}</span>` : ''}${this.face(m, size, rank === 0 && m.points > 0 ? ' leader' : '')}<div class="podium-name">${escape(m.name)}</div>${this.streak(m)}</div>`).join('')
+        ? group.map(m => `<div class="podium-member">${rank === 0 && m.points > 0 ? `<span class="crown">${svg('crown', 30)}</span>` : ''}${this.face(m, size, rank === 0 && m.points > 0 ? ' leader' : '')}<div class="podium-name">${escape(m.name)}</div>${this.rank(m)}${this.streak(m)}</div>`).join('')
         : `<div class="podium-member"><span class="face empty" style="width:${size}px;height:${size}px"></span><div class="podium-name">&nbsp;</div></div>`;
       const score = group.length ? escape(this.t('common.pts', {count: group[0].points})) : '&nbsp;';
       return `<div class="podium-col rank${rank + 1}"><div class="podium-faces">${faces}</div><div class="podium-score">${score}</div><div class="step">${rank + 1}</div></div>`;
@@ -322,6 +331,34 @@ class HoplaFamilyCard extends HTMLElement {
     if (!member.streak) return '';
     const label = this.t('streak', {count: member.streak});
     return `<div class="streak${member.streakToday ? '' : ' at-risk'}" title="${escape(member.streakToday ? label : `${label} · ${this.t('streak_at_risk')}`)}">${svg('flame', 14)}${member.streak}</div>`;
+  }
+  rank(member) {
+    if (!member.rank) return '';
+    const {rank} = member;
+    const pct = rank.next ? Math.min(100, Math.round(100 * (member.earned - rank.from) / Math.max(1, rank.next.points - rank.from))) : 100;
+    const title = rank.next ? this.t('rank_next', {count: rank.next.points - member.earned, name: `${rank.next.icon} ${rank.next.name}`}) : this.t('rank_top');
+    return `<div class="rank" title="${escape(title)}"><span>${escape(`${rank.icon} ${rank.name}`.trim())}</span><span class="bar"><i style="width:${pct}%"></i></span></div>`;
+  }
+  gauge(value, target, done) {
+    const pct = done ? 100 : Math.min(100, Math.round(100 * value / Math.max(1, target)));
+    return `<span class="gauge${done ? ' full' : ''}"><i style="width:${pct}%"></i></span><span class="gauge-n">${Math.min(value, target)}/${target}</span>`;
+  }
+  renderChallenges(challenges, members) {
+    const byId = new Map(members.map(m => [m.id, m]));
+    return challenges.map(c => {
+      const reward = c.reward_text ? `<div class="goal-reward">${svg('gift', 14)}${escape(this.t(c.done ? 'goal_won' : 'goal_to_win', {reward: c.reward_text}))}</div>` : '';
+      const end = c.done ? '' : `<span class="period-end">${escape(this.t('period_left', {time: this.duration(new Date(c.ends_at))}))}</span>`;
+      const lines = c.shared
+        ? `<div class="goal-line"><span class="goal-faces">${c.members.map(id => byId.get(id)).filter(Boolean).map(m => this.face(m, 26)).join('')}</span>${this.gauge(c.total, c.target, c.done)}</div>`
+        : c.members.map(id => byId.get(id)).filter(Boolean).map(m => `<div class="goal-line">${this.face(m, 26)}${this.gauge(c.progress[m.id] || 0, c.target, c.winners.includes(m.id))}</div>`).join('');
+      return `<div class="goal${c.done ? ' done' : ''}"><div class="goal-head">${svg('trophy', 18)}<b>${escape(c.name)}</b>${c.shared ? `<span class="goal-tag">${escape(this.t('goal_family'))}</span>` : ''}${end}</div>${lines}${reward}</div>`;
+    }).join('');
+  }
+  renderQuests(members) {
+    const rows = members.flatMap(m => m.quests.map(q => ({...q, member: m})));
+    if (!rows.length) return '';
+    return `<section>${this.header('flag', 'quest', this.t('quests'), rows.filter(q => !q.done).length)}${rows.map(q =>
+      `<div class="row quest${q.done ? ' is-done' : ''}">${this.face(q.member, 32)}<span class="name">${escape(q.name)}</span>${this.gauge(q.progress, q.target, q.done)}${q.reward ? `<span class="pts bonus">+${q.reward}</span>` : ''}</div>`).join('')}</section>`;
   }
   renderPeriod(period) {
     if (!period) return '';
@@ -490,6 +527,24 @@ class HoplaFamilyCard extends HTMLElement {
       .period { display: flex; align-items: center; gap: 8px; margin: 0 0 18px; padding: 10px 14px; border-radius: 14px;
         background: rgba(245,180,0,.16); color: #8a5a00; font-size: 15px; }
       .period-end { margin-left: auto; font-size: 13px; white-space: nowrap; }
+      .rank { display: flex; flex-direction: column; align-items: center; gap: 3px; margin-top: 2px; font-size: 12px; font-weight: 700; color: var(--secondary-text-color); }
+      .rank .bar { width: 56px; height: 4px; border-radius: 2px; background: var(--dt-line); overflow: hidden; }
+      .rank .bar i, .gauge i { display: block; height: 100%; background: var(--dt-ring); border-radius: inherit; }
+      .gauge { flex: 1; min-width: 60px; height: 8px; border-radius: 4px; background: var(--dt-line); overflow: hidden; }
+      .gauge.full i { background: var(--dt-green); }
+      .gauge-n { font-size: 13px; font-weight: 700; color: var(--secondary-text-color); white-space: nowrap; }
+      .goal { margin: 0 0 18px; padding: 12px 14px; border-radius: 14px; background: rgba(245,180,0,.1); border: 1px solid rgba(245,180,0,.35); }
+      .goal.done { background: rgba(30,142,62,.1); border-color: rgba(30,142,62,.35); }
+      .goal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: #a87300; }
+      .goal.done .goal-head { color: var(--dt-green); }
+      .goal-head b { color: var(--primary-text-color); }
+      .goal-tag { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(245,180,0,.2); }
+      .goal-line { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+      .goal-faces { display: flex; } .goal-faces .face + .face { margin-left: -8px; }
+      .goal-reward { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 14px; font-weight: 600; }
+      .row.quest .name { flex: 1 1 40%; } .row.quest .gauge { flex: 1 1 30%; }
+      .row.quest.is-done { opacity: .7; }
+      .head.quest { border-color: #e8590c; } .head-icon.quest { background: rgba(232,89,12,.12); color: #e8590c; } .count.quest { color: #e8590c; }
       .faces { display: flex; gap: 8px; margin-left: 6px; justify-content: flex-end; align-items: center; padding: 6px 0; }
       .slot { position: relative; display: block; line-height: 0; margin: 0 2px; }
       button { font: inherit; color: inherit; cursor: pointer; border: none; background: none; padding: 0; }
@@ -531,8 +586,10 @@ class HoplaFamilyCard extends HTMLElement {
       ${this.renderParentButton()}${this.renderPinPad()}
       ${this._config.show_points && data.members.length ? this.renderPodium(data.members) : ''}
       ${this.renderPeriod(data.period)}
+      ${this._config.show_goals ? this.renderChallenges(data.challenges, data.members) : ''}
       ${this._config.show_todo ? `<section>${this.header('todo', 'todo', title, data.rows.length)}
         ${data.rows.length ? data.rows.map(row => this.renderTask(row)).join('') : `<div class="empty-text">${escape(empty)}</div>`}</section>` : ''}
+      ${this._config.show_goals ? this.renderQuests(data.members) : ''}
       ${done.length ? `<section>${this.header('check', 'done', this.t('done'), done.length)}${done.map(item => this.renderDone(item)).join('')}</section>` : ''}
       ${rewards.length ? `<section>${this.header('gift', 'gift', this.t('rewards'), rewards.length)}${rewards.map(r => this.renderReward(r, data.members, data.requests)).join('')}</section>` : ''}
       ${presets.length ? `<section>${this.header('plusminus', 'bonus', this.t('bonus_title'), presets.length)}${presets.map(p => this.renderPreset(p, data.members)).join('')}</section>` : ''}
@@ -582,8 +639,9 @@ class HoplaFamilyCardEditor extends HTMLElement {
       {name: 'show_approval', selector: {boolean: {}}},
       {name: 'allow_redeem', selector: {boolean: {}}},
       {name: 'show_bonus', selector: {boolean: {}}},
+      {name: 'show_goals', selector: {boolean: {}}},
     ];
-    this._form.data = {due: 'today', show_points: true, show_todo: true, show_done: true, show_rewards: true, show_approval: false, allow_redeem: false, show_bonus: true,
+    this._form.data = {due: 'today', show_points: true, show_todo: true, show_done: true, show_rewards: true, show_approval: false, allow_redeem: false, show_bonus: true, show_goals: true,
       ...this._config, members: (this._config.members || []).map(String)};
   }
 }

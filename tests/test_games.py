@@ -91,5 +91,69 @@ class GamesTodayTests(unittest.TestCase):
         self.assertEqual(fired[0][1]["config_entry_id"], "entry")
 
 
+def progress(level=1, quest_done=False, solo_winners=(), goal_done=False, total=20):
+    rank = [{"name": "Petit Hop", "icon": "🐣", "minPoints": 0}, {"name": "Hop Hop", "icon": "🐸", "minPoints": 100},
+            {"name": "Super Hop", "icon": "🦘", "minPoints": 300}]
+    return {**TODAY,
+            "members": [{"userId": 2, "earned": 120 if level == 2 else 40, "level": level, "rank": rank[level - 1],
+                         "next": rank[level], "quests": [
+                             {"id": 7, "name": "Mettre la table", "kind": "tasks", "choreId": 11, "period": "week",
+                              "target": 5, "progress": 5 if quest_done else 3, "reward": 8,
+                              "completedAt": "2026-10-21T08:00:00Z" if quest_done else None,
+                              "endsAt": "2026-10-26T00:00:00+02:00"}]}],
+            "challenges": [
+                {"id": 1, "name": "Piscine", "kind": "points", "target": 200, "shared": True, "members": [1, 2],
+                 "progress": {"1": 5, "2": total - 5}, "total": total, "reward": 0, "rewardText": "Sortie piscine",
+                 "startsAt": "2026-10-20T00:00:00Z", "endsAt": "2026-10-30T00:00:00Z",
+                 "completedAt": "2026-10-22T00:00:00Z" if goal_done else None, "winners": [1, 2] if goal_done else []},
+                {"id": 2, "name": "Chambre", "kind": "tasks", "choreId": 10, "target": 3, "shared": False,
+                 "members": [2], "progress": {"2": 1}, "total": 1, "reward": 5, "rewardText": "",
+                 "startsAt": "2026-10-20T00:00:00Z", "endsAt": "2026-10-30T00:00:00Z", "completedAt": None,
+                 "winners": list(solo_winners)},
+            ]}
+
+
+class ProgressionTests(unittest.TestCase):
+    def test_shape(self):
+        today = games.games_today(progress())
+        self.assertEqual(today["ranks"][2], {"level": 1, "name": "Petit Hop", "icon": "🐣", "earned": 40, "min_points": 0,
+                                             "next_name": "Hop Hop", "next_icon": "🐸", "next_points": 100})
+        quest = today["quests"][2][0]
+        self.assertEqual((quest["task_id"], quest["progress"], quest["target"], quest["done"]), (11, 3, 5, False))
+        goal, solo = today["challenges"]
+        self.assertEqual(goal["progress"], {1: 5, 2: 15})
+        self.assertEqual(goal["reward_text"], "Sortie piscine")
+        self.assertFalse(goal["done"])
+        self.assertIsNone(solo["reward_text"])
+        quiet = games.games_today({"rules": {}})
+        self.assertEqual((quiet["ranks"], quiet["quests"], quiet["challenges"]), ({}, {}, []))
+
+    def test_events(self):
+        fired = []
+        tracker = games.GamesTracker(lambda event, data: fired.append((event, data)))
+        tracker.update(games.games_today(progress()), "entry", MEMBERS)
+        tracker.update(games.games_today(progress(level=2, quest_done=True, solo_winners=[2], goal_done=True, total=200)),
+                       "entry", MEMBERS)
+        events = {event: data for event, data in fired}
+        self.assertEqual(list(events), [games.EVENT_RANK_UP, games.EVENT_QUEST_COMPLETED, games.EVENT_CHALLENGE_WON,
+                                        games.EVENT_GOAL_REACHED])
+        self.assertEqual(events[games.EVENT_RANK_UP]["name"], "Hop Hop")
+        self.assertEqual(events[games.EVENT_RANK_UP]["user_name"], "elena")
+        self.assertEqual(events[games.EVENT_QUEST_COMPLETED]["reward"], 8)
+        self.assertEqual(events[games.EVENT_CHALLENGE_WON]["name"], "Chambre")
+        self.assertEqual(events[games.EVENT_GOAL_REACHED]["member_names"], ["Nico", "elena"])
+        self.assertEqual(events[games.EVENT_GOAL_REACHED]["config_entry_id"], "entry")
+        fired.clear()
+        tracker.update(games.games_today(progress(level=2, quest_done=True, solo_winners=[2], goal_done=True, total=200)),
+                       "entry", MEMBERS)
+        self.assertEqual(fired, [], "each event fires once")
+
+    def test_the_first_refresh_only_records(self):
+        fired = []
+        tracker = games.GamesTracker(lambda event, data: fired.append(event))
+        tracker.update(games.games_today(progress(level=2, quest_done=True, goal_done=True)), "entry", MEMBERS)
+        self.assertEqual(fired, [])
+
+
 if __name__ == "__main__":
     unittest.main()

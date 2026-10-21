@@ -56,6 +56,13 @@ export default {
     period: 'Points ×{multiplier}',
     period_left: 'encore {time}',
     surprise: 'Tâche surprise : +{n} points en plus',
+    rank_next_one: 'Encore {count} point pour {name}',
+    rank_next_other: 'Encore {count} points pour {name}',
+    rank_top: 'Rang le plus haut atteint',
+    quests: 'Quêtes',
+    goal_family: 'En famille',
+    goal_to_win: 'À gagner : {reward}',
+    goal_won: 'Gagné : {reward} !',
     errors: {
       due: 'due doit valoir today ou all',
       members: 'members doit être une liste d’identifiants d’utilisateurs Hopla',
@@ -75,6 +82,7 @@ export default {
       show_approval: 'Afficher les boutons Valider et Refuser',
       allow_redeem: 'Permettre d’échanger les récompenses depuis la carte',
       show_bonus: 'Afficher les bonus et pénalités en mode parent',
+      show_goals: 'Afficher les quêtes et les défis',
     },
   },
   todo: {
