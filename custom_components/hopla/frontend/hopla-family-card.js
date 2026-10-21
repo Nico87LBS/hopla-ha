@@ -354,7 +354,7 @@ class HoplaFamilyCard extends HTMLElement {
         ? group.map(m => `<div class="podium-member">${rank === 0 && podiumScore(m) > 0 ? `<span class="crown">${svg('crown', 30)}</span>` : ''}<span class="podium-face">${this.face(m, size, rank === 0 && podiumScore(m) > 0 ? ' leader' : '')}${this.coin(m)}</span><div class="podium-name">${escape(m.name)}${this.streak(m)}</div>${this.rank(m)}</div>`).join('')
         : `<div class="podium-member"><span class="face empty" style="width:${size}px;height:${size}px"></span><div class="podium-name">&nbsp;</div></div>`;
       const score = group.length ? `<span class="score">${podiumScore(group[0])}</span><span class="unit">${escape(this.t('earned', {count: podiumScore(group[0])}))}</span>` : '';
-      return `<div class="podium-col rank${rank + 1}"><div class="podium-faces">${faces}</div><div class="step"><span class="place">${rank + 1}</span>${score}</div></div>`;
+      return `<div class="podium-col rank${rank + 1}"><div class="podium-faces">${faces}</div><div class="step">${score}</div></div>`;
     };
     const order = [[0], [1, 0], [1, 0, 2]][steps.length - 1];
     return `<div class="podium steps${steps.length}">${order.map(rank => step(steps[rank], rank)).join('')}</div>`;
@@ -393,8 +393,7 @@ class HoplaFamilyCard extends HTMLElement {
     const label = `${this.rankStars(rank)} ${rank.name}`.trim();
     return `<button class="rank" data-action="rank" data-member="${member.id}" title="${escape(title)}" aria-label="${escape(`${this.t('rank_open', {name: member.name})} · ${title}`)}">
       <span class="rank-chip">${rank.image || rank.icon ? this.rankBadge(rank, 30) : ''}<span>${escape(label)}</span></span>
-      <span class="rank-prog"><span class="bar"><i style="width:${pct}%"></i></span>${next}</span>
-      <span class="rank-left">${escape(rank.next || rank.starAt ? this.t('rank_left', {count: left}) : this.t('rank_max'))}</span></button>`;
+      <span class="rank-prog"><span class="bar"><i style="width:${pct}%"></i></span>${next}</span></button>`;
   }
   // The rank details, over the card: where the member stands and every rank.
   renderRankDetails(members, ladder) {
@@ -582,12 +581,11 @@ class HoplaFamilyCard extends HTMLElement {
       .coin svg { color: var(--dt-gold); }
       .podium-name { margin-top: 6px; font-weight: 700; font-size: 16px; display: flex; align-items: center; gap: 6px; }
       .step { width: 100%; margin-top: 10px; border-radius: 14px 14px 0 0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 800; }
-      .step .place { font-size: 12px; opacity: .6; }
       .step .score { font-size: 24px; line-height: 1; }
       .step .unit { font-size: 11px; font-weight: 700; opacity: .75; }
       .rank1 .step { height: 92px; background: rgba(245,180,0,.16); color: #a87300; } .rank1 .step .score { font-size: 26px; }
       .rank2 .step { height: 64px; background: rgba(59,111,216,.12); color: var(--dt-blue); }
-      .rank3 .step { height: 48px; background: rgba(160,110,70,.14); color: #8a6f57; } .rank3 .step .score { font-size: 18px; } .rank3 .step .place { display: none; }
+      .rank3 .step { height: 48px; background: rgba(160,110,70,.14); color: #8a6f57; } .rank3 .step .score { font-size: 18px; }
       section { margin-bottom: 20px; }
       .head { display: flex; align-items: center; gap: 10px; padding-bottom: 10px; border-bottom: 2px solid var(--dt-line); }
       .head.todo { border-color: var(--dt-blue); } .head.done { border-color: var(--dt-green); } .head.gift { border-color: #a87300; }
@@ -630,7 +628,6 @@ class HoplaFamilyCard extends HTMLElement {
       .rank-prog { display: flex; align-items: center; gap: 5px; }
       .bar { display: block; height: 8px; border-radius: 4px; background: var(--dt-line); overflow: hidden; }
       .rank-prog .bar { width: 92px; }
-      .rank-left { font-size: 12px; color: var(--secondary-text-color); }
       .bar i, .gauge i { display: block; height: 100%; background: var(--dt-ring); border-radius: inherit; }
       /* Fixed like HA's own dialogs: the card may be shorter than the details. */
       .rank-scrim { position: fixed; inset: 0; z-index: 10; background: rgba(20,18,30,.45); display: flex; align-items: center; justify-content: center; padding: 12px; box-sizing: border-box; }

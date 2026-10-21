@@ -239,7 +239,7 @@ les membres par points gagnés depuis le début, pour qu'une récompense échang
 fasse pas reculer, avec une couronne pour le premier (les ex æquo partagent la
 marche) ; les points gagnés s'affichent dans la marche. Une pastille ⭐ sur la
 photo donne les points qui restent à dépenser. Sous le prénom, le badge du rang,
-une barre vers le badge du rang suivant et les points qui manquent : les toucher
+une barre vers le badge du rang suivant : les toucher
 ouvre le détail du rang (où en est l'enfant, tous les rangs et leurs seuils),
 sans code parent puisqu'on n'y valide rien. Chaque tâche du jour tient sur une ligne : son nom, ses points et une
 photo par membre assigné ; toucher une photo termine la tâche pour ce membre. Une
