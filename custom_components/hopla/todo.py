@@ -20,7 +20,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from .const import DOMAIN, CONF_URL, CONF_TOKEN, CONF_SHOW_DUE_IN, CONF_SHOW_NO_DUE_DATE, CONF_CREATE_UNIFIED_LIST, CONF_CREATE_PROJECT_LISTS, CONF_CREATE_ASSIGNEE_LISTS
 from .api import HoplaApiClient
@@ -222,8 +222,16 @@ class HoplaTodoListBase(CoordinatorEntity, TodoListEntity):
         attributes["completed_tasks"] = getattr(self, "_completed_tasks", lambda: [])()
         return attributes
 
+    def _require_parent(self) -> None:
+        """Keep adding, editing and deleting tasks for parents, as for the services."""
+        guard = self.hass.data[DOMAIN][self._config_entry.entry_id].get("parental")
+        user_id = self._context.user_id if self._context else None
+        if guard is not None and not guard.is_parent(user_id):
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="parent_required")
+
     async def async_create_todo_item(self, item: TodoItem) -> None:
         """Create a todo item."""
+        self._require_parent()
         session = async_get_clientsession(self.hass)
         client = HoplaApiClient(
             self._config_entry.data[CONF_URL],
@@ -294,6 +302,7 @@ class HoplaTodoListBase(CoordinatorEntity, TodoListEntity):
                     item.due = res.next_due_date
             else:
                 # Update task properties (summary, description, due date)
+                self._require_parent()
                 _LOGGER.debug("Updating task %d properties", task_id)
                 
                 # Convert due date to RFC3339 format if provided
@@ -319,6 +328,7 @@ class HoplaTodoListBase(CoordinatorEntity, TodoListEntity):
         """Delete todo items."""
         if any(uid.startswith("history--") for uid in uids):
             raise HomeAssistantError("Completed occurrences are read-only; manage history in Hopla")
+        self._require_parent()
         session = async_get_clientsession(self.hass)
         client = HoplaApiClient(
             self._config_entry.data[CONF_URL],

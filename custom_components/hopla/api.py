@@ -295,9 +295,14 @@ class HoplaApiClient:
             data = await response.json()
             return [HoplaRedemption.from_json(item) for item in data or []]
 
-    async def async_redeem_reward(self, reward_id: int, user_id: int | None = None) -> HoplaRedemption:
-        """Spend points on a reward. For another member it is approved at once."""
-        payload = {"userId": user_id} if user_id else None
+    async def async_redeem_reward(self, reward_id: int, user_id: int | None = None,
+                                  request: bool = False) -> HoplaRedemption:
+        """Spend points on a reward.
+
+        For another member it is approved at once, unless request is set: then
+        it waits for a parent like a member's own request.
+        """
+        payload = {"userId": user_id, "request": request} if user_id else None
         data = await self._post_action(f"/eapi/v1/rewards/{reward_id}/redeem", "redeem the reward", payload)
         return HoplaRedemption.from_json(data["res"])
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 globalThis.HTMLElement = class {};
 globalThis.customElements = {define() {}, get() {}, whenDefined() { return Promise.resolve(); }};
 globalThis.window = {};
-const {boardData, labelNames, podium, rewardState, taskRows} = await import('../custom_components/hopla/frontend/hopla-family-card.js');
+const {boardData, labelNames, parentAccess, podium, rewardState, taskRows} = await import('../custom_components/hopla/frontend/hopla-family-card.js');
 
 assert.deepEqual(labelNames([{name: 'Enfants '}, 'Maison', {name: ''}, null]), ['enfants', 'maison']);
 assert.deepEqual(labelNames('a, b'), ['a', 'b']);
@@ -89,4 +89,23 @@ assert.deepEqual(rows[0].slots.map(s => `${s.member.name}:${s.state}`), ['Elena:
 assert.equal(rows[0].pending, true);
 rows = taskRows([copy(32, 'Dents', [E, A])], [{name: 'Dents', member: E}], [E, A]);
 assert.deepEqual(rows[0].slots.map(s => s.state), ['tap', 'tap'], 'a member who can still do the task keeps a photo');
+// Parent access: everyone without parents set, a parent's own account, or the tablet while parent mode is open.
+const parentMode = (attributes, state = 'off') => ({state, attributes: {hopla_parent_mode: true, config_entry_id: 'entry', enabled: true,
+  parent_users: ['nico-ha'], has_pin: true, unlocked_until: null, ...attributes}});
+assert.equal(parentAccess({states: {}}).parent, true, 'no parent mode sensor keeps full access');
+assert.equal(parentAccess({states: {'binary_sensor.mode_parent': parentMode({enabled: false})}}).guarded, false);
+let access = parentAccess({user: {id: 'tablette'}, states: {'binary_sensor.mode_parent': parentMode({})}}, now);
+assert.deepEqual([access.guarded, access.parent, access.entryId], [true, false, 'entry']);
+assert.equal(parentAccess({user: {id: 'nico-ha'}, states: {'binary_sensor.mode_parent': parentMode({})}}, now).parent, true);
+const open = parentMode({unlocked_until: '2026-10-20T12:01:30'}, 'on');
+access = parentAccess({user: {id: 'tablette'}, states: {'binary_sensor.mode_parent': open}}, now);
+assert.deepEqual([access.parent, access.unlocked], [true, true]);
+assert.equal(parentAccess({user: {id: 'tablette'}, states: {'binary_sensor.mode_parent': open}}, new Date('2026-10-20T12:02:00')).parent, false,
+  'an expired parent mode counts as closed even before the sensor updates');
+
+// Reward requests come with the rewards sensor.
+const withRequests = {states: {...hass.states, 'sensor.hopla_rewards': {state: '1', attributes: {rewards: [{id: 1, name: 'Lecture', points_cost: 3}],
+  requests: [{redemption_id: 9, reward_id: 1, user_id: 2, reward_name: 'Lecture'}]}}}};
+assert.deepEqual(boardData(withRequests, {}, now).requests.map(r => r.redemption_id), [9]);
+assert.deepEqual(boardData(hass, {}, now).requests, []);
 console.log('family card tests passed');

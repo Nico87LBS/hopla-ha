@@ -1,28 +1,35 @@
 blueprint:
-  name: Hopla approval notification
+  name: Hopla - demandes à valider
   description: >
-    Sends an actionable notification to a phone when a Hopla task is waiting for
-    approval, with Approve and Reject buttons. The notification is cleared once the
-    task is approved or rejected, from the phone, the dashboard or Hopla itself.
+    Envoie une notification au téléphone d'un parent quand une tâche Hopla attend
+    sa validation, ou quand un enfant demande une récompense, avec les boutons
+    Valider et Refuser. La notification disparaît dès que la demande est traitée,
+    depuis le téléphone, le tableau de bord ou Hopla.
   domain: automation
   source_url: https://github.com/Nico87LBS/hopla-ha/blob/main/blueprints/automation/hopla/approval_notification.yaml
   input:
     notify_device:
-      name: Phone
-      description: The Home Assistant companion app that receives the request.
+      name: Téléphone
+      description: Le téléphone avec l'application Home Assistant qui reçoit les demandes.
       selector:
         device:
           integration: mobile_app
     approve_title:
-      name: Approve button
-      default: "✅ Approve"
+      name: Bouton Valider
+      default: "✅ Valider"
       selector:
         text:
     reject_title:
-      name: Reject button
-      default: "❌ Reject"
+      name: Bouton Refuser
+      default: "❌ Refuser"
       selector:
         text:
+    include_rewards:
+      name: Demandes de récompense
+      description: Notifier aussi les récompenses demandées depuis la tablette.
+      default: true
+      selector:
+        boolean:
 
 mode: queued
 max: 20
@@ -35,17 +42,27 @@ triggers:
     event_type: hopla_task_approval_resolved
     id: resolved
   - trigger: event
+    event_type: hopla_reward_requested
+    id: reward
+  - trigger: event
+    event_type: hopla_reward_request_resolved
+    id: reward_resolved
+  - trigger: event
     event_type: mobile_app_notification_action
     id: answer
 
 variables:
   approve_title: !input approve_title
   reject_title: !input reject_title
-  answer: "{{ trigger.event.data.action | default('') }}"
+  include_rewards: !input include_rewards
+  answer: "{{ trigger.event.data.action | default('') if trigger.id == 'answer' else '' }}"
 
 conditions:
   - condition: template
-    value_template: "{{ trigger.id != 'answer' or answer is match('HOPLA_(APPROVE|REJECT)_[0-9]+$') }}"
+    value_template: >-
+      {{ (trigger.id in ['pending', 'resolved'])
+         or (trigger.id in ['reward', 'reward_resolved'] and include_rewards)
+         or (trigger.id == 'answer' and answer is match('HOPLA_(REWARD_)?(APPROVE|REJECT)_[0-9]+$')) }}
 
 actions:
   - choose:
@@ -58,13 +75,30 @@ actions:
             device_id: !input notify_device
             title: "⭐ {{ trigger.event.data.completed_by_name or 'Hopla' }}"
             message: >-
-              {{ trigger.event.data.task_name }}{% if trigger.event.data.points %} ({{ trigger.event.data.points }} pts){% endif %}
+              {{ trigger.event.data.task_name }}{% if trigger.event.data.points %} ({{ trigger.event.data.points }} points){% endif %}
             data:
               tag: "hopla_{{ trigger.event.data.task_id }}"
               actions:
                 - action: "HOPLA_APPROVE_{{ trigger.event.data.task_id }}"
                   title: "{{ approve_title }}"
                 - action: "HOPLA_REJECT_{{ trigger.event.data.task_id }}"
+                  title: "{{ reject_title }}"
+      - conditions:
+          - condition: trigger
+            id: reward
+        sequence:
+          - domain: mobile_app
+            type: notify
+            device_id: !input notify_device
+            title: "🎁 {{ trigger.event.data.user_name or 'Hopla' }}"
+            message: >-
+              Demande : {{ trigger.event.data.reward_name }} ({{ trigger.event.data.points_cost }} points)
+            data:
+              tag: "hopla_reward_{{ trigger.event.data.redemption_id }}"
+              actions:
+                - action: "HOPLA_REWARD_APPROVE_{{ trigger.event.data.redemption_id }}"
+                  title: "{{ approve_title }}"
+                - action: "HOPLA_REWARD_REJECT_{{ trigger.event.data.redemption_id }}"
                   title: "{{ reject_title }}"
       - conditions:
           - condition: trigger
@@ -76,6 +110,23 @@ actions:
             message: clear_notification
             data:
               tag: "hopla_{{ trigger.event.data.task_id }}"
+      - conditions:
+          - condition: trigger
+            id: reward_resolved
+        sequence:
+          - domain: mobile_app
+            type: notify
+            device_id: !input notify_device
+            message: clear_notification
+            data:
+              tag: "hopla_reward_{{ trigger.event.data.redemption_id }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ answer.startswith('HOPLA_REWARD_') }}"
+        sequence:
+          - action: "hopla.{{ 'approve_reward' if answer.startswith('HOPLA_REWARD_APPROVE_') else 'reject_reward' }}"
+            data:
+              redemption_id: "{{ answer.split('_')[-1] | int }}"
       - conditions:
           - condition: trigger
             id: answer
