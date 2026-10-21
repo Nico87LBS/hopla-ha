@@ -152,6 +152,9 @@ Pour importer un blueprint : **Paramètres** → **Automatisations et scènes** 
 ## Mises à jour
 
 Chaque nouvelle version de l'intégration est publiée comme une *release* GitHub.
+Chaque PR doit augmenter la version de `custom_components/hopla/manifest.json`
+(0.4.1 pour une correction, 0.5.0 pour une nouveauté) : la CI le vérifie, et la
+fusion publie la release toute seule.
 HACS la voit et crée une entité de mise à jour, `update.hopla_update`. Home
 Assistant l'affiche alors dans **Paramètres**, avec un badge, et on l'installe
 d'une touche, puis on redémarre.
