@@ -96,6 +96,7 @@ def progress(level=1, quest_done=False, solo_winners=(), goal_done=False, total=
     rank = [{"name": "Petit Hop", "icon": "🐣", "minPoints": 0}, {"name": "Hop Hop", "icon": "🐸", "minPoints": 100},
             {"name": "Super Hop", "icon": "🦘", "minPoints": 300}]
     return {**TODAY,
+            "ranks": [rank[2], rank[0], rank[1]],
             "members": [{"userId": 2, "earned": 120 if level == 2 else 40, "level": level, "rank": rank[level - 1],
                          "next": rank[level], "quests": [
                              {"id": 7, "name": "Mettre la table", "kind": "tasks", "choreId": 11, "period": "week",
@@ -128,8 +129,11 @@ class ProgressionTests(unittest.TestCase):
         self.assertEqual(goal["reward_text"], "Sortie piscine")
         self.assertFalse(goal["done"])
         self.assertIsNone(solo["reward_text"])
+        self.assertEqual([(rank["name"], rank["min_points"]) for rank in today["rank_ladder"]],
+                         [("Petit Hop", 0), ("Hop Hop", 100), ("Super Hop", 300)])
+        self.assertEqual(today["rank_ladder"][0], {"name": "Petit Hop", "icon": "🐣", "image": None, "min_points": 0})
         quiet = games.games_today({"rules": {}})
-        self.assertEqual((quiet["ranks"], quiet["quests"], quiet["challenges"]), ({}, {}, []))
+        self.assertEqual((quiet["ranks"], quiet["quests"], quiet["challenges"], quiet["rank_ladder"]), ({}, {}, [], []))
 
     def test_events(self):
         fired = []

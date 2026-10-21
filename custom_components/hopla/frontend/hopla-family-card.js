@@ -26,6 +26,7 @@ const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() ==
 
 // Only the drawn badges the integration ships, from hopla-1 to hopla-7.
 const rankImage = image => /^hopla-[1-7]$/.test(image || '') ? image : null;
+const badgeUrl = image => new URL(`./ranks/${image}.svg${new URL(import.meta.url).search}`, import.meta.url);
 
 // The podium ranks the points earned since the start: spending on a reward
 // does not make a child drop. The balance left to spend is the fallback.
@@ -124,6 +125,7 @@ export function boardData(hass, config, now = new Date()) {
   let surprise = null;
   let period = null;
   let challenges = [];
+  let ladder = [];
   for (const [id, state] of Object.entries(hass.states)) {
     if (!id.startsWith('sensor.') || !isHopla(hass, id)) continue;
     const a = state.attributes;
@@ -132,7 +134,7 @@ export function boardData(hass, config, now = new Date()) {
         picture: a.entity_picture || null, points: Number(state.state) || 0, recent: a.recent_completions || [],
         streak: Number(a.streak) || 0, streakToday: a.streak_done_today === true,
         rank: a.rank ? {name: a.rank, icon: a.rank_icon || '', image: rankImage(a.rank_image), level: Number(a.rank_level) || 1, from: Number(a.rank_points) || 0,
-          next: a.next_rank ? {name: a.next_rank, icon: a.next_rank_icon || '', points: Number(a.next_rank_points) || 0} : null,
+          next: a.next_rank ? {name: a.next_rank, icon: a.next_rank_icon || '', image: rankImage(a.next_rank_image), points: Number(a.next_rank_points) || 0} : null,
           stars: Number(a.rank_stars) || 0, points: Number(a.rank_round_points ?? a.total_points) || 0,
           starAt: Number(a.next_star_points) || 0} : null,
         earned: Number(a.total_points) || 0, quests: Array.isArray(a.quests) ? a.quests : []});
@@ -145,6 +147,7 @@ export function boardData(hass, config, now = new Date()) {
       surprise = a.surprise || null;
       period = a.bonus_period || null;
       challenges = Array.isArray(a.challenges) ? a.challenges : [];
+      ladder = Array.isArray(a.ranks) ? a.ranks.map(r => ({name: r.name || '', icon: r.icon || '', image: rankImage(r.image), points: Number(r.min_points) || 0})) : [];
     } else if (Array.isArray(a.points_presets)) {
       presets = a.points_presets;
       presetsEntry = a.config_entry_id || null;
@@ -176,7 +179,7 @@ export function boardData(hass, config, now = new Date()) {
     .map(item => ({...item, member})))
     .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
   return {members: shown, tasks: visible, rows: taskRows(visible, done, shown), done, doneRows: doneRows(done), rewards: rewards || [], requests,
-    presets, presetsEntry, surprise, period,
+    presets, presetsEntry, surprise, period, ladder,
     // Running challenges, and finished ones until their end date, for the members shown.
     challenges: challenges.filter(c => new Date(c.ends_at) > now && c.members.some(id => shown.some(m => m.id === id)))};
 }
@@ -266,6 +269,7 @@ class HoplaFamilyCard extends HTMLElement {
     }
   }
   async onClick(event) {
+    if (event.target.classList?.contains('rank-scrim')) { this._rankFor = null; this.render(); return; }
     const button = event.target.closest('button[data-action]');
     if (!button || button.disabled) return;
     const {action, task, member, reward, request, digit, preset} = button.dataset;
@@ -275,6 +279,9 @@ class HoplaFamilyCard extends HTMLElement {
       else { this._pin = ''; this._pinError = ''; this.render(); }
       return;
     }
+    // The rank details only show things: no parent code needed.
+    if (action === 'rank') { this._rankFor = Number(member); this.render(); return; }
+    if (action === 'rank-close') { this._rankFor = null; this.render(); return; }
     if (action === 'pin-cancel') { this._pin = null; this.render(); return; }
     if (action === 'pin-back') { this._pin = this._pin.slice(0, -1); this.render(); return; }
     if (action === 'pin-digit') {
@@ -344,32 +351,81 @@ class HoplaFamilyCard extends HTMLElement {
     const step = (group, rank) => {
       const size = rank === 0 ? 76 : 60;
       const faces = group.length
-        ? group.map(m => `<div class="podium-member">${rank === 0 && podiumScore(m) > 0 ? `<span class="crown">${svg('crown', 30)}</span>` : ''}${this.face(m, size, rank === 0 && podiumScore(m) > 0 ? ' leader' : '')}<div class="podium-name">${escape(m.name)}</div><div class="podium-spend">${escape(this.t('to_spend', {count: m.points}))}</div>${this.rank(m)}${this.streak(m)}</div>`).join('')
+        ? group.map(m => `<div class="podium-member">${rank === 0 && podiumScore(m) > 0 ? `<span class="crown">${svg('crown', 30)}</span>` : ''}<span class="podium-face">${this.face(m, size, rank === 0 && podiumScore(m) > 0 ? ' leader' : '')}${this.coin(m)}</span><div class="podium-name">${escape(m.name)}${this.streak(m)}</div>${this.rank(m)}</div>`).join('')
         : `<div class="podium-member"><span class="face empty" style="width:${size}px;height:${size}px"></span><div class="podium-name">&nbsp;</div></div>`;
-      const score = group.length ? escape(this.t('common.pts', {count: podiumScore(group[0])})) : '&nbsp;';
-      return `<div class="podium-col rank${rank + 1}"><div class="podium-faces">${faces}</div><div class="podium-score">${score}</div><div class="step">${rank + 1}</div></div>`;
+      const score = group.length ? `<span class="score">${podiumScore(group[0])}</span><span class="unit">${escape(this.t('earned', {count: podiumScore(group[0])}))}</span>` : '';
+      return `<div class="podium-col rank${rank + 1}"><div class="podium-faces">${faces}</div><div class="step"><span class="place">${rank + 1}</span>${score}</div></div>`;
     };
     const order = [[0], [1, 0], [1, 0, 2]][steps.length - 1];
     return `<div class="podium steps${steps.length}">${order.map(rank => step(steps[rank], rank)).join('')}</div>`;
   }
+  // The points left to spend, as a pastille on the face.
+  coin(member) {
+    const label = this.t('to_spend', {count: member.points});
+    return `<span class="coin" title="${escape(label)}" aria-label="${escape(label)}">${svg('star', 12)}${member.points}</span>`;
+  }
   streak(member) {
     if (!member.streak) return '';
     const label = this.t('streak', {count: member.streak});
-    return `<div class="streak${member.streakToday ? '' : ' at-risk'}" title="${escape(member.streakToday ? label : `${label} · ${this.t('streak_at_risk')}`)}">${svg('flame', 14)}${member.streak}</div>`;
+    return `<span class="streak${member.streakToday ? '' : ' at-risk'}" title="${escape(member.streakToday ? label : `${label} · ${this.t('streak_at_risk')}`)}">${svg('flame', 14)}${member.streak}</span>`;
+  }
+  // A drawn badge, or the rank's emoji when the circle chose its own ranks.
+  rankBadge(rank, size, extra = '') {
+    return rank.image ? `<img class="rank-img${extra}" style="width:${size}px;height:${size}px" src="${badgeUrl(rank.image)}" alt="">`
+      : `<span class="rank-img${extra}" style="width:${size}px;height:${size}px;font-size:${Math.round(size * .7)}px">${escape(rank.icon)}</span>`;
+  }
+  rankProgress(rank) {
+    // Past the last rank, the bar leads to the next prestige star.
+    const target = rank.next ? rank.next.points : rank.starAt;
+    const pct = target ? Math.min(100, Math.round(100 * (rank.points - rank.from) / Math.max(1, target - rank.from))) : 100;
+    return {target, pct, left: target ? Math.max(0, target - rank.points) : 0};
+  }
+  rankStars(rank) {
+    return !rank.stars ? '' : rank.stars <= 3 ? '⭐'.repeat(rank.stars) : `⭐×${rank.stars}`;
   }
   rank(member) {
     if (!member.rank) return '';
     const {rank} = member;
-    // Past the last rank, the bar leads to the next prestige star.
-    const target = rank.next ? rank.next.points : rank.starAt;
-    const pct = target ? Math.min(100, Math.round(100 * (rank.points - rank.from) / Math.max(1, target - rank.from))) : 100;
-    const title = rank.next ? this.t('rank_next', {count: rank.next.points - rank.points, name: `${rank.next.icon} ${rank.next.name}`})
-      : rank.starAt ? this.t('rank_star', {count: rank.starAt - rank.points}) : this.t('rank_top');
-    const stars = !rank.stars ? '' : rank.stars <= 3 ? '⭐'.repeat(rank.stars) : `⭐×${rank.stars}`;
-    // A drawn badge takes the place of the emoji.
-    const badge = rank.image ? `<img class="rank-badge" src="${new URL(`./ranks/${rank.image}.svg${new URL(import.meta.url).search}`, import.meta.url)}" alt="">` : '';
-    const label = `${stars} ${rank.image ? '' : rank.icon} ${rank.name}`.replace(/\s+/g, ' ').trim();
-    return `<div class="rank" title="${escape(title)}">${badge}<span>${escape(label)}</span><span class="bar"><i style="width:${pct}%"></i></span></div>`;
+    const {pct, left} = this.rankProgress(rank);
+    const title = rank.next ? this.t('rank_next', {count: left, name: rank.next.name})
+      : rank.starAt ? this.t('rank_star', {count: left}) : this.t('rank_top');
+    const next = rank.next ? this.rankBadge(rank.next, 22, ' next') : rank.starAt ? '<span class="rank-img next star">⭐</span>' : '';
+    const label = `${this.rankStars(rank)} ${rank.name}`.trim();
+    return `<button class="rank" data-action="rank" data-member="${member.id}" title="${escape(title)}" aria-label="${escape(`${this.t('rank_open', {name: member.name})} · ${title}`)}">
+      <span class="rank-chip">${rank.image || rank.icon ? this.rankBadge(rank, 30) : ''}<span>${escape(label)}</span></span>
+      <span class="rank-prog"><span class="bar"><i style="width:${pct}%"></i></span>${next}</span>
+      <span class="rank-left">${escape(rank.next || rank.starAt ? this.t('rank_left', {count: left}) : this.t('rank_max'))}</span></button>`;
+  }
+  // The rank details, over the card: where the member stands and every rank.
+  renderRankDetails(members, ladder) {
+    const member = this._rankFor === null || this._rankFor === undefined ? null : members.find(m => m.id === this._rankFor && m.rank);
+    if (!member) return '';
+    const {rank} = member;
+    const {target, pct, left} = this.rankProgress(rank);
+    const token = '\u0001';
+    const bold = (text, name) => escape(text).replace(token, `<b>${escape(name)}</b>`);
+    const goal = rank.next ? `<div class="rank-goal">${this.rankBadge(rank.next, 40, ' next')}<span>${bold(this.t('rank_goal', {count: left, name: token}), rank.next.name)}</span></div>`
+      : rank.starAt ? `<div class="rank-goal"><span class="rank-img next star" style="width:40px;height:40px;font-size:28px">⭐</span><span>${escape(this.t('rank_star', {count: left}))}</span></div>`
+      : `<div class="rank-goal"><span>${escape(this.t('rank_top'))}</span></div>`;
+    const steps = ladder.map((item, i) => {
+      const level = i + 1;
+      const state = level < rank.level ? 'got' : level === rank.level ? 'here' : 'later';
+      const mark = state === 'got' ? `${svg('check', 12)}${escape(this.t('rank_got'))}` : state === 'here' ? escape(this.t('rank_here')) : escape(this.t('common.pts', {count: item.points}));
+      return `<li class="${state}">${this.rankBadge(item, 34, state === 'later' ? ' next' : '')}<span>${escape(item.name)}</span><span class="mark">${mark}</span></li>`;
+    }).join('');
+    return `<div class="rank-scrim"><div class="rank-dialog" role="dialog" aria-label="${escape(this.t('rank_open', {name: member.name}))}">
+      <div class="rank-head">${this.face(member, 28)}<span>${escape(member.name)}</span>
+        <button class="close" data-action="rank-close" aria-label="${escape(this.t('close'))}">${svg('cross', 16)}</button></div>
+      <div class="rank-hero">${this.rankBadge(rank, 84)}<div>
+        <div class="rank-level">${escape(ladder.length ? this.t('rank_level', {level: rank.level, total: ladder.length}) : this.t('rank_level_alone', {level: rank.level}))}</div>
+        <div class="rank-name">${escape(rank.name)}</div>
+        <div class="rank-sub">${escape([rank.stars ? `${this.rankStars(rank)} ${this.t('rank_stars', {count: rank.stars})}` : '', this.t('rank_earned', {count: member.earned})].filter(Boolean).join(' · '))}</div></div></div>
+      <div class="rank-big"><span class="bar"><i style="width:${pct}%"></i></span>
+        <div class="rank-nums"><span>${rank.from}</span><span>${target ? `<b>${rank.points}</b> / ${escape(this.t('common.pts', {count: target}))}` : `<b>${escape(this.t('common.pts', {count: rank.points}))}</b>`}</span></div></div>
+      ${goal}
+      ${steps ? `<ul class="rank-ladder">${steps}</ul>` : ''}
+      <div class="rank-foot">${escape(this.t('rank_explain'))}</div>
+    </div></div>`;
   }
   gauge(value, target, done) {
     const pct = done ? 100 : Math.min(100, Math.round(100 * value / Math.max(1, target)));
@@ -520,13 +576,18 @@ class HoplaFamilyCard extends HTMLElement {
       .podium-faces { display: flex; gap: 10px; justify-content: center; }
       .podium-member { display: flex; flex-direction: column; align-items: center; }
       .crown { line-height: 0; margin-bottom: 2px; }
-      .podium-name { margin-top: 6px; font-weight: 600; font-size: 15px; }
-      .podium-spend { font-size: 12px; color: var(--secondary-text-color); }
-      .podium-score { font-size: 13px; color: var(--secondary-text-color); margin: 2px 0 8px; }
-      .step { width: 100%; border-radius: 14px 14px 0 0; display: grid; place-items: center; font-weight: 800; }
-      .rank1 .step { height: 96px; font-size: 26px; background: rgba(245,180,0,.16); color: #a87300; }
-      .rank2 .step { height: 64px; font-size: 22px; background: rgba(59,111,216,.12); color: var(--dt-blue); }
-      .rank3 .step { height: 40px; font-size: 18px; background: rgba(160,110,70,.14); color: #8a6f57; }
+      .podium-face { position: relative; line-height: 0; }
+      .coin { position: absolute; right: -10px; bottom: -4px; display: inline-flex; align-items: center; gap: 2px; padding: 2px 7px 2px 5px; border-radius: 999px;
+        background: #fff4cc; color: #8a5d00; font-size: 13px; font-weight: 800; line-height: 1.2; border: 2px solid var(--card-background-color, #fff); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+      .coin svg { color: var(--dt-gold); }
+      .podium-name { margin-top: 6px; font-weight: 700; font-size: 16px; display: flex; align-items: center; gap: 6px; }
+      .step { width: 100%; margin-top: 10px; border-radius: 14px 14px 0 0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 800; }
+      .step .place { font-size: 12px; opacity: .6; }
+      .step .score { font-size: 24px; line-height: 1; }
+      .step .unit { font-size: 11px; font-weight: 700; opacity: .75; }
+      .rank1 .step { height: 92px; background: rgba(245,180,0,.16); color: #a87300; } .rank1 .step .score { font-size: 26px; }
+      .rank2 .step { height: 64px; background: rgba(59,111,216,.12); color: var(--dt-blue); }
+      .rank3 .step { height: 48px; background: rgba(160,110,70,.14); color: #8a6f57; } .rank3 .step .score { font-size: 18px; } .rank3 .step .place { display: none; }
       section { margin-bottom: 20px; }
       .head { display: flex; align-items: center; gap: 10px; padding-bottom: 10px; border-bottom: 2px solid var(--dt-line); }
       .head.todo { border-color: var(--dt-blue); } .head.done { border-color: var(--dt-green); } .head.gift { border-color: #a87300; }
@@ -553,7 +614,7 @@ class HoplaFamilyCard extends HTMLElement {
       .pts.penalty { background: rgba(217,48,37,.12); color: var(--error-color, #d93025); }
       .head.bonus { border-color: #7c4dff; } .head-icon.bonus { background: rgba(124,77,255,.12); color: #7c4dff; } .count.bonus { color: #7c4dff; }
       .hourglass { color: #8a6f57; line-height: 0; }
-      .streak { display: inline-flex; align-items: center; gap: 2px; margin-top: 2px; font-size: 13px; font-weight: 800; color: #e8590c; }
+      .streak { display: inline-flex; align-items: center; gap: 1px; font-size: 13px; font-weight: 800; color: #e8590c; }
       .streak.at-risk { color: #b0a59a; }
       .surprise { display: inline-flex; align-items: center; gap: 3px; padding: 4px 9px 4px 7px; border-radius: 999px; font-size: 13px; font-weight: 800;
         background: linear-gradient(90deg, rgba(236,72,153,.16), rgba(124,77,255,.16)); color: #a21caf; white-space: nowrap; }
@@ -561,10 +622,38 @@ class HoplaFamilyCard extends HTMLElement {
       .period { display: flex; align-items: center; gap: 8px; margin: 0 0 18px; padding: 10px 14px; border-radius: 14px;
         background: rgba(245,180,0,.16); color: #8a5a00; font-size: 15px; }
       .period-end { margin-left: auto; font-size: 13px; white-space: nowrap; }
-      .rank { display: flex; flex-direction: column; align-items: center; gap: 3px; margin-top: 2px; font-size: 12px; font-weight: 700; color: var(--secondary-text-color); }
-      .rank-badge { width: 40px; height: 40px; display: block; }
-      .rank .bar { width: 56px; height: 4px; border-radius: 2px; background: var(--dt-line); overflow: hidden; }
-      .rank .bar i, .gauge i { display: block; height: 100%; background: var(--dt-ring); border-radius: inherit; }
+      .rank { display: flex; flex-direction: column; align-items: center; gap: 3px; margin-top: 4px; padding: 3px 6px; border-radius: 12px; touch-action: manipulation; }
+      .rank:active { background: rgba(99,102,241,.1); }
+      .rank-chip { display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; color: var(--dt-ring); }
+      .rank-img { display: grid; place-items: center; flex: none; line-height: 1; object-fit: contain; }
+      .rank-img.next { opacity: .4; filter: grayscale(.6); }
+      .rank-prog { display: flex; align-items: center; gap: 5px; }
+      .bar { display: block; height: 8px; border-radius: 4px; background: var(--dt-line); overflow: hidden; }
+      .rank-prog .bar { width: 92px; }
+      .rank-left { font-size: 12px; color: var(--secondary-text-color); }
+      .bar i, .gauge i { display: block; height: 100%; background: var(--dt-ring); border-radius: inherit; }
+      /* Fixed like HA's own dialogs: the card may be shorter than the details. */
+      .rank-scrim { position: fixed; inset: 0; z-index: 10; background: rgba(20,18,30,.45); display: flex; align-items: center; justify-content: center; padding: 12px; box-sizing: border-box; }
+      .rank-dialog { width: 100%; max-width: 440px; max-height: 100%; overflow-y: auto; box-sizing: border-box; background: var(--card-background-color, #fff); border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,.25); padding: 16px 16px 14px; }
+      .rank-head { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; }
+      .rank-head .close { margin-left: auto; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: rgba(127,127,127,.12); color: var(--secondary-text-color); }
+      .rank-hero { display: flex; align-items: center; gap: 12px; margin: 12px 0 8px; }
+      .rank-level { font-size: 12px; font-weight: 700; color: var(--secondary-text-color); text-transform: uppercase; letter-spacing: .05em; }
+      .rank-name { font-size: 20px; font-weight: 800; line-height: 1.15; color: var(--dt-ring); }
+      .rank-sub { font-size: 13px; color: var(--secondary-text-color); margin-top: 2px; }
+      .rank-big .bar { height: 12px; border-radius: 6px; }
+      .rank-nums { display: flex; justify-content: space-between; font-size: 13px; color: var(--secondary-text-color); margin-top: 4px; }
+      .rank-nums b { color: var(--primary-text-color); }
+      .rank-goal { display: flex; align-items: center; gap: 8px; margin: 10px 0 12px; padding: 8px 10px; border-radius: 12px; background: rgba(99,102,241,.08); font-size: 14px; }
+      .rank-goal b { color: var(--dt-ring); }
+      .rank-ladder { list-style: none; margin: 0; padding: 0; }
+      .rank-ladder li { display: flex; align-items: center; gap: 10px; padding: 5px 6px; border-radius: 10px; font-size: 14px; }
+      .rank-ladder li > span:nth-child(2) { flex: 1; min-width: 0; }
+      .rank-ladder .mark { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 700; color: var(--secondary-text-color); white-space: nowrap; }
+      .rank-ladder .got .mark { color: var(--dt-green); }
+      .rank-ladder .here { background: rgba(245,180,0,.16); font-weight: 800; } .rank-ladder .here .mark { color: #a87300; }
+      .rank-ladder .later { color: var(--secondary-text-color); }
+      .rank-foot { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--dt-line); font-size: 12px; line-height: 1.4; color: var(--secondary-text-color); }
       .gauge { flex: 1; min-width: 60px; height: 8px; border-radius: 4px; background: var(--dt-line); overflow: hidden; }
       .gauge.full i { background: var(--dt-green); }
       .gauge-n { font-size: 13px; font-weight: 700; color: var(--secondary-text-color); white-space: nowrap; }
@@ -618,7 +707,7 @@ class HoplaFamilyCard extends HTMLElement {
       .key.small { font-size: 14px; background: none; }
       .key:not(:disabled):active { transform: scale(.94); }
     </style><ha-card>
-      ${this.renderParentButton()}${this.renderPinPad()}
+      ${this.renderParentButton()}${this.renderPinPad()}${this._config.show_points ? this.renderRankDetails(data.members, data.ladder) : ''}
       ${this._config.show_points && data.members.length ? this.renderPodium(data.members) : ''}
       ${this.renderPeriod(data.period)}
       ${this._config.show_goals ? this.renderChallenges(data.challenges, data.members) : ''}
