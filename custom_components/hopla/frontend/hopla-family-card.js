@@ -66,6 +66,19 @@ export function taskRows(tasks, done, members) {
   return rows.sort((a, b) => (a.due ?? Infinity) - (b.due ?? Infinity) || a.name.localeCompare(b.name));
 }
 
+// Tasks done today, one row per task name like the tasks to do: a task done by
+// each child shows once, with every child who did it.
+export function doneRows(done) {
+  const rows = [];
+  for (const item of done) {
+    let row = rows.find(r => r.key === sameName(item.name));
+    if (!row) rows.push(row = {key: sameName(item.name), name: String(item.name).trim(), points: item.points, items: []});
+    if (!row.items.some(other => other.member.id === item.member.id)) row.items.push(item);
+    row.points = Math.max(Number(row.points) || 0, Number(item.points) || 0);
+  }
+  return rows;
+}
+
 // What a member sees on a reward: available, missing points, or out of quota until a date.
 export function rewardState(reward, member, now = new Date()) {
   const resetsAt = reward.quota_resets_at ? new Date(reward.quota_resets_at) : null;
@@ -144,7 +157,10 @@ export function boardData(hass, config, now = new Date()) {
     && (config.due !== 'today' || !task.due || task.due <= endOfDay))
     .map(task => {
       const candidates = task.assignees.length ? shown.filter(m => task.assignees.includes(m.id)) : shown;
-      return {...task, members: candidates, surprise: surprise?.task_id === task.id ? surprise.points : 0, completedBy: task.pending ? shown.find(m => m.id === completers.get(task.id)) || null : null};
+      // Every child's copy of the surprise task, same name, is worth the bonus.
+      const isSurprise = surprise && (surprise.task_id === task.id || (surprise.task_ids || []).includes(task.id)
+        || sameName(surprise.task_name) === sameName(task.name));
+      return {...task, members: candidates, surprise: isSurprise ? surprise.points : 0, completedBy: task.pending ? shown.find(m => m.id === completers.get(task.id)) || null : null};
     })
     .filter(task => task.members.length || task.pending)
     .sort((a, b) => (a.due ?? Infinity) - (b.due ?? Infinity) || a.name.localeCompare(b.name));
@@ -152,7 +168,7 @@ export function boardData(hass, config, now = new Date()) {
     .filter(item => item.completed_at && sameDay(new Date(item.completed_at), now) && labelled(item.labels))
     .map(item => ({...item, member})))
     .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
-  return {members: shown, tasks: visible, rows: taskRows(visible, done, shown), done, rewards: rewards || [], requests,
+  return {members: shown, tasks: visible, rows: taskRows(visible, done, shown), done, doneRows: doneRows(done), rewards: rewards || [], requests,
     presets, presetsEntry, surprise, period,
     // Running challenges, and finished ones until their end date, for the members shown.
     challenges: challenges.filter(c => new Date(c.ends_at) > now && c.members.some(id => shown.some(m => m.id === id)))};
@@ -217,7 +233,7 @@ class HoplaFamilyCard extends HTMLElement {
       && previous.locale?.language === hass.locale?.language) return;
     this.render();
   }
-  getCardSize() { return 4 + (this._data?.rows.length || 0) + (this._data?.done.length || 0) + (this._data?.rewards.length || 0); }
+  getCardSize() { return 4 + (this._data?.rows.length || 0) + (this._data?.doneRows.length || 0) + (this._data?.rewards.length || 0); }
   getGridOptions() { return {columns: 12, min_columns: 6}; }
   t(key, values = {}) {
     const language = this._hass?.locale?.language || this._hass?.language || browserLanguage();
@@ -393,8 +409,9 @@ class HoplaFamilyCard extends HTMLElement {
     const sparkle = surprise ? `<span class="surprise" title="${escape(this.t('surprise', {n: surprise.surprise}))}">${svg('sparkle', 14)}+${surprise.surprise}</span>` : '';
     return `<div class="row${row.pending ? ' is-pending' : ''}${surprise ? ' is-surprise' : ''}"><span class="name">${escape(row.name)}</span>${this.points(row.points)}${sparkle}${waiting}<span class="faces">${right}</span></div>`;
   }
-  renderDone(item) {
-    return `<div class="row small"><span class="name muted">${escape(item.name)}</span>${this.points(item.points, true)}<span class="faces"><span class="slot" title="${escape(item.member.name)}">${this.face(item.member, 40)}${this.badge('done', 'check')}</span></span></div>`;
+  renderDone(row) {
+    const faces = row.items.map(item => `<span class="slot" title="${escape(item.member.name)}">${this.face(item.member, 40)}${this.badge('done', 'check')}</span>`).join('');
+    return `<div class="row small"><span class="name muted">${escape(row.name)}</span>${this.points(row.points, true)}<span class="faces">${faces}</span></div>`;
   }
   renderReward(reward, members, requests) {
     const period = reward.quota_count > 0 && reward.quota_period ? `<span class="sub">${escape(this.t(reward.quota_period, {n: reward.quota_count}))}</span>` : '';
@@ -474,7 +491,7 @@ class HoplaFamilyCard extends HTMLElement {
     const title = this._config.title ?? (this._config.due === 'today' ? this.t('today') : this.t('all'));
     const empty = data.members.length ? (this._config.due === 'today' ? this.t('allDone') : this.t('noTasks')) : this.t('noMembers');
     const rewards = this._config.show_rewards && data.members.length ? data.rewards : [];
-    const done = this._config.show_done ? data.done : [];
+    const done = this._config.show_done ? data.doneRows : [];
     // Bonuses and penalties are for parents: on the tablet, only in parent mode.
     const presets = this._config.show_bonus && this._access.parent && data.members.length ? data.presets : [];
     this.shadowRoot.innerHTML = `<style>

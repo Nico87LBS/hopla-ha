@@ -90,7 +90,7 @@ L'état est le nom de la tâche.
 | | `requests` | Demandes en attente : `redemption_id`, `reward_name`, `points_cost`, `user_id`, `user_name`, `requested_at` |
 | `sensor.hopla_bonus_et_penalites` | `points_presets` | Préréglages : `id`, `name`, `points` (négatif pour une pénalité) |
 | | `recent` | Derniers mouvements de points : `user_name`, `action`, `points`, `delta`, `reason`, `created_at` |
-| `sensor.hopla_jeux_du_jour` | `surprise` | Tâche surprise du jour : `task_id`, `task_name`, `points` en plus |
+| `sensor.hopla_jeux_du_jour` | `surprise` | Tâche surprise du jour : `task_id`, `task_name`, `points` en plus, et `task_ids`, les copies de la tâche au même nom (une par enfant), qui rapportent toutes le bonus |
 | | `bonus_period` | Période bonus en cours : `name`, `multiplier`, `starts_at`, `ends_at` |
 | | `streak_every`, `streak_bonus` | Le bonus de série : tous les combien de jours, et combien de points |
 | | `challenges` | Défis en cours : `name`, `shared` (défi en famille), `members`, `progress` par membre, `total`, `target`, `reward`, `reward_text`, `done`, `winners`, `ends_at` |

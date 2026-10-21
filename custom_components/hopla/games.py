@@ -130,6 +130,7 @@ def games_today(data):
     return {
         "surprise": {
             "task_id": surprise["choreId"],
+            "task_ids": surprise.get("choreIds") or [surprise["choreId"]],
             "task_name": surprise.get("name"),
             "points": surprise["points"],
             "day": surprise.get("day"),
