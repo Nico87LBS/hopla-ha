@@ -177,6 +177,9 @@ class HoplaPointsSensor(_FamilySensor):
             "next_rank": rank["next_name"],
             "next_rank_icon": rank["next_icon"],
             "next_rank_points": rank["next_points"],
+            "rank_stars": rank.get("stars", 0),
+            "rank_round_points": rank.get("round_points", rank["earned"]),
+            "next_star_points": rank.get("star_at"),
             "quests": today.get("quests", {}).get(user_id, []),
         }
 

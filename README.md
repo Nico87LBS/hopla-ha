@@ -61,6 +61,8 @@ dépenser.
 | `points_redeemed` | Points dépensés en récompenses ou perdus en pénalités |
 | `rank`, `rank_icon`, `rank_level` | Rang actuel, par exemple `Hop Hop`, `🐸`, `2` |
 | `rank_points`, `next_rank`, `next_rank_icon`, `next_rank_points` | Points du rang actuel, et rang suivant avec les points qu'il demande (vide au dernier rang) |
+| `rank_stars` | Étoiles de prestige ⭐ : une de plus à chaque tour complet des rangs, gardées pour toujours |
+| `rank_round_points`, `next_star_points` | Points gagnés dans le tour en cours, et points du tour qui donnent l'étoile suivante |
 | `streak`, `best_streak`, `streak_done_today` | Série : jours d'affilée avec au moins une tâche faite, record, et si aujourd'hui compte déjà |
 | `quests` | Quêtes en cours : `name`, `progress`, `target`, `reward`, `done`, `period` (`week` ou `month`), `ends_at` |
 | `recent_completions` | Tâches faites ces deux derniers jours : `task_id`, `name`, `points`, `completed_at` |
@@ -117,7 +119,7 @@ toute seule, en attendant un peu plus après chaque échec (jusqu'à 5 minutes).
 | `hopla_points_changed` | Les points d'un membre bougent : tâche, tâche annulée, récompense, bonus, pénalité ou remise à zéro | `user_id`, `user_name`, `action` (`task`, `undo`, `redeem`, `bonus`, `penalty` ou `reset`), `points`, `delta` (signé), `reason`, `created_by_name` |
 | `hopla_surprise_task` | La tâche surprise du jour est tirée | `task_id`, `task_name`, `points`, `day` |
 | `hopla_bonus_period_started` / `hopla_bonus_period_ended` | Une période bonus commence ou se termine | `name`, `multiplier`, `starts_at`, `ends_at` |
-| `hopla_rank_up` | Un membre passe au rang suivant | `user_id`, `user_name`, `name`, `icon`, `level`, `next_name` |
+| `hopla_rank_up` | Un membre passe au rang suivant, ou gagne une étoile ⭐ et repart au premier rang | `user_id`, `user_name`, `name`, `icon`, `level`, `next_name`, `stars`, `new_star` |
 | `hopla_quest_completed` | Un membre réussit une quête | `user_id`, `user_name`, `name`, `reward` |
 | `hopla_challenge_won` | Un membre gagne un défi chacun pour soi | `user_id`, `user_name`, `name`, `reward`, `reward_text` |
 | `hopla_goal_reached` | La famille atteint un défi commun | `name`, `total`, `target`, `reward_text`, `member_names` |
