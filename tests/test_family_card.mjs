@@ -145,7 +145,8 @@ const withProgress = {...hass, states: {...hass.states,
   ]}}}};
 const progress = boardData(withProgress, {members: [2, 3]}, now);
 const elenaProgress = progress.members.find(m => m.id === 2);
-assert.deepEqual(elenaProgress.rank, {name: 'Hop Hop', icon: '🐸', level: 2, from: 100, next: {name: 'Super Hop', icon: '🦘', points: 300}});
+assert.deepEqual(elenaProgress.rank, {name: 'Hop Hop', icon: '🐸', level: 2, from: 100, next: {name: 'Super Hop', icon: '🦘', points: 300},
+  stars: 0, points: 140, starAt: 0});
 assert.equal(elenaProgress.earned, 140);
 assert.deepEqual(elenaProgress.quests, [quest]);
 assert.equal(progress.members.find(m => m.id === 3).rank, null);

@@ -59,6 +59,8 @@ export default {
     rank_next_one: '{count} more point to {name}',
     rank_next_other: '{count} more points to {name}',
     rank_top: 'Top rank reached',
+    rank_star_one: '{count} more point to a ⭐ star',
+    rank_star_other: '{count} more points to a ⭐ star',
     quests: 'Quests',
     goal_family: 'Family',
     goal_to_win: 'To win: {reward}',

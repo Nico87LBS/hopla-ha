@@ -117,7 +117,8 @@ class ProgressionTests(unittest.TestCase):
     def test_shape(self):
         today = games.games_today(progress())
         self.assertEqual(today["ranks"][2], {"level": 1, "name": "Petit Hop", "icon": "🐣", "earned": 40, "min_points": 0,
-                                             "next_name": "Hop Hop", "next_icon": "🐸", "next_points": 100})
+                                             "next_name": "Hop Hop", "next_icon": "🐸", "next_points": 100,
+                                             "stars": 0, "round_points": 40, "star_at": None})
         quest = today["quests"][2][0]
         self.assertEqual((quest["task_id"], quest["progress"], quest["target"], quest["done"]), (11, 3, 5, False))
         goal, solo = today["challenges"]
@@ -147,6 +148,20 @@ class ProgressionTests(unittest.TestCase):
         tracker.update(games.games_today(progress(level=2, quest_done=True, solo_winners=[2], goal_done=True, total=200)),
                        "entry", MEMBERS)
         self.assertEqual(fired, [], "each event fires once")
+        self.assertFalse(events[games.EVENT_RANK_UP]["new_star"])
+
+    def test_a_prestige_star_is_a_rank_up(self):
+        fired = []
+        tracker = games.GamesTracker(lambda event, data: fired.append((event, data)))
+        before = progress(level=2)
+        tracker.update(games.games_today(before), "entry", MEMBERS)
+        after = progress()
+        after["members"][0]["stars"] = 1
+        tracker.update(games.games_today(after), "entry", MEMBERS)
+        rank_up = [data for event, data in fired if event == games.EVENT_RANK_UP]
+        self.assertEqual(len(rank_up), 1, "back to the first rank with a star is a step up")
+        self.assertTrue(rank_up[0]["new_star"])
+        self.assertEqual((rank_up[0]["stars"], rank_up[0]["name"]), (1, "Petit Hop"))
 
     def test_the_first_refresh_only_records(self):
         fired = []

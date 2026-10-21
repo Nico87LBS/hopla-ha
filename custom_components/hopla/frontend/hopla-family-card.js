@@ -112,7 +112,9 @@ export function boardData(hass, config, now = new Date()) {
         picture: a.entity_picture || null, points: Number(state.state) || 0, recent: a.recent_completions || [],
         streak: Number(a.streak) || 0, streakToday: a.streak_done_today === true,
         rank: a.rank ? {name: a.rank, icon: a.rank_icon || '', level: Number(a.rank_level) || 1, from: Number(a.rank_points) || 0,
-          next: a.next_rank ? {name: a.next_rank, icon: a.next_rank_icon || '', points: Number(a.next_rank_points) || 0} : null} : null,
+          next: a.next_rank ? {name: a.next_rank, icon: a.next_rank_icon || '', points: Number(a.next_rank_points) || 0} : null,
+          stars: Number(a.rank_stars) || 0, points: Number(a.rank_round_points ?? a.total_points) || 0,
+          starAt: Number(a.next_star_points) || 0} : null,
         earned: Number(a.total_points) || 0, quests: Array.isArray(a.quests) ? a.quests : []});
     } else if (a.task_id !== undefined && a.is_active !== false) {
       // The state is the bare task name; friendly_name may carry the device name.
@@ -335,9 +337,13 @@ class HoplaFamilyCard extends HTMLElement {
   rank(member) {
     if (!member.rank) return '';
     const {rank} = member;
-    const pct = rank.next ? Math.min(100, Math.round(100 * (member.earned - rank.from) / Math.max(1, rank.next.points - rank.from))) : 100;
-    const title = rank.next ? this.t('rank_next', {count: rank.next.points - member.earned, name: `${rank.next.icon} ${rank.next.name}`}) : this.t('rank_top');
-    return `<div class="rank" title="${escape(title)}"><span>${escape(`${rank.icon} ${rank.name}`.trim())}</span><span class="bar"><i style="width:${pct}%"></i></span></div>`;
+    // Past the last rank, the bar leads to the next prestige star.
+    const target = rank.next ? rank.next.points : rank.starAt;
+    const pct = target ? Math.min(100, Math.round(100 * (rank.points - rank.from) / Math.max(1, target - rank.from))) : 100;
+    const title = rank.next ? this.t('rank_next', {count: rank.next.points - rank.points, name: `${rank.next.icon} ${rank.next.name}`})
+      : rank.starAt ? this.t('rank_star', {count: rank.starAt - rank.points}) : this.t('rank_top');
+    const stars = !rank.stars ? '' : rank.stars <= 3 ? '⭐'.repeat(rank.stars) : `⭐×${rank.stars}`;
+    return `<div class="rank" title="${escape(title)}"><span>${escape(`${stars} ${rank.icon} ${rank.name}`.trim())}</span><span class="bar"><i style="width:${pct}%"></i></span></div>`;
   }
   gauge(value, target, done) {
     const pct = done ? 100 : Math.min(100, Math.round(100 * value / Math.max(1, target)));

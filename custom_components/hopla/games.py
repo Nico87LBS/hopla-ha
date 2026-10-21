@@ -76,6 +76,9 @@ def _rank(item):
         "next_name": following.get("name") if following else None,
         "next_icon": following.get("icon") if following else None,
         "next_points": following.get("minPoints") if following else None,
+        "stars": item.get("stars", 0),
+        "round_points": item.get("points", item.get("earned", 0)),
+        "star_at": item.get("starAt") or None,
     }
 
 
@@ -176,7 +179,9 @@ class GamesTracker:
         surprise = today.get("surprise")
         period = today.get("bonus_period")
         surprise_key = (surprise["day"], surprise["task_id"]) if surprise else None
-        levels = {user_id: rank["level"] for user_id, rank in (today.get("ranks") or {}).items()}
+        # A prestige star restarts the ranks, so a level is compared with its stars.
+        levels = {user_id: (rank.get("stars", 0), rank["level"])
+                  for user_id, rank in (today.get("ranks") or {}).items()}
         quests = {(user_id, quest["id"]) for user_id, items in (today.get("quests") or {}).items()
                   for quest in items if quest["done"]}
         challenges = today.get("challenges") or []
@@ -196,7 +201,8 @@ class GamesTracker:
                 fire(EVENT_BONUS_PERIOD_STARTED, period)
             for user_id, level in levels.items():
                 if user_id in self._levels and level > self._levels[user_id]:
-                    fire(EVENT_RANK_UP, today["ranks"][user_id], user_id)
+                    new_star = level[0] > self._levels[user_id][0]
+                    fire(EVENT_RANK_UP, {**today["ranks"][user_id], "new_star": new_star}, user_id)
             for user_id, quest_id in sorted(quests - self._quests):
                 quest = next(q for q in today["quests"][user_id] if q["id"] == quest_id)
                 fire(EVENT_QUEST_COMPLETED, quest, user_id)
