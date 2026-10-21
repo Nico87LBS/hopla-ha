@@ -341,7 +341,7 @@ class HoplaFamilyCard extends HTMLElement {
     const step = (group, rank) => {
       const size = rank === 0 ? 76 : 60;
       const faces = group.length
-        ? group.map(m => `<div class="podium-member">${rank === 0 && podiumScore(m) > 0 ? `<span class="crown">${svg('crown', 30)}</span>` : ''}${this.face(m, size, rank === 0 && podiumScore(m) > 0 ? ' leader' : '')}<div class="podium-name">${escape(m.name)}</div>${podiumScore(m) !== m.points ? `<div class="podium-spend">${escape(this.t('to_spend', {count: m.points}))}</div>` : ''}${this.rank(m)}${this.streak(m)}</div>`).join('')
+        ? group.map(m => `<div class="podium-member">${rank === 0 && podiumScore(m) > 0 ? `<span class="crown">${svg('crown', 30)}</span>` : ''}${this.face(m, size, rank === 0 && podiumScore(m) > 0 ? ' leader' : '')}<div class="podium-name">${escape(m.name)}</div><div class="podium-spend">${escape(this.t('to_spend', {count: m.points}))}</div>${this.rank(m)}${this.streak(m)}</div>`).join('')
         : `<div class="podium-member"><span class="face empty" style="width:${size}px;height:${size}px"></span><div class="podium-name">&nbsp;</div></div>`;
       const score = group.length ? escape(this.t('common.pts', {count: podiumScore(group[0])})) : '&nbsp;';
       return `<div class="podium-col rank${rank + 1}"><div class="podium-faces">${faces}</div><div class="podium-score">${score}</div><div class="step">${rank + 1}</div></div>`;
