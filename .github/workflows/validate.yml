@@ -52,3 +52,22 @@ jobs:
         uses: "hacs/action@main"
         with:
           category: "integration"
+
+  version-bump:
+    # Every change needs a new version in manifest.json: merging it publishes
+    # the release that HACS offers as an update.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: The manifest version is higher than on the base branch
+        run: |
+          base=$(git show "origin/${{ github.base_ref }}:custom_components/hopla/manifest.json" | jq -r .version)
+          head=$(jq -r .version custom_components/hopla/manifest.json)
+          echo "base $base, this PR $head"
+          if [ "$(printf '%s\n%s\n' "$base" "$head" | sort -V | tail -n1)" != "$head" ] || [ "$base" = "$head" ]; then
+            echo "::error file=custom_components/hopla/manifest.json::Raise the version above $base so the merge publishes a release."
+            exit 1
+          fi
