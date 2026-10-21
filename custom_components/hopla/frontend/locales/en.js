@@ -56,6 +56,13 @@ export default {
     period: 'Points ×{multiplier}',
     period_left: '{time} left',
     surprise: 'Surprise task: +{n} extra points',
+    rank_next_one: '{count} more point to {name}',
+    rank_next_other: '{count} more points to {name}',
+    rank_top: 'Top rank reached',
+    quests: 'Quests',
+    goal_family: 'Family',
+    goal_to_win: 'To win: {reward}',
+    goal_won: 'Won: {reward}!',
     errors: {
       due: 'due must be today or all',
       members: 'members must be a list of Hopla user IDs',
@@ -75,6 +82,7 @@ export default {
       show_approval: 'Show approve and reject buttons',
       allow_redeem: 'Allow redeeming rewards from the card',
       show_bonus: 'Show bonuses and penalties in parent mode',
+      show_goals: 'Show quests and challenges',
     },
   },
   todo: {

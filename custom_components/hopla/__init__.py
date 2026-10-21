@@ -212,7 +212,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 _LOGGER.debug("Failed to refresh the points history: %s", err)
         try:
             coordinator.games_today = games_today(await client.async_get_games_today())
-            games.update(coordinator.games_today, entry.entry_id)
+            games.update(coordinator.games_today, entry.entry_id, circle_members)
         except Exception as err:
             _LOGGER.debug("Failed to refresh today's games: %s", err)
         coordinator.pending_approvals = pending_approvals(tasks, history, circle_members)

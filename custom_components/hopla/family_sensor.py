@@ -154,6 +154,7 @@ class HoplaPointsSensor(_FamilySensor):
             "recent_completions": recent_completions(
                 getattr(self.coordinator, "completed_tasks", []), member.user_id),
             **self._streak(member.user_id),
+            **self._progress(member.user_id),
         }
 
     def _streak(self, user_id: int) -> dict[str, Any]:
@@ -162,6 +163,22 @@ class HoplaPointsSensor(_FamilySensor):
             return {}
         streak = today["streaks"].get(user_id, {"current": 0, "best": 0, "done_today": False})
         return {"streak": streak["current"], "best_streak": streak["best"], "streak_done_today": streak["done_today"]}
+
+    def _progress(self, user_id: int) -> dict[str, Any]:
+        today = getattr(self.coordinator, "games_today", None)
+        rank = (today or {}).get("ranks", {}).get(user_id)
+        if not rank:
+            return {}
+        return {
+            "rank": rank["name"],
+            "rank_icon": rank["icon"],
+            "rank_level": rank["level"],
+            "rank_points": rank["min_points"],
+            "next_rank": rank["next_name"],
+            "next_rank_icon": rank["next_icon"],
+            "next_rank_points": rank["next_points"],
+            "quests": today.get("quests", {}).get(user_id, []),
+        }
 
 
 class HoplaPendingApprovalSensor(_FamilySensor):
@@ -243,7 +260,8 @@ class HoplaBonusSensor(_FamilySensor):
 
 
 class HoplaGamesSensor(_FamilySensor):
-    """Today's surprise task, as the state, and the bonus period running now."""
+    """Today's surprise task, as the state, the bonus period running now and
+    the challenges."""
 
     _attr_icon = "mdi:party-popper"
     _attr_translation_key = "games_today"
@@ -270,5 +288,6 @@ class HoplaGamesSensor(_FamilySensor):
             "bonus_period": today.get("bonus_period"),
             "streak_every": today.get("streak_every", 0),
             "streak_bonus": today.get("streak_bonus", 0),
+            "challenges": today.get("challenges", []),
             "config_entry_id": self._config_entry.entry_id,
         }

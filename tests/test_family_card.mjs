@@ -131,3 +131,22 @@ assert.equal(games.tasks.find(t => t.id === 11).surprise, 0);
 assert.equal(games.members.find(m => m.id === 2).streak, 4);
 assert.equal(games.rewards.length, 1, 'the games sensor is not taken for another one');
 assert.equal(boardData(hass, {}, now).period, null);
+
+// Ranks, quests and challenges.
+const quest = {id: 7, name: 'Mettre la table', target: 5, progress: 3, reward: 8, done: false};
+const withProgress = {...hass, states: {...hass.states,
+  'sensor.hopla_points_elena': {state: '5', attributes: {hopla_member_id: 2, display_name: 'Elena', role: 'member', total_points: 140,
+    rank: 'Hop Hop', rank_icon: '🐸', rank_level: 2, rank_points: 100, next_rank: 'Super Hop', next_rank_icon: '🦘', next_rank_points: 300,
+    quests: [quest]}},
+  'sensor.hopla_jeux_du_jour': {state: 'unknown', attributes: {hopla_games: true, challenges: [
+    {id: 1, name: 'Piscine', shared: true, members: [2, 3], progress: {2: 15, 3: 5}, total: 20, target: 200, done: false, winners: [], ends_at: '2026-10-25T00:00:00Z'},
+    {id: 2, name: 'Fini', shared: false, members: [2], progress: {2: 3}, total: 3, target: 3, done: true, winners: [2], ends_at: '2026-10-19T00:00:00Z'},
+    {id: 3, name: 'Nico seul', shared: false, members: [1], progress: {}, total: 0, target: 3, done: false, winners: [], ends_at: '2026-10-25T00:00:00Z'},
+  ]}}}};
+const progress = boardData(withProgress, {members: [2, 3]}, now);
+const elenaProgress = progress.members.find(m => m.id === 2);
+assert.deepEqual(elenaProgress.rank, {name: 'Hop Hop', icon: '🐸', level: 2, from: 100, next: {name: 'Super Hop', icon: '🦘', points: 300}});
+assert.equal(elenaProgress.earned, 140);
+assert.deepEqual(elenaProgress.quests, [quest]);
+assert.equal(progress.members.find(m => m.id === 3).rank, null);
+assert.deepEqual(progress.challenges.map(c => c.id), [1], 'ended challenges and other members’ ones are left out');

@@ -43,7 +43,10 @@ seule.
   l'état est le nombre de points encore disponibles, avec `total_points`,
   `points_redeemed`, la photo de profil Hopla du membre et sa série : `streak`
   (jours d'affilée avec au moins une tâche faite), `best_streak` et
-  `streak_done_today`.
+  `streak_done_today`. Il porte aussi le rang, qui suit les points gagnés depuis
+  le début (`rank`, `rank_icon`, `rank_level`, `next_rank`, `next_rank_points`),
+  et les quêtes en cours (`quests` : `name`, `progress`, `target`, `reward`,
+  `done`).
 - **`sensor.hopla_pending_approvals`** : les tâches qui attendent une validation,
   avec qui les a faites (attribut `tasks`).
 - **`sensor.hopla_rewards`** : les récompenses actives et leur coût (attribut
@@ -55,7 +58,9 @@ seule.
 - **`sensor.hopla_jeux_du_jour`** : l'état est le nom de la tâche surprise du
   jour, avec les attributs `surprise` (`task_id`, `task_name`, `points` en plus),
   `bonus_period` (la période bonus en cours : `name`, `multiplier`, `ends_at`),
-  `streak_every` et `streak_bonus`. Les règles se règlent dans Hopla, onglet
+  `streak_every`, `streak_bonus` et `challenges` (les défis en cours :
+  `name`, `shared` pour un défi en famille, `total`, `target`, `progress` par
+  membre, `reward_text`, `done`, `winners`). Les règles se règlent dans Hopla, onglet
   Jeux de la page Points.
 - **`binary_sensor.hopla_mode_parent`** : allumé quand le mode parent est ouvert
   sur la tablette.
@@ -87,6 +92,10 @@ toute seule, en attendant un peu plus après chaque échec (jusqu'à 5 minutes).
 | `hopla_points_changed` | Les points d'un membre bougent : tâche, tâche annulée, récompense, bonus ou pénalité | `user_id`, `user_name`, `action` (`task`, `undo`, `redeem`, `bonus` ou `penalty`), `points`, `delta` (signé), `reason`, `created_by_name` |
 | `hopla_surprise_task` | La tâche surprise du jour est tirée | `task_id`, `task_name`, `points`, `day` |
 | `hopla_bonus_period_started` / `hopla_bonus_period_ended` | Une période bonus commence ou se termine | `name`, `multiplier`, `starts_at`, `ends_at` |
+| `hopla_rank_up` | Un membre passe au rang suivant | `user_id`, `user_name`, `name`, `icon`, `level`, `next_name` |
+| `hopla_quest_completed` | Un membre réussit une quête | `user_id`, `user_name`, `name`, `reward` |
+| `hopla_challenge_won` | Un membre gagne un défi chacun pour soi | `user_id`, `user_name`, `name`, `reward`, `reward_text` |
+| `hopla_goal_reached` | La famille atteint un défi commun | `name`, `total`, `target`, `reward_text`, `member_names` |
 | `hopla_task_reminder` | À chaque rappel réglé sur une tâche dans Hopla | voir ci-dessous |
 
 ### Rappels de tâches
@@ -208,6 +217,7 @@ show_rewards: true     # les récompenses
 show_approval: false   # boutons Valider et Refuser, pour les parents
 allow_redeem: false    # échanger des récompenses depuis la carte (deux touches)
 show_bonus: true       # les bonus et pénalités, pour les parents
+show_goals: true       # les quêtes et les défis
 ```
 
 Chaque partie peut être masquée : la même carte peut n'afficher que les
