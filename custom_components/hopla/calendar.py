@@ -566,7 +566,7 @@ class HoplaCalendar(CoordinatorEntity, CalendarEntity):
     """A calendar entity representing Hopla chores."""
 
     _attr_has_entity_name = True
-    _attr_name = "Chores"
+    _attr_translation_key = "due_dates"
 
     def __init__(
         self,
@@ -580,9 +580,10 @@ class HoplaCalendar(CoordinatorEntity, CalendarEntity):
         self._client = client
         self._circle_members = circle_members
         self._attr_unique_id = f"{entry.entry_id}_calendar"
+        # On the main Hopla device, so the calendars are calendar.hopla_….
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, f"{entry.entry_id}_chores")},
-            "name": "Hopla Chores",
+            "identifiers": {(DOMAIN, f"family_{entry.entry_id}")},
+            "name": "Hopla",
             "manufacturer": "Hopla",
         }
 
@@ -647,7 +648,7 @@ class HoplaActivityCalendar(CoordinatorEntity, CalendarEntity):
     """A calendar entity representing Hopla chore activity history."""
 
     _attr_has_entity_name = True
-    _attr_name = "Activity Log"
+    _attr_translation_key = "activity"
 
     def __init__(
         self,
@@ -661,9 +662,10 @@ class HoplaActivityCalendar(CoordinatorEntity, CalendarEntity):
         self._client = client
         self._circle_members = circle_members
         self._attr_unique_id = f"{entry.entry_id}_activity_calendar"
+        # On the main Hopla device, so the calendars are calendar.hopla_….
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, f"{entry.entry_id}_chores")},
-            "name": "Hopla Chores",
+            "identifiers": {(DOMAIN, f"family_{entry.entry_id}")},
+            "name": "Hopla",
             "manufacturer": "Hopla",
         }
 

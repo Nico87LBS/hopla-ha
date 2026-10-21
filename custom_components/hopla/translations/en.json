@@ -63,6 +63,31 @@
       },
       "games_today": {
         "name": "Today's games"
+      },
+      "pending_approvals": {
+        "name": "Pending approvals"
+      },
+      "rewards": {
+        "name": "Rewards"
+      }
+    },
+    "todo": {
+      "all_tasks": {
+        "name": "All tasks"
+      },
+      "project_tasks": {
+        "name": "{project} tasks"
+      },
+      "member_tasks": {
+        "name": "{name}'s tasks"
+      }
+    },
+    "calendar": {
+      "due_dates": {
+        "name": "Due dates"
+      },
+      "activity": {
+        "name": "Activity log"
       }
     }
   },

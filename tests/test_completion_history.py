@@ -31,7 +31,7 @@ class CompletionHistoryTests(IsolatedAsyncioTestCase):
         records = [dict(uid='history--1',task_id=10,name='Daily task',description='',completed_at='2026-10-12T22:30:00+00:00',completed_by=1,project_id=3),
                    dict(uid='history--2',task_id=10,name='Yesterday',description='',completed_at='2026-10-12T20:30:00+00:00',completed_by=1,project_id=3)]
         task=SimpleNamespace(id=10,name='Daily task',description='',next_due_date=datetime(2026,10,14,tzinfo=timezone.utc),is_active=True)
-        entity=SimpleNamespace(coordinator=SimpleNamespace(data=[task],completed_tasks=records),_attr_name='Tasks',_filter_tasks=lambda tasks:tasks,_apply_due_window=lambda tasks:tasks,get_status=lambda *args:'needs_action')
+        entity=SimpleNamespace(coordinator=SimpleNamespace(data=[task],completed_tasks=records),entity_id='todo.tasks',_filter_tasks=lambda tasks:tasks,_apply_due_window=lambda tasks:tasks,get_status=lambda *args:'needs_action')
         entity._completed_tasks=lambda:self.methods['_completed_tasks'](entity)
         items=self.methods['todo_items'](entity)
         self.assertEqual([item.status for item in items],['needs_action','completed'])
