@@ -114,7 +114,7 @@ toute seule, en attendant un peu plus après chaque échec (jusqu'à 5 minutes).
 | `hopla_task_approval_resolved` | Elle a été validée ou refusée, ici ou dans Hopla | `task_id`, `task_name` |
 | `hopla_reward_requested` | Un enfant demande une récompense depuis la tablette | `redemption_id`, `reward_id`, `reward_name`, `points_cost`, `user_id`, `user_name` |
 | `hopla_reward_request_resolved` | La demande a été validée ou refusée | `redemption_id`, `reward_name`, `user_id` |
-| `hopla_points_changed` | Les points d'un membre bougent : tâche, tâche annulée, récompense, bonus ou pénalité | `user_id`, `user_name`, `action` (`task`, `undo`, `redeem`, `bonus` ou `penalty`), `points`, `delta` (signé), `reason`, `created_by_name` |
+| `hopla_points_changed` | Les points d'un membre bougent : tâche, tâche annulée, récompense, bonus, pénalité ou remise à zéro | `user_id`, `user_name`, `action` (`task`, `undo`, `redeem`, `bonus`, `penalty` ou `reset`), `points`, `delta` (signé), `reason`, `created_by_name` |
 | `hopla_surprise_task` | La tâche surprise du jour est tirée | `task_id`, `task_name`, `points`, `day` |
 | `hopla_bonus_period_started` / `hopla_bonus_period_ended` | Une période bonus commence ou se termine | `name`, `multiplier`, `starts_at`, `ends_at` |
 | `hopla_rank_up` | Un membre passe au rang suivant | `user_id`, `user_name`, `name`, `icon`, `level`, `next_name` |
