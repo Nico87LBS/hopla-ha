@@ -24,6 +24,9 @@ function isHopla(hass, id) {
 
 const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
+// Only the drawn badges the integration ships, from hopla-1 to hopla-7.
+const rankImage = image => /^hopla-[1-7]$/.test(image || '') ? image : null;
+
 // The podium ranks the points earned since the start: spending on a reward
 // does not make a child drop. The balance left to spend is the fallback.
 const podiumScore = member => member.earned ?? member.points;
@@ -128,7 +131,7 @@ export function boardData(hass, config, now = new Date()) {
       members.push({id: a.hopla_member_id, name: a.display_name || a.friendly_name, role: a.role,
         picture: a.entity_picture || null, points: Number(state.state) || 0, recent: a.recent_completions || [],
         streak: Number(a.streak) || 0, streakToday: a.streak_done_today === true,
-        rank: a.rank ? {name: a.rank, icon: a.rank_icon || '', level: Number(a.rank_level) || 1, from: Number(a.rank_points) || 0,
+        rank: a.rank ? {name: a.rank, icon: a.rank_icon || '', image: rankImage(a.rank_image), level: Number(a.rank_level) || 1, from: Number(a.rank_points) || 0,
           next: a.next_rank ? {name: a.next_rank, icon: a.next_rank_icon || '', points: Number(a.next_rank_points) || 0} : null,
           stars: Number(a.rank_stars) || 0, points: Number(a.rank_round_points ?? a.total_points) || 0,
           starAt: Number(a.next_star_points) || 0} : null,
@@ -363,7 +366,10 @@ class HoplaFamilyCard extends HTMLElement {
     const title = rank.next ? this.t('rank_next', {count: rank.next.points - rank.points, name: `${rank.next.icon} ${rank.next.name}`})
       : rank.starAt ? this.t('rank_star', {count: rank.starAt - rank.points}) : this.t('rank_top');
     const stars = !rank.stars ? '' : rank.stars <= 3 ? '⭐'.repeat(rank.stars) : `⭐×${rank.stars}`;
-    return `<div class="rank" title="${escape(title)}"><span>${escape(`${stars} ${rank.icon} ${rank.name}`.trim())}</span><span class="bar"><i style="width:${pct}%"></i></span></div>`;
+    // A drawn badge takes the place of the emoji.
+    const badge = rank.image ? `<img class="rank-badge" src="${new URL(`./ranks/${rank.image}.svg${new URL(import.meta.url).search}`, import.meta.url)}" alt="">` : '';
+    const label = `${stars} ${rank.image ? '' : rank.icon} ${rank.name}`.replace(/\s+/g, ' ').trim();
+    return `<div class="rank" title="${escape(title)}">${badge}<span>${escape(label)}</span><span class="bar"><i style="width:${pct}%"></i></span></div>`;
   }
   gauge(value, target, done) {
     const pct = done ? 100 : Math.min(100, Math.round(100 * value / Math.max(1, target)));
@@ -556,6 +562,7 @@ class HoplaFamilyCard extends HTMLElement {
         background: rgba(245,180,0,.16); color: #8a5a00; font-size: 15px; }
       .period-end { margin-left: auto; font-size: 13px; white-space: nowrap; }
       .rank { display: flex; flex-direction: column; align-items: center; gap: 3px; margin-top: 2px; font-size: 12px; font-weight: 700; color: var(--secondary-text-color); }
+      .rank-badge { width: 40px; height: 40px; display: block; }
       .rank .bar { width: 56px; height: 4px; border-radius: 2px; background: var(--dt-line); overflow: hidden; }
       .rank .bar i, .gauge i { display: block; height: 100%; background: var(--dt-ring); border-radius: inherit; }
       .gauge { flex: 1; min-width: 60px; height: 8px; border-radius: 4px; background: var(--dt-line); overflow: hidden; }

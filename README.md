@@ -59,7 +59,8 @@ dépenser.
 | `hopla_member_id`, `display_name`, `username`, `role` | Qui est ce membre |
 | `total_points` | Points gagnés depuis le début (c'est ce qui fixe le rang) |
 | `points_redeemed` | Points dépensés en récompenses ou perdus en pénalités |
-| `rank`, `rank_icon`, `rank_level` | Rang actuel, par exemple `Hop Hop`, `🐸`, `2` |
+| `rank`, `rank_icon`, `rank_level` | Rang actuel, par exemple `Petit bondisseur`, `🌱`, `2` |
+| `rank_image`, `next_rank_image` | Badge dessiné du rang actuel et du suivant (`hopla-1` à `hopla-7`), vide si le rang n'en a pas. La carte famille l'affiche à la place de l'emoji |
 | `rank_points`, `next_rank`, `next_rank_icon`, `next_rank_points` | Points du rang actuel, et rang suivant avec les points qu'il demande (vide au dernier rang) |
 | `rank_stars` | Étoiles de prestige ⭐ : une de plus à chaque tour complet des rangs, gardées pour toujours |
 | `rank_round_points`, `next_star_points` | Points gagnés dans le tour en cours, et points du tour qui donnent l'étoile suivante |

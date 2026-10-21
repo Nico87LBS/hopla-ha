@@ -117,8 +117,9 @@ def progress(level=1, quest_done=False, solo_winners=(), goal_done=False, total=
 class ProgressionTests(unittest.TestCase):
     def test_shape(self):
         today = games.games_today(progress())
-        self.assertEqual(today["ranks"][2], {"level": 1, "name": "Petit Hop", "icon": "🐣", "earned": 40, "min_points": 0,
-                                             "next_name": "Hop Hop", "next_icon": "🐸", "next_points": 100,
+        self.assertEqual(today["ranks"][2], {"level": 1, "name": "Petit Hop", "icon": "🐣", "image": None, "earned": 40, "min_points": 0,
+                                             "next_name": "Hop Hop", "next_icon": "🐸", "next_image": None,
+                                             "next_points": 100,
                                              "stars": 0, "round_points": 40, "star_at": None})
         quest = today["quests"][2][0]
         self.assertEqual((quest["task_id"], quest["progress"], quest["target"], quest["done"]), (11, 3, 5, False))

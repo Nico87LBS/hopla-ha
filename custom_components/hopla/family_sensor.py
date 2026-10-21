@@ -172,10 +172,12 @@ class HoplaPointsSensor(_FamilySensor):
         return {
             "rank": rank["name"],
             "rank_icon": rank["icon"],
+            "rank_image": rank.get("image"),
             "rank_level": rank["level"],
             "rank_points": rank["min_points"],
             "next_rank": rank["next_name"],
             "next_rank_icon": rank["next_icon"],
+            "next_rank_image": rank.get("next_image"),
             "next_rank_points": rank["next_points"],
             "rank_stars": rank.get("stars", 0),
             "rank_round_points": rank.get("round_points", rank["earned"]),
