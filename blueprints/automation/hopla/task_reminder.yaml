@@ -1,0 +1,93 @@
+blueprint:
+  name: Rappel de tâche Hopla
+  description: >
+    Prévient une personne au moment des rappels réglés sur ses tâches dans Hopla
+    (avant l'échéance, à l'échéance ou après). Créez une automatisation par
+    personne. Le serveur Hopla n'envoie aucune notification : c'est ce blueprint
+    qui le fait.
+  domain: automation
+  source_url: https://github.com/Nico87LBS/hopla-ha/blob/main/blueprints/automation/hopla/task_reminder.yaml
+  input:
+    member:
+      name: Personne
+      description: Le capteur de points Hopla de la personne à prévenir.
+      selector:
+        entity:
+          integration: hopla
+          domain: sensor
+    include_unassigned:
+      name: Tâches sans personne attribuée
+      description: Prévenir aussi pour les tâches attribuées à « N'importe qui ».
+      default: false
+      selector:
+        boolean:
+    notify_service:
+      name: Service de notification (facultatif)
+      description: >
+        Par exemple notify.mobile_app_telephone_de_nico pour le téléphone de la
+        personne. Laissez vide pour n'utiliser que les autres actions.
+      default: ""
+      selector:
+        text:
+    title:
+      name: Titre
+      default: "⏰ {{ task_name }}"
+      selector:
+        text:
+    message:
+      name: Message
+      default: "{{ quand | capitalize }}{% if points %} · {{ points }} points{% endif %}"
+      selector:
+        text:
+          multiline: true
+    extra_actions:
+      name: Autres actions (facultatif)
+      description: >
+        Par exemple une annonce sur une enceinte. Les variables task_name, quand,
+        points et person sont disponibles.
+      default: []
+      selector:
+        action:
+
+mode: queued
+max: 20
+
+triggers:
+  - trigger: event
+    event_type: hopla_task_reminder
+
+variables:
+  member: !input member
+  include_unassigned: !input include_unassigned
+  notify_service: !input notify_service
+  member_id: "{{ state_attr(member, 'hopla_member_id') }}"
+  person: "{{ trigger.event.data.assigned_to_name or '' }}"
+  task_name: "{{ trigger.event.data.task_name }}"
+  points: "{{ trigger.event.data.points or 0 }}"
+  quand: >-
+    {% set m = trigger.event.data.offset_minutes | int(0) %}
+    {% set a = m | abs %}
+    {% if a % 1440 == 0 %}{% set duree = (a // 1440) ~ ' j' %}
+    {% elif a % 60 == 0 %}{% set duree = (a // 60) ~ ' h' %}
+    {% else %}{% set duree = a ~ ' min' %}{% endif %}
+    {% if m == 0 %}à faire maintenant{% elif m < 0 %}à faire dans {{ duree }}{% else %}en retard de {{ duree }}{% endif %}
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ (member_id is not none and trigger.event.data.assigned_to == member_id)
+         or (include_unassigned and trigger.event.data.assigned_to is none) }}
+
+actions:
+  - if:
+      - condition: template
+        value_template: "{{ notify_service | trim != '' }}"
+    then:
+      - action: "{{ notify_service | trim }}"
+        data:
+          title: !input title
+          message: !input message
+          data:
+            tag: "hopla_reminder_{{ trigger.event.data.task_id }}"
+  - choose: []
+    default: !input extra_actions

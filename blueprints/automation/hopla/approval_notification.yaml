@@ -5,7 +5,7 @@ blueprint:
     approval, with Approve and Reject buttons. The notification is cleared once the
     task is approved or rejected, from the phone, the dashboard or Hopla itself.
   domain: automation
-  source_url: https://github.com/Nico87LBS/hopla-hass-integration/blob/main/blueprints/automation/hopla/approval_notification.yaml
+  source_url: https://github.com/Nico87LBS/hopla-ha/blob/main/blueprints/automation/hopla/approval_notification.yaml
   input:
     notify_device:
       name: Phone

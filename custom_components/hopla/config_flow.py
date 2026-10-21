@@ -3,7 +3,6 @@ from typing import Any
 import logging
 import voluptuous as vol
 import aiohttp
-from datetime import timedelta
 
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
@@ -11,31 +10,10 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import config_validation as cv
 
-from homeassistant.helpers.selector import (
-    DurationSelector,
-    DurationSelectorConfig,
-)
-
-from .const import DOMAIN, CONF_URL, CONF_TOKEN, CONF_SHOW_DUE_IN, CONF_SHOW_NO_DUE_DATE, CONF_CREATE_PROJECT_LISTS, CONF_CREATE_UNIFIED_LIST, CONF_CREATE_ASSIGNEE_LISTS, CONF_REFRESH_INTERVAL, DEFAULT_REFRESH_INTERVAL
+from .const import DOMAIN, CONF_URL, CONF_TOKEN, CONF_SHOW_DUE_IN, CONF_SHOW_NO_DUE_DATE, CONF_CREATE_PROJECT_LISTS, CONF_CREATE_UNIFIED_LIST, CONF_CREATE_ASSIGNEE_LISTS
 from .api import HoplaApiClient
 
 _LOGGER = logging.getLogger(__name__)
-
-def _seconds_to_time_config(total_seconds: int):
-    hours, remainder = divmod(total_seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    return {
-        "hours": hours,
-        "minutes": minutes,
-        "seconds": seconds,
-    }
-
-def _config_to_seconds(config: dict[str, int]):
-    return timedelta(
-        hours=config["hours"],
-        minutes=config["minutes"],
-        seconds=config["seconds"],
-    ).total_seconds()
 
 class HoplaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Hopla."""
@@ -85,9 +63,6 @@ class HoplaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Handle the options step."""
         if user_input is not None:
-            refresh_interval = DEFAULT_REFRESH_INTERVAL
-            if (refresh_interval_input := user_input.get(CONF_REFRESH_INTERVAL)) is not None:
-                refresh_interval = _config_to_seconds(refresh_interval_input)
             final_data = {
                 **self._server_data,
                 CONF_SHOW_DUE_IN: user_input.get(CONF_SHOW_DUE_IN, 7),
@@ -95,7 +70,6 @@ class HoplaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_CREATE_UNIFIED_LIST: user_input.get(CONF_CREATE_UNIFIED_LIST, True),
                 CONF_CREATE_PROJECT_LISTS: user_input.get(CONF_CREATE_PROJECT_LISTS, False),
                 CONF_CREATE_ASSIGNEE_LISTS: user_input.get(CONF_CREATE_ASSIGNEE_LISTS, False),
-                CONF_REFRESH_INTERVAL: refresh_interval
             }
             
             return self.async_create_entry(
@@ -111,9 +85,6 @@ class HoplaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_CREATE_UNIFIED_LIST, default=True): bool,
                 vol.Optional(CONF_CREATE_PROJECT_LISTS, default=False): bool,
                 vol.Optional(CONF_CREATE_ASSIGNEE_LISTS, default=False): bool,
-                vol.Optional(CONF_REFRESH_INTERVAL, default=_seconds_to_time_config(DEFAULT_REFRESH_INTERVAL)): DurationSelector(
-                    DurationSelectorConfig(enable_day=False, allow_negative=False)
-                ),
             }),
         )
 
@@ -135,9 +106,6 @@ class HoplaOptionsFlowHandler(config_entries.OptionsFlow):
     ) -> FlowResult:
         """Manage the options."""
         if user_input is not None:
-            refresh_interval = DEFAULT_REFRESH_INTERVAL
-            if (refresh_interval_input := user_input.get(CONF_REFRESH_INTERVAL)) is not None:
-                refresh_interval = _config_to_seconds(refresh_interval_input)
             data = {
                 CONF_URL: self.entry.data.get(CONF_URL),
                 CONF_TOKEN: self.entry.data.get(CONF_TOKEN),
@@ -146,7 +114,6 @@ class HoplaOptionsFlowHandler(config_entries.OptionsFlow):
                 CONF_CREATE_UNIFIED_LIST: user_input.get(CONF_CREATE_UNIFIED_LIST, True),
                 CONF_CREATE_PROJECT_LISTS: user_input.get(CONF_CREATE_PROJECT_LISTS, False),
                 CONF_CREATE_ASSIGNEE_LISTS: user_input.get(CONF_CREATE_ASSIGNEE_LISTS, False),
-                CONF_REFRESH_INTERVAL: refresh_interval
             }
 
             # Workaround to being able to use the same parameters in both config and options flow. 
@@ -185,9 +152,5 @@ class HoplaOptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_CREATE_ASSIGNEE_LISTS,
                     default=self.entry.data.get(CONF_CREATE_ASSIGNEE_LISTS, False)
                 ): bool,
-                vol.Optional(
-                    CONF_REFRESH_INTERVAL, 
-                    default=_seconds_to_time_config(self.entry.data.get(CONF_REFRESH_INTERVAL, DEFAULT_REFRESH_INTERVAL))
-                ): DurationSelector(DurationSelectorConfig(enable_day=False, allow_negative=False))
             }),
         )

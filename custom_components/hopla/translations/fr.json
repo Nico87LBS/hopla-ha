@@ -17,8 +17,7 @@
           "show_no_due_date": "Afficher les tâches sans échéance",
           "create_unified_list": "Créer la liste « Toutes les tâches »",
           "create_project_lists": "Créer une liste par projet",
-          "create_assignee_lists": "Créer une liste par personne",
-          "refresh_interval": "Intervalle d'actualisation"
+          "create_assignee_lists": "Créer une liste par personne"
         }
       }
     },
@@ -38,8 +37,7 @@
           "show_no_due_date": "Afficher les tâches sans échéance",
           "create_unified_list": "Créer la liste « Toutes les tâches »",
           "create_project_lists": "Créer une liste par projet",
-          "create_assignee_lists": "Créer une liste par personne",
-          "refresh_interval": "Intervalle d'actualisation"
+          "create_assignee_lists": "Créer une liste par personne"
         }
       }
     }

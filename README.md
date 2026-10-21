@@ -43,13 +43,40 @@ To assign a task, call `hopla.update_task` with `task_id` and `assigned_to` set 
 
 ### ⭐ Points, approvals and rewards
 
-These need a Hopla server with the external API routes for approval and rewards.
-
 - **Points sensors**: one per circle member, such as `sensor.hopla_points_elena`. The state is the points the member can still spend; `total_points` and `points_redeemed` are attributes, and the entity picture is the member's Hopla profile photo.
 - **`sensor.hopla_pending_approvals`**: how many completions wait for approval, with the task, who did it and the points in the `tasks` attribute.
 - **`sensor.hopla_rewards`**: the active rewards and their cost.
 - Task sensors also expose `status`, `pending_approval` and `assignee_ids`.
 - **Events**: `hopla_task_pending_approval` fires when a task starts waiting for approval (`task_id`, `task_name`, `points`, `completed_by`, `completed_by_name`), and `hopla_task_approval_resolved` when it stops waiting, whether it was approved or rejected here or in Hopla.
+
+### ⚡ Live updates
+
+The integration keeps one connection open to Hopla's live event stream with the
+same API token. Every change made in Hopla (a task created, completed, approved
+or edited, a reward, a thing, a family member) refreshes Home Assistant within a
+few seconds. There is no refresh interval to set: while the stream is connected,
+a full refresh still runs every 30 minutes as a safety net, and every 5 minutes
+while it is down. The connection comes back on its own, waiting a little longer
+after each failed attempt (up to 5 minutes).
+
+- **`hopla_task_completed`** fires when a task is completed, in Hopla or here
+  (`task_id`, `task_name`, `points`, `completed_by`, `completed_by_name`). A
+  completion waiting for approval fires `hopla_task_pending_approval` instead.
+
+### ⏰ Task reminders
+
+Hopla sends no notifications itself. The reminders set on a task in Hopla
+(before the due date, at the due date or after it) become a
+**`hopla_task_reminder`** event at each of those moments, with `task_id`,
+`task_name`, `due_date`, `reminder_at`, `offset_minutes` (negative before the due
+date), `kind` (`before`, `due` or `after`), `assigned_to`, `assigned_to_name`,
+`assignee_ids` and `points`. Completing or rescheduling the task cancels its
+pending reminders. Reminders whose time passed while Home Assistant was stopped
+are not sent afterwards.
+
+Import [`blueprints/automation/hopla/task_reminder.yaml`](blueprints/automation/hopla/task_reminder.yaml)
+once per person: pick their Hopla points sensor, then a notify service (such as
+their phone) and/or any other actions, such as an announcement on a speaker.
 
 ### 📱 Approval notification blueprint
 

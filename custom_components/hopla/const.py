@@ -9,8 +9,9 @@ CONF_SHOW_NO_DUE_DATE = "show_no_due_date"
 CONF_CREATE_UNIFIED_LIST = "create_unified_list"
 CONF_CREATE_PROJECT_LISTS = "create_project_lists"
 CONF_CREATE_ASSIGNEE_LISTS = "create_assignee_lists"
-CONF_REFRESH_INTERVAL = "refresh_interval"
 
-DEFAULT_REFRESH_INTERVAL = 900 # seconds - 15 minutes
+# Live updates make polling a safety net: rare while connected, frequent while not.
+LIVE_REFRESH_INTERVAL = 1800  # seconds
+OFFLINE_REFRESH_INTERVAL = 300  # seconds
 
 API_TIMEOUT = 10  # seconds
