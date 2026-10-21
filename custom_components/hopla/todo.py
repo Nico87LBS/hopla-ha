@@ -108,6 +108,12 @@ class HoplaTodoListBase(CoordinatorEntity, TodoListEntity):
         """Initialize the Todo List."""
         super().__init__(coordinator)
         self._config_entry = config_entry
+        # On the main Hopla device, so the lists are todo.hopla_….
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, f"family_{config_entry.entry_id}")},
+            "name": "Hopla",
+            "manufacturer": "Hopla",
+        }
 
     def _filter_tasks(self, tasks):
         """Filter tasks based on entity type. Override in subclasses."""
@@ -135,11 +141,11 @@ class HoplaTodoListBase(CoordinatorEntity, TodoListEntity):
         """Return a list of todo items."""
         if self.coordinator.data is None:
             return None
-        _LOGGER.debug("Generating todo items for entity %s (start with %d)", self._attr_name, len(self.coordinator.data))
+        _LOGGER.debug("Generating todo items for entity %s (start with %d)", self.entity_id, len(self.coordinator.data))
         filtered_tasks = self._filter_tasks(self.coordinator.data)
-        _LOGGER.debug("Generating todo items for entity %s (after filtering to: %d)", self._attr_name, len(filtered_tasks))
+        _LOGGER.debug("Generating todo items for entity %s (after filtering to: %d)", self.entity_id, len(filtered_tasks))
         filtered_tasks = self._apply_due_window(filtered_tasks)
-        _LOGGER.debug("Generating todo items for entity %s (after applying due window: %d)", self._attr_name, len(filtered_tasks))
+        _LOGGER.debug("Generating todo items for entity %s (after applying due window: %d)", self.entity_id, len(filtered_tasks))
         pending = [
             TodoItem(
                 summary=task.name,
@@ -370,7 +376,8 @@ class HoplaAllTasksList(HoplaTodoListBase):
         """Initialize the All Tasks List."""
         super().__init__(coordinator, config_entry)
         self._attr_unique_id = f"dt_{config_entry.entry_id}_all_tasks"
-        self._attr_name = "All Tasks"
+        self._attr_has_entity_name = True
+        self._attr_translation_key = "all_tasks"
 
     def _filter_tasks(self, tasks):
         """Return all active tasks."""
@@ -386,7 +393,9 @@ class HoplaProjectTasksList(HoplaTodoListBase):
         self._project_id = project.id
         self._project_name = project.name
         self._attr_unique_id = f"dt_{config_entry.entry_id}_project_{project.id}_tasks"
-        self._attr_name = f"{project.name} Tasks"
+        self._attr_has_entity_name = True
+        self._attr_translation_key = "project_tasks"
+        self._attr_translation_placeholders = {"project": project.name}
 
     def _filter_tasks(self, tasks):
         """Return tasks belonging to this project."""
@@ -402,7 +411,9 @@ class HoplaAssigneeTasksList(HoplaTodoListBase):
         super().__init__(coordinator, config_entry)
         self._member = member
         self._attr_unique_id = f"dt_{config_entry.entry_id}_{member.user_id}_tasks"
-        self._attr_name = f"{member.display_name}'s Tasks"
+        self._attr_has_entity_name = True
+        self._attr_translation_key = "member_tasks"
+        self._attr_translation_placeholders = {"name": member.display_name or member.username}
 
     def _filter_tasks(self, tasks):
         """Return tasks assigned to this member."""

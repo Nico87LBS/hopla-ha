@@ -27,48 +27,73 @@ Les options de l'intégration ajoutent la sécurité de la tablette (voir plus b
 
 ## Ce que l'intégration crée
 
-### Listes de tâches
+Les noms d'entités ci-dessous sont ceux d'un Home Assistant en français : Home
+Assistant les fabrique dans sa langue au moment de l'installation. Tu peux les
+renommer ensuite ; les cartes Hopla retrouvent leurs capteurs sans dépendre du nom.
 
-Des listes natives de Home Assistant : « Toutes les tâches », une par personne et
-une par projet si tu les actives. On peut y créer, modifier, terminer et supprimer
-des tâches. Les tâches terminées aujourd'hui y apparaissent aussi, en lecture
-seule.
+### Les entités
 
-### Capteurs
+| Entité | État | À quoi elle sert |
+| --- | --- | --- |
+| `todo.hopla_toutes_les_taches` | Nombre de tâches à faire | Liste de toutes les tâches : on peut y créer, modifier, terminer et supprimer des tâches. Les tâches terminées aujourd'hui y restent visibles, en lecture seule |
+| `todo.hopla_taches_de_elena` | Idem | Une liste par membre, si l'option est cochée |
+| `todo.hopla_taches_<projet>` | Idem | Une liste par projet, si l'option est cochée |
+| `calendar.hopla_echeances` | Calendrier | Les échéances à venir, récurrences comprises |
+| `calendar.hopla_historique` | Calendrier | Les tâches faites, à leur date |
+| `sensor.<nom de la tâche>` | Nom de la tâche | Un capteur par tâche (détails plus bas) |
+| `sensor.hopla_points_elena` | Points encore disponibles | Un capteur par membre, avec son rang, sa série et ses quêtes |
+| `sensor.hopla_validations_en_attente` | Nombre de tâches à valider | Ce qui attend un parent |
+| `sensor.hopla_recompenses` | Nombre de récompenses actives | Les récompenses et les demandes en attente |
+| `sensor.hopla_bonus_et_penalites` | Nombre de préréglages | Les bonus et pénalités tout prêts, et les derniers mouvements de points |
+| `sensor.hopla_jeux_du_jour` | Nom de la tâche surprise du jour | La période bonus en cours et les défis |
+| `binary_sensor.hopla_mode_parent` | Allumé si le mode parent est ouvert | La sécurité de la tablette (voir plus bas) |
+| `switch`, `number`, `text` ou `sensor.hopla_things_<objet>` | La valeur de l'objet | Les « objets » Hopla : oui/non, nombre ou texte |
 
-- **Un capteur par tâche**, avec `points`, `status`, `pending_approval`,
-  `assignee_ids`, `frequency`, `interval_type` (`hours`, `days`, `weeks`,
-  `months` ou `years`) et l'échéance.
-- **Un capteur de points par membre**, par exemple `sensor.hopla_points_elena` :
-  l'état est le nombre de points encore disponibles, avec `total_points`,
-  `points_redeemed`, la photo de profil Hopla du membre et sa série : `streak`
-  (jours d'affilée avec au moins une tâche faite), `best_streak` et
-  `streak_done_today`. Il porte aussi le rang, qui suit les points gagnés depuis
-  le début (`rank`, `rank_icon`, `rank_level`, `next_rank`, `next_rank_points`),
-  et les quêtes en cours (`quests` : `name`, `progress`, `target`, `reward`,
-  `done`).
-- **`sensor.hopla_pending_approvals`** : les tâches qui attendent une validation,
-  avec qui les a faites (attribut `tasks`).
-- **`sensor.hopla_rewards`** : les récompenses actives et leur coût (attribut
-  `rewards`), et les demandes de récompense en attente (attribut `requests`).
-- **`sensor.hopla_bonus_et_penalites`** : les préréglages de bonus et de
-  pénalités réglés dans Hopla (attribut `points_presets`, avec `id`, `name` et
-  `points`, négatif pour une pénalité) et les derniers mouvements de points
-  (attribut `recent`).
-- **`sensor.hopla_jeux_du_jour`** : l'état est le nom de la tâche surprise du
-  jour, avec les attributs `surprise` (`task_id`, `task_name`, `points` en plus),
-  `bonus_period` (la période bonus en cours : `name`, `multiplier`, `ends_at`),
-  `streak_every`, `streak_bonus` et `challenges` (les défis en cours :
-  `name`, `shared` pour un défi en famille, `total`, `target`, `progress` par
-  membre, `reward_text`, `done`, `winners`). Les règles se règlent dans Hopla, onglet
-  Jeux de la page Points.
-- **`binary_sensor.hopla_mode_parent`** : allumé quand le mode parent est ouvert
-  sur la tablette.
+### Capteur de points d'un membre
 
-### Objets Hopla
+`sensor.hopla_points_elena` : l'état est le nombre de points qu'Elena peut encore
+dépenser.
 
-Les « objets » Hopla deviennent des interrupteurs (oui/non), des nombres ou des
-textes dans Home Assistant.
+| Attribut | Contenu |
+| --- | --- |
+| `hopla_member_id`, `display_name`, `username`, `role` | Qui est ce membre |
+| `total_points` | Points gagnés depuis le début (c'est ce qui fixe le rang) |
+| `points_redeemed` | Points dépensés en récompenses ou perdus en pénalités |
+| `rank`, `rank_icon`, `rank_level` | Rang actuel, par exemple `Hop Hop`, `🐸`, `2` |
+| `rank_points`, `next_rank`, `next_rank_icon`, `next_rank_points` | Points du rang actuel, et rang suivant avec les points qu'il demande (vide au dernier rang) |
+| `streak`, `best_streak`, `streak_done_today` | Série : jours d'affilée avec au moins une tâche faite, record, et si aujourd'hui compte déjà |
+| `quests` | Quêtes en cours : `name`, `progress`, `target`, `reward`, `done`, `period` (`week` ou `month`), `ends_at` |
+| `recent_completions` | Tâches faites ces deux derniers jours : `task_id`, `name`, `points`, `completed_at` |
+| `entity_picture` | Photo de profil Hopla |
+
+### Capteur d'une tâche
+
+L'état est le nom de la tâche.
+
+| Attribut | Contenu |
+| --- | --- |
+| `task_id`, `description`, `labels`, `priority`, `is_active` | La tâche |
+| `points` | Points qu'elle rapporte |
+| `next_due_date` | Prochaine échéance |
+| `frequency_type`, `frequency`, `interval_type` | Récurrence ; `interval_type` vaut `hours`, `days`, `weeks`, `months` ou `years` |
+| `assigned_to`, `assigned_to_user_id`, `assignee_ids` | À qui elle revient, et qui peut la faire |
+| `status`, `pending_approval` | État, et `true` si elle attend la validation d'un parent |
+
+### Capteurs de la famille
+
+| Capteur | Attribut | Contenu |
+| --- | --- | --- |
+| `sensor.hopla_validations_en_attente` | `tasks` | Chaque tâche à valider : `task_id`, `task_name`, `points`, `completed_by`, `completed_by_name` |
+| `sensor.hopla_recompenses` | `rewards` | Chaque récompense : `id`, `name`, `points_cost`, `description`, et sa limite (`quota_count`, `quota_period`, `quota_used`, `quota_resets_at`) |
+| | `requests` | Demandes en attente : `redemption_id`, `reward_name`, `points_cost`, `user_id`, `user_name`, `requested_at` |
+| `sensor.hopla_bonus_et_penalites` | `points_presets` | Préréglages : `id`, `name`, `points` (négatif pour une pénalité) |
+| | `recent` | Derniers mouvements de points : `user_name`, `action`, `points`, `delta`, `reason`, `created_at` |
+| `sensor.hopla_jeux_du_jour` | `surprise` | Tâche surprise du jour : `task_id`, `task_name`, `points` en plus |
+| | `bonus_period` | Période bonus en cours : `name`, `multiplier`, `starts_at`, `ends_at` |
+| | `streak_every`, `streak_bonus` | Le bonus de série : tous les combien de jours, et combien de points |
+| | `challenges` | Défis en cours : `name`, `shared` (défi en famille), `members`, `progress` par membre, `total`, `target`, `reward`, `reward_text`, `done`, `winners`, `ends_at` |
+
+Les jeux se règlent dans Hopla, onglet Jeux de la page Points.
 
 ## Synchro en temps réel
 
@@ -89,7 +114,7 @@ toute seule, en attendant un peu plus après chaque échec (jusqu'à 5 minutes).
 | `hopla_task_approval_resolved` | Elle a été validée ou refusée, ici ou dans Hopla | `task_id`, `task_name` |
 | `hopla_reward_requested` | Un enfant demande une récompense depuis la tablette | `redemption_id`, `reward_id`, `reward_name`, `points_cost`, `user_id`, `user_name` |
 | `hopla_reward_request_resolved` | La demande a été validée ou refusée | `redemption_id`, `reward_name`, `user_id` |
-| `hopla_points_changed` | Les points d'un membre bougent : tâche, tâche annulée, récompense, bonus ou pénalité | `user_id`, `user_name`, `action` (`task`, `undo`, `redeem`, `bonus` ou `penalty`), `points`, `delta` (signé), `reason`, `created_by_name` |
+| `hopla_points_changed` | Les points d'un membre bougent : tâche, tâche annulée, récompense, bonus, pénalité ou remise à zéro | `user_id`, `user_name`, `action` (`task`, `undo`, `redeem`, `bonus`, `penalty` ou `reset`), `points`, `delta` (signé), `reason`, `created_by_name` |
 | `hopla_surprise_task` | La tâche surprise du jour est tirée | `task_id`, `task_name`, `points`, `day` |
 | `hopla_bonus_period_started` / `hopla_bonus_period_ended` | Une période bonus commence ou se termine | `name`, `multiplier`, `starts_at`, `ends_at` |
 | `hopla_rank_up` | Un membre passe au rang suivant | `user_id`, `user_name`, `name`, `icon`, `level`, `next_name` |
@@ -234,7 +259,7 @@ disponibles et Apparence.
 
 ```yaml
 type: custom:hopla-user-todo-card
-entity: todo.toutes_les_taches
+entity: todo.hopla_toutes_les_taches
 user_id: all                    # un ID de membre, ou all
 display_filters: [overdue, today, future]   # vide pour toutes ; undated pour sans date
 upcoming_days: 7                # jours à l'avance pour « À venir » (0 : sans limite)

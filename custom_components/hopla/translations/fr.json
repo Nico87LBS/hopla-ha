@@ -63,6 +63,31 @@
       },
       "games_today": {
         "name": "Jeux du jour"
+      },
+      "pending_approvals": {
+        "name": "Validations en attente"
+      },
+      "rewards": {
+        "name": "Récompenses"
+      }
+    },
+    "todo": {
+      "all_tasks": {
+        "name": "Toutes les tâches"
+      },
+      "project_tasks": {
+        "name": "Tâches {project}"
+      },
+      "member_tasks": {
+        "name": "Tâches de {name}"
+      }
+    },
+    "calendar": {
+      "due_dates": {
+        "name": "Échéances"
+      },
+      "activity": {
+        "name": "Historique"
       }
     }
   },

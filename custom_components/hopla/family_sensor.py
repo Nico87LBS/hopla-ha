@@ -185,7 +185,7 @@ class HoplaPendingApprovalSensor(_FamilySensor):
     """Number of task completions waiting for an admin, with the details."""
 
     _attr_icon = "mdi:account-clock"
-    _attr_name = "Pending approvals"
+    _attr_translation_key = "pending_approvals"
 
     def __init__(self, coordinator: DataUpdateCoordinator, config_entry: ConfigEntry) -> None:
         super().__init__(coordinator, config_entry)
@@ -204,7 +204,7 @@ class HoplaRewardsSensor(_FamilySensor):
     """Active rewards members can spend their points on."""
 
     _attr_icon = "mdi:gift"
-    _attr_name = "Rewards"
+    _attr_translation_key = "rewards"
 
     def __init__(self, coordinator: DataUpdateCoordinator, config_entry: ConfigEntry) -> None:
         super().__init__(coordinator, config_entry)
