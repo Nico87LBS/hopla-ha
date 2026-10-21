@@ -151,16 +151,21 @@ const withProgress = {...hass, states: {...hass.states,
   'sensor.hopla_points_elena': {state: '5', attributes: {hopla_member_id: 2, display_name: 'Elena', role: 'member', total_points: 140,
     rank: 'Hop Hop', rank_icon: '🐸', rank_level: 2, rank_points: 100, next_rank: 'Super Hop', next_rank_icon: '🦘', next_rank_points: 300,
     quests: [quest]}},
-  'sensor.hopla_jeux_du_jour': {state: 'unknown', attributes: {hopla_games: true, challenges: [
+  'sensor.hopla_jeux_du_jour': {state: 'unknown', attributes: {hopla_games: true,
+    ranks: [{name: 'Lapineau', icon: '🐰', image: 'hopla-1', min_points: 0}, {name: 'Bizarre', icon: '', image: '../evil', min_points: 100}],
+    challenges: [
     {id: 1, name: 'Piscine', shared: true, members: [2, 3], progress: {2: 15, 3: 5}, total: 20, target: 200, done: false, winners: [], ends_at: '2026-10-25T00:00:00Z'},
     {id: 2, name: 'Fini', shared: false, members: [2], progress: {2: 3}, total: 3, target: 3, done: true, winners: [2], ends_at: '2026-10-19T00:00:00Z'},
     {id: 3, name: 'Nico seul', shared: false, members: [1], progress: {}, total: 0, target: 3, done: false, winners: [], ends_at: '2026-10-25T00:00:00Z'},
   ]}}}};
 const progress = boardData(withProgress, {members: [2, 3]}, now);
 const elenaProgress = progress.members.find(m => m.id === 2);
-assert.deepEqual(elenaProgress.rank, {name: 'Hop Hop', icon: '🐸', image: null, level: 2, from: 100, next: {name: 'Super Hop', icon: '🦘', points: 300},
+assert.deepEqual(elenaProgress.rank, {name: 'Hop Hop', icon: '🐸', image: null, level: 2, from: 100, next: {name: 'Super Hop', icon: '🦘', image: null, points: 300},
   stars: 0, points: 140, starAt: 0});
 assert.equal(elenaProgress.earned, 140);
+// Every rank of the circle, for the rank details.
+assert.deepEqual(progress.ladder, [{name: 'Lapineau', icon: '🐰', image: 'hopla-1', points: 0}, {name: 'Bizarre', icon: '', image: null, points: 100}]);
+assert.deepEqual(boardData(hass, {}, now).ladder, []);
 // A drawn badge is kept only when the integration ships it.
 const withBadge = image => boardData({...withProgress, states: {...withProgress.states, 'sensor.hopla_points_elena': {
   ...withProgress.states['sensor.hopla_points_elena'], attributes: {...withProgress.states['sensor.hopla_points_elena'].attributes, rank_image: image}}}},

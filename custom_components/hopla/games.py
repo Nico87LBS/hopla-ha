@@ -154,6 +154,13 @@ def games_today(data):
         "streak_every": rules.get("streakEvery", 0),
         "streak_bonus": rules.get("streakBonus", 0),
         "ranks": {item["userId"]: _rank(item) for item in data.get("members") or []},
+        # Every rank of the circle, lowest first, for the card's rank details.
+        "rank_ladder": [{
+            "name": rank.get("name"),
+            "icon": rank.get("icon"),
+            "image": rank.get("image") or None,
+            "min_points": rank.get("minPoints", 0),
+        } for rank in sorted(data.get("ranks") or [], key=lambda rank: rank.get("minPoints", 0))],
         "quests": {item["userId"]: [_quest(q) for q in item.get("quests") or []] for item in data.get("members") or []},
         "challenges": [_challenge(c) for c in data.get("challenges") or []],
     }
