@@ -101,17 +101,23 @@ export function boardData(hass, config, now = new Date()) {
   let requests = [];
   let presets = [];
   let presetsEntry = null;
+  let surprise = null;
+  let period = null;
   for (const [id, state] of Object.entries(hass.states)) {
     if (!id.startsWith('sensor.') || !isHopla(hass, id)) continue;
     const a = state.attributes;
     if (a.hopla_member_id !== undefined) {
       members.push({id: a.hopla_member_id, name: a.display_name || a.friendly_name, role: a.role,
-        picture: a.entity_picture || null, points: Number(state.state) || 0, recent: a.recent_completions || []});
+        picture: a.entity_picture || null, points: Number(state.state) || 0, recent: a.recent_completions || [],
+        streak: Number(a.streak) || 0, streakToday: a.streak_done_today === true});
     } else if (a.task_id !== undefined && a.is_active !== false) {
       // The state is the bare task name; friendly_name may carry the device name.
       tasks.push({id: a.task_id, entity: id, name: state.state || a.friendly_name, points: a.points,
         due: a.next_due_date ? new Date(a.next_due_date) : null, labels: labelNames(a.labels),
         assignees: a.assignee_ids || [], pending: a.pending_approval === true});
+    } else if (a.hopla_games) {
+      surprise = a.surprise || null;
+      period = a.bonus_period || null;
     } else if (Array.isArray(a.points_presets)) {
       presets = a.points_presets;
       presetsEntry = a.config_entry_id || null;
@@ -131,7 +137,7 @@ export function boardData(hass, config, now = new Date()) {
     && (config.due !== 'today' || !task.due || task.due <= endOfDay))
     .map(task => {
       const candidates = task.assignees.length ? shown.filter(m => task.assignees.includes(m.id)) : shown;
-      return {...task, members: candidates, completedBy: task.pending ? shown.find(m => m.id === completers.get(task.id)) || null : null};
+      return {...task, members: candidates, surprise: surprise?.task_id === task.id ? surprise.points : 0, completedBy: task.pending ? shown.find(m => m.id === completers.get(task.id)) || null : null};
     })
     .filter(task => task.members.length || task.pending)
     .sort((a, b) => (a.due ?? Infinity) - (b.due ?? Infinity) || a.name.localeCompare(b.name));
@@ -140,7 +146,7 @@ export function boardData(hass, config, now = new Date()) {
     .map(item => ({...item, member})))
     .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
   return {members: shown, tasks: visible, rows: taskRows(visible, done, shown), done, rewards: rewards || [], requests,
-    presets, presetsEntry};
+    presets, presetsEntry, surprise, period};
 }
 
 const icon = {
@@ -152,6 +158,9 @@ const icon = {
   lock: '<rect x="5" y="11" width="14" height="10" rx="2" fill="currentColor"/><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2.6"/>',
   clock: '<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
   plusminus: '<path d="M8 3v8M4 7h8M13 17h8M17 2L7 22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>',
+  flame: '<path d="M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-5 3-6 0 2 1 3 2 3 0-4-1-6 1-9z" fill="currentColor"/>',
+  sparkle: '<path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5l-2.2-6.3L3.5 10l6.3-1.7zM19 15l.9 2.6 2.6.9-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9z" fill="currentColor"/>',
+  bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="currentColor"/>',
   hourglass: '<path d="M6 2h12M6 22h12M7 2c0 5 10 5 10 10S7 17 7 22M17 2c0 5-10 5-10 10s10 5 10 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
   cross: '<path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>',
   unlock: '<rect x="5" y="11" width="14" height="10" rx="2" fill="currentColor"/><path d="M8 11V8a4 4 0 0 1 7.5-2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
@@ -301,13 +310,24 @@ class HoplaFamilyCard extends HTMLElement {
     const step = (group, rank) => {
       const size = rank === 0 ? 76 : 60;
       const faces = group.length
-        ? group.map(m => `<div class="podium-member">${rank === 0 && m.points > 0 ? `<span class="crown">${svg('crown', 30)}</span>` : ''}${this.face(m, size, rank === 0 && m.points > 0 ? ' leader' : '')}<div class="podium-name">${escape(m.name)}</div></div>`).join('')
+        ? group.map(m => `<div class="podium-member">${rank === 0 && m.points > 0 ? `<span class="crown">${svg('crown', 30)}</span>` : ''}${this.face(m, size, rank === 0 && m.points > 0 ? ' leader' : '')}<div class="podium-name">${escape(m.name)}</div>${this.streak(m)}</div>`).join('')
         : `<div class="podium-member"><span class="face empty" style="width:${size}px;height:${size}px"></span><div class="podium-name">&nbsp;</div></div>`;
       const score = group.length ? escape(this.t('common.pts', {count: group[0].points})) : '&nbsp;';
       return `<div class="podium-col rank${rank + 1}"><div class="podium-faces">${faces}</div><div class="podium-score">${score}</div><div class="step">${rank + 1}</div></div>`;
     };
     const order = [[0], [1, 0], [1, 0, 2]][steps.length - 1];
     return `<div class="podium steps${steps.length}">${order.map(rank => step(steps[rank], rank)).join('')}</div>`;
+  }
+  streak(member) {
+    if (!member.streak) return '';
+    const label = this.t('streak', {count: member.streak});
+    return `<div class="streak${member.streakToday ? '' : ' at-risk'}" title="${escape(member.streakToday ? label : `${label} · ${this.t('streak_at_risk')}`)}">${svg('flame', 14)}${member.streak}</div>`;
+  }
+  renderPeriod(period) {
+    if (!period) return '';
+    const end = new Date(period.ends_at);
+    return `<div class="period">${svg('bolt', 18)}<span><b>${escape(this.t('period', {multiplier: period.multiplier}))}</b> · ${escape(period.name)}</span>
+      <span class="period-end">${escape(this.t('period_left', {time: this.duration(end)}))}</span></div>`;
   }
   renderTask(row) {
     const busy = row.tasks.find(task => this._busy.has(task.id));
@@ -326,7 +346,9 @@ class HoplaFamilyCard extends HTMLElement {
       }).join('') + (row.unknownPending ? approval(row.unknownPending) : '');
     }
     const waiting = row.pending ? `<span class="hourglass">${svg('hourglass', 18, this.t('pending'))}</span>` : '';
-    return `<div class="row${row.pending ? ' is-pending' : ''}"><span class="name">${escape(row.name)}</span>${this.points(row.points)}${waiting}<span class="faces">${right}</span></div>`;
+    const surprise = row.tasks.find(task => task.surprise);
+    const sparkle = surprise ? `<span class="surprise" title="${escape(this.t('surprise', {n: surprise.surprise}))}">${svg('sparkle', 14)}+${surprise.surprise}</span>` : '';
+    return `<div class="row${row.pending ? ' is-pending' : ''}${surprise ? ' is-surprise' : ''}"><span class="name">${escape(row.name)}</span>${this.points(row.points)}${sparkle}${waiting}<span class="faces">${right}</span></div>`;
   }
   renderDone(item) {
     return `<div class="row small"><span class="name muted">${escape(item.name)}</span>${this.points(item.points, true)}<span class="faces"><span class="slot" title="${escape(item.member.name)}">${this.face(item.member, 40)}${this.badge('done', 'check')}</span></span></div>`;
@@ -460,6 +482,14 @@ class HoplaFamilyCard extends HTMLElement {
       .pts.penalty { background: rgba(217,48,37,.12); color: var(--error-color, #d93025); }
       .head.bonus { border-color: #7c4dff; } .head-icon.bonus { background: rgba(124,77,255,.12); color: #7c4dff; } .count.bonus { color: #7c4dff; }
       .hourglass { color: #8a6f57; line-height: 0; }
+      .streak { display: inline-flex; align-items: center; gap: 2px; margin-top: 2px; font-size: 13px; font-weight: 800; color: #e8590c; }
+      .streak.at-risk { color: #b0a59a; }
+      .surprise { display: inline-flex; align-items: center; gap: 3px; padding: 4px 9px 4px 7px; border-radius: 999px; font-size: 13px; font-weight: 800;
+        background: linear-gradient(90deg, rgba(236,72,153,.16), rgba(124,77,255,.16)); color: #a21caf; white-space: nowrap; }
+      .row.is-surprise { border-color: rgba(162,28,175,.45); }
+      .period { display: flex; align-items: center; gap: 8px; margin: 0 0 18px; padding: 10px 14px; border-radius: 14px;
+        background: rgba(245,180,0,.16); color: #8a5a00; font-size: 15px; }
+      .period-end { margin-left: auto; font-size: 13px; white-space: nowrap; }
       .faces { display: flex; gap: 8px; margin-left: 6px; justify-content: flex-end; align-items: center; padding: 6px 0; }
       .slot { position: relative; display: block; line-height: 0; margin: 0 2px; }
       button { font: inherit; color: inherit; cursor: pointer; border: none; background: none; padding: 0; }
@@ -500,6 +530,7 @@ class HoplaFamilyCard extends HTMLElement {
     </style><ha-card>
       ${this.renderParentButton()}${this.renderPinPad()}
       ${this._config.show_points && data.members.length ? this.renderPodium(data.members) : ''}
+      ${this.renderPeriod(data.period)}
       ${this._config.show_todo ? `<section>${this.header('todo', 'todo', title, data.rows.length)}
         ${data.rows.length ? data.rows.map(row => this.renderTask(row)).join('') : `<div class="empty-text">${escape(empty)}</div>`}</section>` : ''}
       ${done.length ? `<section>${this.header('check', 'done', this.t('done'), done.length)}${done.map(item => this.renderDone(item)).join('')}</section>` : ''}

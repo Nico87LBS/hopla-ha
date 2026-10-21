@@ -50,6 +50,12 @@ export default {
     bonus_done_other: '+{count} points for {name}',
     penalty_done_one: '−{count} point for {name}',
     penalty_done_other: '−{count} points for {name}',
+    streak_one: '{count} day in a row',
+    streak_other: '{count} days in a row',
+    streak_at_risk: 'keep it going today',
+    period: 'Points ×{multiplier}',
+    period_left: '{time} left',
+    surprise: 'Surprise task: +{n} extra points',
     errors: {
       due: 'due must be today or all',
       members: 'members must be a list of Hopla user IDs',

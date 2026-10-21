@@ -339,6 +339,22 @@ class HoplaApiClient:
             response.raise_for_status()
             return (await response.json()).get("res") or []
 
+    async def async_get_games_today(self) -> Optional[dict]:
+        """Get today's games: streaks, the surprise task and the bonus period.
+
+        None when the server has no games API.
+        """
+        async with self._session.get(
+            f"{self._base_url}/eapi/v1/games/today",
+            headers=self._headers(),
+            timeout=API_TIMEOUT,
+        ) as response:
+            if response.status in (403, 404):
+                _LOGGER.debug("Hopla games API unavailable: HTTP %s", response.status)
+                return None
+            response.raise_for_status()
+            return (await response.json()).get("res")
+
     async def async_adjust_points(self, user_id: int, points: int | None = None, preset_id: int | None = None,
                                   reason: str | None = None) -> dict:
         """Give a bonus (points > 0) or a penalty (points < 0), or apply a preset."""

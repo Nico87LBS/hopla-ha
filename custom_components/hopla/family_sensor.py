@@ -52,7 +52,7 @@ async def async_setup_family_sensors(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up one points sensor per member, and the approvals, rewards and bonus sensors."""
+    """Set up one points sensor per member, and the approvals, rewards, bonus and games sensors."""
     config = hass.data[DOMAIN][config_entry.entry_id]
     coordinator = config["coordinator"]
     members: list[HoplaMember] = config["circle_members"]
@@ -62,6 +62,8 @@ async def async_setup_family_sensors(
         entities.append(HoplaRewardsSensor(coordinator, config_entry))
     if coordinator.points_presets is not None:
         entities.append(HoplaBonusSensor(coordinator, config_entry))
+    if coordinator.games_today is not None:
+        entities.append(HoplaGamesSensor(coordinator, config_entry))
 
     known: set[int] = set()
 
@@ -151,7 +153,15 @@ class HoplaPointsSensor(_FamilySensor):
             "points_redeemed": member.points_redeemed,
             "recent_completions": recent_completions(
                 getattr(self.coordinator, "completed_tasks", []), member.user_id),
+            **self._streak(member.user_id),
         }
+
+    def _streak(self, user_id: int) -> dict[str, Any]:
+        today = getattr(self.coordinator, "games_today", None)
+        if not today:
+            return {}
+        streak = today["streaks"].get(user_id, {"current": 0, "best": 0, "done_today": False})
+        return {"streak": streak["current"], "best_streak": streak["best"], "streak_done_today": streak["done_today"]}
 
 
 class HoplaPendingApprovalSensor(_FamilySensor):
@@ -228,5 +238,37 @@ class HoplaBonusSensor(_FamilySensor):
         return {
             "points_presets": self.coordinator.points_presets or [],
             "recent": self.coordinator.points_history[:RECENT_LIMIT],
+            "config_entry_id": self._config_entry.entry_id,
+        }
+
+
+class HoplaGamesSensor(_FamilySensor):
+    """Today's surprise task, as the state, and the bonus period running now."""
+
+    _attr_icon = "mdi:party-popper"
+    _attr_translation_key = "games_today"
+
+    def __init__(self, coordinator: DataUpdateCoordinator, config_entry: ConfigEntry) -> None:
+        super().__init__(coordinator, config_entry)
+        self._attr_unique_id = f"hopla_games_today_{config_entry.entry_id}"
+
+    @property
+    def _today(self) -> dict[str, Any]:
+        return getattr(self.coordinator, "games_today", None) or {}
+
+    @property
+    def native_value(self) -> str | None:
+        surprise = self._today.get("surprise")
+        return surprise["task_name"] if surprise else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        today = self._today
+        return {
+            "hopla_games": True,
+            "surprise": today.get("surprise"),
+            "bonus_period": today.get("bonus_period"),
+            "streak_every": today.get("streak_every", 0),
+            "streak_bonus": today.get("streak_bonus", 0),
             "config_entry_id": self._config_entry.entry_id,
         }
