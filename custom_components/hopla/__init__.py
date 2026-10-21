@@ -17,6 +17,7 @@ from .api import HoplaApiClient
 from .frontend import async_setup_frontend
 from .completion_history import async_completed_occurrences
 from .approval import ApprovalTracker, STATUS_PENDING_APPROVAL, pending_approvals, member_name
+from .games import PointsLedgerTracker, ledger_entries, presets as points_presets
 from .realtime import RealtimeListener
 from .reminders import ReminderScheduler
 from .parental import (ParentGuard, ParentModeError, RewardRequestTracker, pending_rewards,
@@ -42,10 +43,11 @@ SERVICE_APPROVE_REWARD = "approve_reward"
 SERVICE_REJECT_REWARD = "reject_reward"
 SERVICE_UNLOCK_PARENT_MODE = "unlock_parent_mode"
 SERVICE_LOCK_PARENT_MODE = "lock_parent_mode"
+SERVICE_ADJUST_POINTS = "adjust_points"
 SERVICES = [SERVICE_COMPLETE_TASK, SERVICE_CREATE_TASK, SERVICE_UPDATE_TASK, SERVICE_DELETE_TASK, SERVICE_SKIP_TASK,
             SERVICE_COMPLETE_ASSIGNED_TASK, SERVICE_POSTPONE_TASK, SERVICE_APPROVE_TASK, SERVICE_REJECT_TASK,
             SERVICE_REDEEM_REWARD, SERVICE_APPROVE_REWARD, SERVICE_REJECT_REWARD,
-            SERVICE_UNLOCK_PARENT_MODE, SERVICE_LOCK_PARENT_MODE]
+            SERVICE_UNLOCK_PARENT_MODE, SERVICE_LOCK_PARENT_MODE, SERVICE_ADJUST_POINTS]
 
 COMPLETE_TASK_SCHEMA = vol.Schema({
     vol.Required("task_id"): vol.Coerce(int),
@@ -117,6 +119,18 @@ LOCK_PARENT_MODE_SCHEMA = vol.Schema({
     vol.Optional("config_entry_id"): cv.string,
 })
 
+MAX_ADJUSTMENT = 1000
+
+# Either an amount (positive for a bonus, negative for a penalty) or a preset.
+ADJUST_POINTS_SCHEMA = vol.All(vol.Schema({
+    vol.Required("user_id"): vol.All(vol.Coerce(int), vol.Range(min=1)),
+    vol.Exclusive("points", "amount"): vol.All(vol.Coerce(int), vol.Range(min=-MAX_ADJUSTMENT, max=MAX_ADJUSTMENT),
+                                               vol.NotIn([0])),
+    vol.Exclusive("preset_id", "amount"): vol.All(vol.Coerce(int), vol.Range(min=1)),
+    vol.Optional("reason"): vol.All(cv.string, vol.Length(max=200)),
+    vol.Optional("config_entry_id"): cv.string,
+}), cv.has_at_least_one_key("points", "preset_id"))
+
 
 def _parent_error(err: ParentModeError) -> ServiceValidationError:
     """Explain in the user's language why a parent action was refused."""
@@ -155,6 +169,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     entry.async_on_unload(reminders.cancel_all)
     reward_requests = RewardRequestTracker(hass.bus.async_fire)
+    ledger = PointsLedgerTracker(hass.bus.async_fire)
 
     @callback
     def parent_mode_changed() -> None:
@@ -184,6 +199,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 reward_requests.update(coordinator.pending_rewards, entry.entry_id)
             except Exception as err:
                 _LOGGER.debug("Failed to refresh reward requests: %s", err)
+        try:
+            coordinator.points_presets = points_presets(await client.async_get_points_presets())
+        except Exception as err:
+            _LOGGER.debug("Failed to refresh points presets: %s", err)
+        if coordinator.points_presets is not None:
+            try:
+                coordinator.points_history = ledger_entries(await client.async_get_points_history(), circle_members)
+                ledger.update(coordinator.points_history, entry.entry_id)
+            except Exception as err:
+                _LOGGER.debug("Failed to refresh the points history: %s", err)
         coordinator.pending_approvals = pending_approvals(tasks, history, circle_members)
         approvals.update(coordinator.pending_approvals, entry.entry_id)
         reminders.update(tasks, circle_members, entry.entry_id)
@@ -199,6 +224,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator.rewards = None
     coordinator.pending_approvals = []
     coordinator.pending_rewards = []
+    coordinator.points_presets = None
+    coordinator.points_history = []
     await coordinator.async_config_entry_first_refresh()
 
     @callback
@@ -334,6 +361,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                  supports_response=SupportsResponse.OPTIONAL)
     hass.services.async_register(DOMAIN, SERVICE_LOCK_PARENT_MODE, lock_handler,
                                  schema=LOCK_PARENT_MODE_SCHEMA)
+
+    async def adjust_points_handler(call: ServiceCall) -> ServiceResponse:
+        return await async_adjust_points_service(hass, call)
+
+    hass.services.async_register(DOMAIN, SERVICE_ADJUST_POINTS, adjust_points_handler,
+                                 schema=ADJUST_POINTS_SCHEMA,
+                                 supports_response=SupportsResponse.OPTIONAL)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     entry.add_update_listener(async_reload_entry)
@@ -421,6 +455,20 @@ async def async_resolve_reward_service(hass: HomeAssistant, call: ServiceCall, *
         raise HomeAssistantError(str(err)) from err
     finally:
         await config["coordinator"].async_refresh()
+
+
+async def async_adjust_points_service(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
+    """Give a bonus or a penalty; a penalty never takes the balance below zero."""
+    config = await _get_config(hass, call)
+    require_parent(config, call)
+    try:
+        result = await config["client"].async_adjust_points(
+            call.data["user_id"], call.data.get("points"), call.data.get("preset_id"), call.data.get("reason"))
+    except Exception as err:
+        raise HomeAssistantError(str(err)) from err
+    finally:
+        await config["coordinator"].async_refresh()
+    return {key: result.get(key) for key in ("action", "points", "delta", "reason")}
 
 
 async def async_unlock_parent_mode_service(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:

@@ -56,6 +56,11 @@
       "parent_mode": {
         "name": "Mode parent"
       }
+    },
+    "sensor": {
+      "bonus_penalties": {
+        "name": "Bonus et pénalités"
+      }
     }
   },
   "exceptions": {
@@ -307,6 +312,32 @@
       "name": "Fermer le mode parent",
       "description": "Ferme le mode parent avant la fin des deux minutes.",
       "fields": {
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
+    },
+    "adjust_points": {
+      "name": "Bonus ou pénalité",
+      "description": "Donne des points en plus à un membre, ou retire-lui-en. Réservé aux parents. Une pénalité ne fait jamais passer le solde sous zéro et ne baisse jamais les points gagnés sur lesquels reposent les rangs.",
+      "fields": {
+        "user_id": {
+          "name": "Membre",
+          "description": "L'ID Hopla du membre"
+        },
+        "points": {
+          "name": "Points",
+          "description": "Positif pour un bonus, négatif pour une pénalité (vide avec un préréglage)"
+        },
+        "preset_id": {
+          "name": "Préréglage",
+          "description": "L'ID d'un préréglage de bonus ou de pénalité (voir le capteur des bonus et pénalités), à la place des points"
+        },
+        "reason": {
+          "name": "Raison",
+          "description": "Pourquoi, affiché dans l'historique des points (facultatif, le nom du préréglage par défaut)"
+        },
         "config_entry_id": {
           "name": "Intégration Hopla",
           "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"

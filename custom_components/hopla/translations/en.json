@@ -56,6 +56,11 @@
       "parent_mode": {
         "name": "Parent mode"
       }
+    },
+    "sensor": {
+      "bonus_penalties": {
+        "name": "Bonuses and penalties"
+      }
     }
   },
   "exceptions": {
@@ -307,6 +312,32 @@
       "name": "Close parent mode",
       "description": "Close parent mode before the two minutes are up.",
       "fields": {
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
+    },
+    "adjust_points": {
+      "name": "Bonus or penalty",
+      "description": "Give a member extra points, or take some away. Only for parents. A penalty never takes the balance below zero and never lowers the points earned that ranks are built on.",
+      "fields": {
+        "user_id": {
+          "name": "Member",
+          "description": "The Hopla ID of the member"
+        },
+        "points": {
+          "name": "Points",
+          "description": "Positive for a bonus, negative for a penalty (leave empty with a preset)"
+        },
+        "preset_id": {
+          "name": "Preset",
+          "description": "The ID of a bonus or penalty preset (see the bonuses and penalties sensor), instead of points"
+        },
+        "reason": {
+          "name": "Reason",
+          "description": "Why, shown in the points history (optional, the preset name by default)"
+        },
         "config_entry_id": {
           "name": "Hopla integration",
           "description": "The Hopla integration to use (optional, the first one by default)"

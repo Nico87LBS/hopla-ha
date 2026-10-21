@@ -109,3 +109,12 @@ const withRequests = {states: {...hass.states, 'sensor.hopla_rewards': {state: '
 assert.deepEqual(boardData(withRequests, {}, now).requests.map(r => r.redemption_id), [9]);
 assert.deepEqual(boardData(hass, {}, now).requests, []);
 console.log('family card tests passed');
+
+// Bonus and penalty presets come with their own sensor.
+const withPresets = {...hass, states: {...hass.states, 'sensor.hopla_bonus': {state: '2', attributes: {
+  points_presets: [{id: 1, name: 'Chambre rangée', points: 5}, {id: 2, name: 'Dispute', points: -3}], config_entry_id: 'abc'}}}};
+const presetData = boardData(withPresets, {}, now);
+assert.deepEqual(presetData.presets.map(p => p.points), [5, -3]);
+assert.equal(presetData.presetsEntry, 'abc');
+assert.equal(presetData.rewards.length, 1, 'the presets sensor is not taken for the rewards one');
+assert.deepEqual(boardData(hass, {}, now).presets, []);

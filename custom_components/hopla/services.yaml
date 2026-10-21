@@ -211,3 +211,32 @@ lock_parent_mode:
     config_entry_id:
       required: false
       selector: *id002
+adjust_points:
+  fields:
+    user_id:
+      required: true
+      selector:
+        number:
+          min: 1
+          mode: box
+    points:
+      required: false
+      selector:
+        number:
+          min: -1000
+          max: 1000
+          mode: box
+    preset_id:
+      required: false
+      selector:
+        number:
+          min: 1
+          mode: box
+    reason:
+      required: false
+      selector:
+        text:
+    config_entry_id:
+      required: false
+      selector:
+        text:

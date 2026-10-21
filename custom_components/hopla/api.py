@@ -312,6 +312,40 @@ class HoplaApiClient:
         await self._post_action(f"/eapi/v1/rewards/redemptions/{redemption_id}/{action}",
                                 f"{action} the redemption")
 
+    async def async_get_points_presets(self) -> Optional[list]:
+        """Get the bonus and penalty presets, or None when the server has no points API."""
+        async with self._session.get(
+            f"{self._base_url}/eapi/v1/points/presets",
+            headers=self._headers(),
+            timeout=API_TIMEOUT,
+        ) as response:
+            if response.status in (403, 404):
+                _LOGGER.debug("Hopla points API unavailable: HTTP %s", response.status)
+                return None
+            response.raise_for_status()
+            return (await response.json()).get("res") or []
+
+    async def async_get_points_history(self, limit: int = 20, user_id: int | None = None) -> list:
+        """Get the newest points ledger rows of the circle."""
+        params = {"limit": limit}
+        if user_id:
+            params["userId"] = user_id
+        async with self._session.get(
+            f"{self._base_url}/eapi/v1/points/history",
+            headers=self._headers(),
+            params=params,
+            timeout=API_TIMEOUT,
+        ) as response:
+            response.raise_for_status()
+            return (await response.json()).get("res") or []
+
+    async def async_adjust_points(self, user_id: int, points: int | None = None, preset_id: int | None = None,
+                                  reason: str | None = None) -> dict:
+        """Give a bonus (points > 0) or a penalty (points < 0), or apply a preset."""
+        payload = {"userId": user_id, "points": points or 0, "reason": reason, "presetId": preset_id}
+        data = await self._post_action("/eapi/v1/points/adjust", "change the points", payload)
+        return data["res"]
+
     async def async_create_task(self, name: str, description: str = None, due_date: str = None, created_by: int = None, project_id: int = None) -> HoplaTask:
         """Create a new task"""
         headers = self._headers()

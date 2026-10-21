@@ -44,6 +44,12 @@ export default {
     pin_missing: "Pas encore de code parent. Choisis-en un dans les options de l'intégration Hopla.",
     cancel: 'Annuler',
     erase: 'Effacer',
+    bonus_title: 'Bonus et pénalités',
+    bonus_confirm: 'Touche encore pour valider',
+    bonus_done_one: '+{count} point pour {name}',
+    bonus_done_other: '+{count} points pour {name}',
+    penalty_done_one: '−{count} point pour {name}',
+    penalty_done_other: '−{count} points pour {name}',
     errors: {
       due: 'due doit valoir today ou all',
       members: 'members doit être une liste d’identifiants d’utilisateurs Hopla',
@@ -62,6 +68,7 @@ export default {
       show_rewards: 'Afficher les récompenses',
       show_approval: 'Afficher les boutons Valider et Refuser',
       allow_redeem: 'Permettre d’échanger les récompenses depuis la carte',
+      show_bonus: 'Afficher les bonus et pénalités en mode parent',
     },
   },
   todo: {

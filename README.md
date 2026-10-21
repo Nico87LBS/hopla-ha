@@ -46,6 +46,10 @@ seule.
   avec qui les a faites (attribut `tasks`).
 - **`sensor.hopla_rewards`** : les récompenses actives et leur coût (attribut
   `rewards`), et les demandes de récompense en attente (attribut `requests`).
+- **`sensor.hopla_bonus_et_penalites`** : les préréglages de bonus et de
+  pénalités réglés dans Hopla (attribut `points_presets`, avec `id`, `name` et
+  `points`, négatif pour une pénalité) et les derniers mouvements de points
+  (attribut `recent`).
 - **`binary_sensor.hopla_mode_parent`** : allumé quand le mode parent est ouvert
   sur la tablette.
 
@@ -73,6 +77,7 @@ toute seule, en attendant un peu plus après chaque échec (jusqu'à 5 minutes).
 | `hopla_task_approval_resolved` | Elle a été validée ou refusée, ici ou dans Hopla | `task_id`, `task_name` |
 | `hopla_reward_requested` | Un enfant demande une récompense depuis la tablette | `redemption_id`, `reward_id`, `reward_name`, `points_cost`, `user_id`, `user_name` |
 | `hopla_reward_request_resolved` | La demande a été validée ou refusée | `redemption_id`, `reward_name`, `user_id` |
+| `hopla_points_changed` | Les points d'un membre bougent : tâche, tâche annulée, récompense, bonus ou pénalité | `user_id`, `user_name`, `action` (`task`, `undo`, `redeem`, `bonus` ou `penalty`), `points`, `delta` (signé), `reason`, `created_by_name` |
 | `hopla_task_reminder` | À chaque rappel réglé sur une tâche dans Hopla | voir ci-dessous |
 
 ### Rappels de tâches
@@ -117,6 +122,7 @@ Ensuite :
   code parent, pour deux minutes. Il se referme tout seul, ou d'une touche.
 - Une récompense échangée depuis la tablette devient une demande : les points ne
   sont dépensés qu'une fois qu'un parent l'a validée.
+- Les bonus et pénalités sont réservés aux parents.
 - Après cinq codes faux, il faut attendre cinq minutes.
 - Les automatisations comptent comme des parents, puisque ce sont eux qui les
   écrivent.
@@ -134,6 +140,7 @@ Sans parent choisi, rien ne change : tout le monde garde tous les droits.
 | `hopla.approve_reward` / `hopla.reject_reward` | Valider ou refuser une demande de récompense (`redemption_id`) | ✓ |
 | `hopla.create_task`, `hopla.update_task`, `hopla.delete_task` | Créer, modifier, supprimer une tâche | ✓ |
 | `hopla.skip_task`, `hopla.postpone_task` | Passer une tâche à sa prochaine occurrence | ✓ |
+| `hopla.adjust_points` | Donner un bonus ou une pénalité à un membre (`user_id`), avec `points` (négatif pour une pénalité) ou un préréglage (`preset_id`), et une raison (`reason`) si tu veux. Une pénalité ne fait jamais passer le solde sous zéro | ✓ |
 | `hopla.unlock_parent_mode` | Ouvrir le mode parent pour deux minutes avec le code (`pin`) | |
 | `hopla.lock_parent_mode` | Refermer le mode parent | |
 
@@ -171,6 +178,10 @@ Quand des parents sont choisis, un cadenas en haut à droite ouvre le pavé du c
 parent. En mode parent, il affiche le temps restant et referme le mode d'une
 touche. Les boutons Valider et Refuser n'apparaissent que pour un parent.
 
+En mode parent, ou pour un parent, la carte montre aussi les bonus et pénalités
+préréglés dans Hopla (onglet Jeux de la page Points) : touche deux fois la photo
+d'un enfant pour lui donner « Chambre rangée (+5) » ou « Dispute (−3) ».
+
 ```yaml
 type: custom:hopla-family-card
 members: [2, 3]        # membres avec un bouton photo (par défaut : tout le monde)
@@ -182,6 +193,7 @@ show_done: true        # les tâches faites aujourd'hui
 show_rewards: true     # les récompenses
 show_approval: false   # boutons Valider et Refuser, pour les parents
 allow_redeem: false    # échanger des récompenses depuis la carte (deux touches)
+show_bonus: true       # les bonus et pénalités, pour les parents
 ```
 
 Chaque partie peut être masquée : la même carte peut n'afficher que les
