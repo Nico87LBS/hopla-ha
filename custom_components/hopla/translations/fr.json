@@ -60,6 +60,9 @@
     "sensor": {
       "bonus_penalties": {
         "name": "Bonus et pénalités"
+      },
+      "games_today": {
+        "name": "Jeux du jour"
       }
     }
   },

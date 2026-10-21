@@ -41,7 +41,9 @@ seule.
   `months` ou `years`) et l'échéance.
 - **Un capteur de points par membre**, par exemple `sensor.hopla_points_elena` :
   l'état est le nombre de points encore disponibles, avec `total_points`,
-  `points_redeemed` et la photo de profil Hopla du membre.
+  `points_redeemed`, la photo de profil Hopla du membre et sa série : `streak`
+  (jours d'affilée avec au moins une tâche faite), `best_streak` et
+  `streak_done_today`.
 - **`sensor.hopla_pending_approvals`** : les tâches qui attendent une validation,
   avec qui les a faites (attribut `tasks`).
 - **`sensor.hopla_rewards`** : les récompenses actives et leur coût (attribut
@@ -50,6 +52,11 @@ seule.
   pénalités réglés dans Hopla (attribut `points_presets`, avec `id`, `name` et
   `points`, négatif pour une pénalité) et les derniers mouvements de points
   (attribut `recent`).
+- **`sensor.hopla_jeux_du_jour`** : l'état est le nom de la tâche surprise du
+  jour, avec les attributs `surprise` (`task_id`, `task_name`, `points` en plus),
+  `bonus_period` (la période bonus en cours : `name`, `multiplier`, `ends_at`),
+  `streak_every` et `streak_bonus`. Les règles se règlent dans Hopla, onglet
+  Jeux de la page Points.
 - **`binary_sensor.hopla_mode_parent`** : allumé quand le mode parent est ouvert
   sur la tablette.
 
@@ -78,6 +85,8 @@ toute seule, en attendant un peu plus après chaque échec (jusqu'à 5 minutes).
 | `hopla_reward_requested` | Un enfant demande une récompense depuis la tablette | `redemption_id`, `reward_id`, `reward_name`, `points_cost`, `user_id`, `user_name` |
 | `hopla_reward_request_resolved` | La demande a été validée ou refusée | `redemption_id`, `reward_name`, `user_id` |
 | `hopla_points_changed` | Les points d'un membre bougent : tâche, tâche annulée, récompense, bonus ou pénalité | `user_id`, `user_name`, `action` (`task`, `undo`, `redeem`, `bonus` ou `penalty`), `points`, `delta` (signé), `reason`, `created_by_name` |
+| `hopla_surprise_task` | La tâche surprise du jour est tirée | `task_id`, `task_name`, `points`, `day` |
+| `hopla_bonus_period_started` / `hopla_bonus_period_ended` | Une période bonus commence ou se termine | `name`, `multiplier`, `starts_at`, `ends_at` |
 | `hopla_task_reminder` | À chaque rappel réglé sur une tâche dans Hopla | voir ci-dessous |
 
 ### Rappels de tâches
@@ -165,6 +174,11 @@ photo par membre assigné ; toucher une photo termine la tâche pour ce membre. 
 tâche à valider reste affichée avec un sablier et la photo de qui l'a faite,
 jusqu'à la réponse d'un parent. Les tâches déjà faites aujourd'hui suivent, avec
 la photo de qui les a faites. Toute photo qu'on peut toucher a un anneau.
+
+Le podium montre la série de chacun avec une flamme, grisée tant que personne
+n'a encore fait de tâche aujourd'hui pour la continuer. Pendant une période bonus,
+un bandeau rappelle le multiplicateur et le temps restant, et la tâche surprise du
+jour porte une étincelle avec ses points en plus.
 
 Pour une tâche que chacun doit faire, comme faire son lit, crée-la dans Hopla une
 fois par membre. La carte regroupe les tâches de même nom sur une ligne.

@@ -17,7 +17,7 @@ from .api import HoplaApiClient
 from .frontend import async_setup_frontend
 from .completion_history import async_completed_occurrences
 from .approval import ApprovalTracker, STATUS_PENDING_APPROVAL, pending_approvals, member_name
-from .games import PointsLedgerTracker, ledger_entries, presets as points_presets
+from .games import GamesTracker, PointsLedgerTracker, games_today, ledger_entries, presets as points_presets
 from .realtime import RealtimeListener
 from .reminders import ReminderScheduler
 from .parental import (ParentGuard, ParentModeError, RewardRequestTracker, pending_rewards,
@@ -170,6 +170,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(reminders.cancel_all)
     reward_requests = RewardRequestTracker(hass.bus.async_fire)
     ledger = PointsLedgerTracker(hass.bus.async_fire)
+    games = GamesTracker(hass.bus.async_fire)
 
     @callback
     def parent_mode_changed() -> None:
@@ -209,6 +210,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 ledger.update(coordinator.points_history, entry.entry_id)
             except Exception as err:
                 _LOGGER.debug("Failed to refresh the points history: %s", err)
+        try:
+            coordinator.games_today = games_today(await client.async_get_games_today())
+            games.update(coordinator.games_today, entry.entry_id)
+        except Exception as err:
+            _LOGGER.debug("Failed to refresh today's games: %s", err)
         coordinator.pending_approvals = pending_approvals(tasks, history, circle_members)
         approvals.update(coordinator.pending_approvals, entry.entry_id)
         reminders.update(tasks, circle_members, entry.entry_id)
@@ -226,6 +232,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator.pending_rewards = []
     coordinator.points_presets = None
     coordinator.points_history = []
+    coordinator.games_today = None
     await coordinator.async_config_entry_first_refresh()
 
     @callback

@@ -52,5 +52,44 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual([data["id"] for data in fired], [1])
 
 
+TODAY = {
+    "rules": {"streakEvery": 7, "streakBonus": 10},
+    "surprise": {"choreId": 12, "name": "Dents", "points": 5, "day": "2026-10-21"},
+    "period": {"id": 1, "name": "Week-end double", "multiplier": 2,
+               "startsAt": "2026-10-21T00:00:00Z", "endsAt": "2026-10-23T00:00:00Z"},
+    "streaks": [{"userId": 2, "current": 4, "best": 9, "doneToday": True}],
+}
+
+
+class GamesTodayTests(unittest.TestCase):
+    def test_shape(self):
+        today = games.games_today(TODAY)
+        self.assertEqual(today["surprise"], {"task_id": 12, "task_name": "Dents", "points": 5, "day": "2026-10-21"})
+        self.assertEqual(today["bonus_period"]["multiplier"], 2)
+        self.assertEqual(today["streaks"][2], {"current": 4, "best": 9, "done_today": True})
+        self.assertEqual(today["streak_every"], 7)
+        self.assertIsNone(games.games_today(None))
+        quiet = games.games_today({"surprise": None, "period": None, "streaks": None})
+        self.assertIsNone(quiet["surprise"])
+        self.assertEqual(quiet["streaks"], {})
+
+    def test_events_for_a_new_surprise_and_periods_starting_and_ending(self):
+        fired = []
+        tracker = games.GamesTracker(lambda event, data: fired.append((event, data)))
+        tracker.update(games.games_today(TODAY), "entry")
+        self.assertEqual(fired, [], "the first refresh only records")
+        tracker.update(games.games_today(TODAY), "entry")
+        self.assertEqual(fired, [])
+        tomorrow = {**TODAY, "surprise": {**TODAY["surprise"], "day": "2026-10-22", "choreId": 11}, "period": None}
+        tracker.update(games.games_today(tomorrow), "entry")
+        self.assertEqual([event for event, _ in fired], [games.EVENT_SURPRISE_TASK, games.EVENT_BONUS_PERIOD_ENDED])
+        self.assertEqual(fired[0][1]["task_id"], 11)
+        self.assertEqual(fired[1][1]["name"], "Week-end double")
+        fired.clear()
+        tracker.update(games.games_today({**tomorrow, "period": {**TODAY["period"], "id": 2}}), "entry")
+        self.assertEqual([event for event, _ in fired], [games.EVENT_BONUS_PERIOD_STARTED])
+        self.assertEqual(fired[0][1]["config_entry_id"], "entry")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -118,3 +118,16 @@ assert.deepEqual(presetData.presets.map(p => p.points), [5, -3]);
 assert.equal(presetData.presetsEntry, 'abc');
 assert.equal(presetData.rewards.length, 1, 'the presets sensor is not taken for the rewards one');
 assert.deepEqual(boardData(hass, {}, now).presets, []);
+
+// Today's games: the surprise task, the bonus period and the streaks.
+const withGames = {...hass, states: {...hass.states,
+  'sensor.hopla_points_elena': {state: '5', attributes: {hopla_member_id: 2, display_name: 'Elena', role: 'member', streak: 4, streak_done_today: true}},
+  'sensor.hopla_jeux_du_jour': {state: 'Dents', attributes: {hopla_games: true, surprise: {task_id: 12, task_name: 'Dents', points: 5},
+    bonus_period: {id: 1, name: 'Week-end double', multiplier: 2, ends_at: '2026-10-21T20:00:00Z'}}}}};
+const games = boardData(withGames, {}, now);
+assert.equal(games.period.multiplier, 2);
+assert.equal(games.tasks.find(t => t.id === 12).surprise, 5);
+assert.equal(games.tasks.find(t => t.id === 11).surprise, 0);
+assert.equal(games.members.find(m => m.id === 2).streak, 4);
+assert.equal(games.rewards.length, 1, 'the games sensor is not taken for another one');
+assert.equal(boardData(hass, {}, now).period, null);

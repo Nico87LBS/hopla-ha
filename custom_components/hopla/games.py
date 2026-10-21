@@ -53,3 +53,69 @@ class PointsLedgerTracker:
                 if entry["id"] > self._last_id:
                     self._fire(EVENT_POINTS_CHANGED, {**entry, "config_entry_id": entry_id})
         self._last_id = max(newest, self._last_id or 0)
+
+
+EVENT_SURPRISE_TASK = "hopla_surprise_task"
+EVENT_BONUS_PERIOD_STARTED = "hopla_bonus_period_started"
+EVENT_BONUS_PERIOD_ENDED = "hopla_bonus_period_ended"
+
+
+def games_today(data):
+    """Today's games from Hopla, in the shape the sensors and events use."""
+    if not data:
+        return None
+    surprise = data.get("surprise")
+    period = data.get("period")
+    rules = data.get("rules") or {}
+    return {
+        "surprise": {
+            "task_id": surprise["choreId"],
+            "task_name": surprise.get("name"),
+            "points": surprise["points"],
+            "day": surprise.get("day"),
+        } if surprise else None,
+        "bonus_period": {
+            "id": period["id"],
+            "name": period["name"],
+            "multiplier": period["multiplier"],
+            "starts_at": period["startsAt"],
+            "ends_at": period["endsAt"],
+        } if period else None,
+        "streaks": {
+            item["userId"]: {
+                "current": item["current"],
+                "best": item["best"],
+                "done_today": item.get("doneToday", False),
+            } for item in data.get("streaks") or []
+        },
+        "streak_every": rules.get("streakEvery", 0),
+        "streak_bonus": rules.get("streakBonus", 0),
+    }
+
+
+class GamesTracker:
+    """Fire events when the surprise task is drawn and when a bonus period starts or ends.
+
+    Like the other trackers, the first refresh only records the current state.
+    """
+
+    def __init__(self, fire):
+        self._fire = fire
+        self._seen = False
+        self._surprise = None
+        self._period = None
+
+    def update(self, today, entry_id):
+        surprise = (today or {}).get("surprise")
+        period = (today or {}).get("bonus_period")
+        surprise_key = (surprise["day"], surprise["task_id"]) if surprise else None
+        if self._seen:
+            if surprise_key and surprise_key != self._surprise:
+                self._fire(EVENT_SURPRISE_TASK, {**surprise, "config_entry_id": entry_id})
+            if self._period and (not period or period["id"] != self._period["id"]):
+                self._fire(EVENT_BONUS_PERIOD_ENDED, {**self._period, "config_entry_id": entry_id})
+            if period and (not self._period or period["id"] != self._period["id"]):
+                self._fire(EVENT_BONUS_PERIOD_STARTED, {**period, "config_entry_id": entry_id})
+        self._seen = True
+        self._surprise = surprise_key
+        self._period = period
