@@ -27,6 +27,7 @@ class FrontendTests(unittest.IsolatedAsyncioTestCase):
         self.setup_frontend = namespace["async_setup_frontend"]
         self.card_file = namespace["CARD_FILE"]
         self.family_card_file = namespace["FAMILY_CARD_FILE"]
+        self.version = namespace["frontend_version"]
 
         async def executor(fn):
             await asyncio.sleep(0)
@@ -38,14 +39,26 @@ class FrontendTests(unittest.IsolatedAsyncioTestCase):
     async def test_concurrent_entries_and_reload_register_only_once(self):
         await asyncio.gather(self.setup_frontend(self.hass), self.setup_frontend(self.hass))
         await self.setup_frontend(self.hass)
+        frontend = self.card_file.parent
         self.hass.http.async_register_static_paths.assert_awaited_once_with([
             ("/hopla/hopla-user-todo-card.js", str(self.card_file), False),
-            ("/hopla/hopla-family-card.js", str(self.family_card_file), False)])
-        version = sha256(self.card_file.read_bytes()).hexdigest()[:12]
-        family_version = sha256(self.family_card_file.read_bytes()).hexdigest()[:12]
+            ("/hopla/hopla-family-card.js", str(self.family_card_file), False),
+            ("/hopla/hopla-i18n.js", str(frontend / "hopla-i18n.js"), False),
+            ("/hopla/locales", str(frontend / "locales"), False)])
+        version = self.version()
         self.assertEqual(self.add_url.call_args_list, [
             unittest.mock.call(self.hass, f"/hopla/hopla-user-todo-card.js?v={version}"),
-            unittest.mock.call(self.hass, f"/hopla/hopla-family-card.js?v={family_version}")])
+            unittest.mock.call(self.hass, f"/hopla/hopla-family-card.js?v={version}")])
+
+    async def test_translation_change_changes_version(self):
+        before = self.version()
+        locale = self.card_file.parent / "locales" / "fr.js"
+        original = locale.read_bytes()
+        try:
+            locale.write_bytes(original + b"\n")
+            self.assertNotEqual(self.version(), before)
+        finally:
+            locale.write_bytes(original)
 
     async def test_registration_failure_can_retry(self):
         self.hass.http.async_register_static_paths.side_effect = RuntimeError("Not ready")

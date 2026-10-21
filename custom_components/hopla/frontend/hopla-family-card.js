@@ -6,18 +6,8 @@
 // Wait before defining classes so they use the final registry and base class.
 await customElements.whenDefined('home-assistant');
 
-const STRINGS = {
-  en: {today:'To do today', all:'Tasks', allDone:'All done for today, well done!', noTasks:'No tasks to show',
-    pending:'Waiting for approval', done:'Done today', rewards:'Rewards', approve:'Approve', reject:'Reject',
-    confirm:'Tap again to redeem', bravo:'Well done!', submitted:'Sent for approval', noMembers:'No Hopla members found',
-    day:'{n} per day', week:'{n} per week', month:'{n} per month', missing:'{n} points missing', quota:'Available again in {time}',
-    available:'Redeem', minutes:'{n} min', hours:'{n} h', days:'{n} d'},
-  fr: {today:"À faire aujourd'hui", all:'Tâches', allDone:"Tout est fait pour aujourd'hui, bravo !", noTasks:'Aucune tâche à afficher',
-    pending:'En attente de validation', done:"Déjà fait aujourd'hui", rewards:'Récompenses', approve:'Valider', reject:'Refuser',
-    confirm:'Touche encore pour échanger', bravo:'Bravo !', submitted:'Envoyé pour validation', noMembers:'Aucun membre Hopla trouvé',
-    day:'{n} par jour', week:'{n} par semaine', month:'{n} par mois', missing:'Il manque {n} points', quota:'De nouveau disponible dans {time}',
-    available:'Échanger', minutes:'{n} min', hours:'{n} h', days:'{n} j'},
-};
+const {translator, browserLanguage} = await import(new URL(`./hopla-i18n.js${new URL(import.meta.url).search}`, import.meta.url));
+const KEYS = {allDone: 'all_done', noTasks: 'no_tasks', noMembers: 'no_members'};
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -86,12 +76,29 @@ export function rewardState(reward, member, now = new Date()) {
   return {kind: 'available'};
 }
 
+// Who may approve and spend points here. Without parents chosen in the
+// integration options, everyone may; otherwise a parent's own account may,
+// and anyone else only while parent mode is open.
+export function parentAccess(hass, now = new Date()) {
+  const entry = Object.entries(hass.states).find(([id, state]) => id.startsWith('binary_sensor.')
+    && isHopla(hass, id) && state.attributes.hopla_parent_mode);
+  if (!entry || !entry[1].attributes.enabled) return {guarded: false, parent: true};
+  const [entity, state] = entry;
+  const a = state.attributes;
+  const until = a.unlocked_until ? new Date(a.unlocked_until) : null;
+  const unlocked = state.state === 'on' && until !== null && until > now;
+  const account = (a.parent_users || []).includes(hass.user?.id);
+  return {guarded: true, entity, entryId: a.config_entry_id, hasPin: a.has_pin === true,
+    account, unlocked, until: unlocked ? until : null, parent: account || unlocked};
+}
+
 // Members come from the points sensors, tasks from the task sensors.
 export function boardData(hass, config, now = new Date()) {
   const members = [];
   const tasks = [];
   const completers = new Map();
   let rewards = null;
+  let requests = [];
   for (const [id, state] of Object.entries(hass.states)) {
     if (!id.startsWith('sensor.') || !isHopla(hass, id)) continue;
     const a = state.attributes;
@@ -105,6 +112,7 @@ export function boardData(hass, config, now = new Date()) {
         assignees: a.assignee_ids || [], pending: a.pending_approval === true});
     } else if (Array.isArray(a.rewards) && rewards === null) {
       rewards = a.rewards;
+      requests = Array.isArray(a.requests) ? a.requests : [];
     } else if (Array.isArray(a.tasks) && a.tasks.every(t => 'completed_by' in t)) {
       for (const t of a.tasks) completers.set(t.task_id, t.completed_by);
     }
@@ -126,7 +134,7 @@ export function boardData(hass, config, now = new Date()) {
     .filter(item => item.completed_at && sameDay(new Date(item.completed_at), now) && labelled(item.labels))
     .map(item => ({...item, member})))
     .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
-  return {members: shown, tasks: visible, rows: taskRows(visible, done, shown), done, rewards: rewards || []};
+  return {members: shown, tasks: visible, rows: taskRows(visible, done, shown), done, rewards: rewards || [], requests};
 }
 
 const icon = {
@@ -139,7 +147,10 @@ const icon = {
   clock: '<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
   hourglass: '<path d="M6 2h12M6 22h12M7 2c0 5 10 5 10 10S7 17 7 22M17 2c0 5-10 5-10 10s10 5 10 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
   cross: '<path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>',
+  unlock: '<rect x="5" y="11" width="14" height="10" rx="2" fill="currentColor"/><path d="M8 11V8a4 4 0 0 1 7.5-2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
+  back: '<path d="M21 6H8l-6 6 6 6h13zM12 9l6 6M18 9l-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
 };
+const RESPONDING = ['complete_task', 'redeem_reward', 'unlock_parent_mode'];
 const svg = (name, size, label) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" ${label ? `role="img" aria-label="${escape(label)}"` : 'aria-hidden="true"'}>${icon[name]}</svg>`;
 
 class HoplaFamilyCard extends HTMLElement {
@@ -155,24 +166,25 @@ class HoplaFamilyCard extends HTMLElement {
     this._busy = new Map();   // task id or reward key -> member id being sent
     this._flash = new Map();  // task id -> message shown briefly after a tap
     this._armed = null;       // reward key waiting for a confirming second tap
+    this._pin = null;         // digits typed on the parent code pad while it is open
     this.shadowRoot.addEventListener('click', event => this.onClick(event));
   }
   connectedCallback() {
     // Quota countdowns move on even when no sensor changes.
     this._timer = setInterval(() => this.render(), 60000);
   }
-  disconnectedCallback() { clearInterval(this._timer); }
+  disconnectedCallback() { clearInterval(this._timer); clearTimeout(this._lockTimer); }
   setConfig(config) {
-    if (config.due && !['today', 'all'].includes(config.due)) throw new Error('due must be today or all');
-    if (config.members !== undefined && !Array.isArray(config.members)) throw new Error('members must be a list of Hopla user IDs');
-    if (config.labels !== undefined && !Array.isArray(config.labels)) throw new Error('labels must be a list of label names');
+    if (config.due && !['today', 'all'].includes(config.due)) throw new Error(this.t('errors.due'));
+    if (config.members !== undefined && !Array.isArray(config.members)) throw new Error(this.t('errors.members'));
+    if (config.labels !== undefined && !Array.isArray(config.labels)) throw new Error(this.t('errors.labels'));
     this._config = {due: 'today', show_points: true, show_todo: true, show_done: true, show_rewards: true, show_approval: false, allow_redeem: false, ...config};
     this.render();
   }
   set hass(hass) {
     const previous = this._hass;
     this._hass = hass;
-    const relevant = id => id.startsWith('sensor.') && isHopla(hass, id);
+    const relevant = id => (id.startsWith('sensor.') || id.startsWith('binary_sensor.')) && isHopla(hass, id);
     if (previous && Object.keys(hass.states).every(id => !relevant(id) || previous.states[id] === hass.states[id])
       && Object.keys(previous.states).every(id => !relevant(id) || hass.states[id])
       && previous.locale?.language === hass.locale?.language) return;
@@ -181,9 +193,9 @@ class HoplaFamilyCard extends HTMLElement {
   getCardSize() { return 4 + (this._data?.rows.length || 0) + (this._data?.done.length || 0) + (this._data?.rewards.length || 0); }
   getGridOptions() { return {columns: 12, min_columns: 6}; }
   t(key, values = {}) {
-    const language = (this._hass?.locale?.language || 'en').split('-')[0];
-    const text = (STRINGS[language] || STRINGS.en)[key] ?? STRINGS.en[key];
-    return text.replace(/\{(\w+)\}/g, (_, name) => values[name]);
+    const language = this._hass?.locale?.language || this._hass?.language || browserLanguage();
+    if (this._language !== language) { this._language = language; this._t = translator(language, () => this.render()); }
+    return this._t(key.includes('.') ? key : `family.${KEYS[key] || key}`, values);
   }
   duration(until) {
     const minutes = Math.max(1, Math.ceil((until - new Date()) / 60000));
@@ -194,7 +206,7 @@ class HoplaFamilyCard extends HTMLElement {
   async call(service, data, key, memberId) {
     this._busy.set(key, memberId); this._error = ''; this.render();
     try {
-      const result = await this._hass.callService('hopla', service, data, undefined, false, service !== 'approve_task' && service !== 'reject_task');
+      const result = await this._hass.callService('hopla', service, data, undefined, false, RESPONDING.includes(service));
       return result?.response ?? {};
     } catch (err) {
       this._error = err?.message || String(err);
@@ -206,7 +218,32 @@ class HoplaFamilyCard extends HTMLElement {
   async onClick(event) {
     const button = event.target.closest('button[data-action]');
     if (!button || button.disabled) return;
-    const {action, task, member, reward} = button.dataset;
+    const {action, task, member, reward, request, digit} = button.dataset;
+    if (action === 'parent') {
+      const access = parentAccess(this._hass);
+      if (access.unlocked) await this.call('lock_parent_mode', {config_entry_id: access.entryId}, 'parent', null);
+      else { this._pin = ''; this._pinError = ''; this.render(); }
+      return;
+    }
+    if (action === 'pin-cancel') { this._pin = null; this.render(); return; }
+    if (action === 'pin-back') { this._pin = this._pin.slice(0, -1); this.render(); return; }
+    if (action === 'pin-digit') {
+      if (this._pin === null || this._pin.length >= 4) return;
+      this._pin += digit; this._pinError = ''; this.render();
+      if (this._pin.length < 4) return;
+      const pin = this._pin;
+      this._error = '';
+      const response = await this.call('unlock_parent_mode', {pin, config_entry_id: parentAccess(this._hass).entryId}, 'parent', null);
+      if (response) this._pin = null;
+      else { this._pin = ''; this._pinError = this._error; this._error = ''; }
+      this.render();
+      return;
+    }
+    if (action === 'approve-request' || action === 'reject-request') {
+      const key = `request-${request}`;
+      await this.call(action === 'approve-request' ? 'approve_reward' : 'reject_reward', {redemption_id: Number(request)}, key, null);
+      return;
+    }
     if (action === 'complete') {
       const taskId = Number(task);
       if (this._busy.has(taskId)) return;
@@ -218,12 +255,13 @@ class HoplaFamilyCard extends HTMLElement {
       const key = `reward-${reward}-${member}`;
       if (this._armed !== key) { this._armed = key; this.render(); setTimeout(() => { if (this._armed === key) { this._armed = null; this.render(); } }, 4000); return; }
       this._armed = null;
-      await this.call('redeem_reward', {reward_id: Number(reward), user_id: Number(member)}, key, Number(member));
+      const response = await this.call('redeem_reward', {reward_id: Number(reward), user_id: Number(member)}, key, Number(member));
+      if (response) this.flash(key, response.pending ? this.t('requested') : this.t('bravo'));
     }
   }
-  flash(taskId, message) {
-    this._flash.set(taskId, message); this.render();
-    setTimeout(() => { this._flash.delete(taskId); this.render(); }, 2500);
+  flash(key, message) {
+    this._flash.set(key, message); this.render();
+    setTimeout(() => { this._flash.delete(key); this.render(); }, 2500);
   }
   face(member, size, extra = '') {
     const initial = escape((member.name || '?').charAt(0).toUpperCase());
@@ -247,7 +285,7 @@ class HoplaFamilyCard extends HTMLElement {
       const faces = group.length
         ? group.map(m => `<div class="podium-member">${rank === 0 && m.points > 0 ? `<span class="crown">${svg('crown', 30)}</span>` : ''}${this.face(m, size, rank === 0 && m.points > 0 ? ' leader' : '')}<div class="podium-name">${escape(m.name)}</div></div>`).join('')
         : `<div class="podium-member"><span class="face empty" style="width:${size}px;height:${size}px"></span><div class="podium-name">&nbsp;</div></div>`;
-      const score = group.length ? `${group[0].points} ${group[0].points === 1 ? 'pt' : 'pts'}` : '&nbsp;';
+      const score = group.length ? escape(this.t('common.pts', {count: group[0].points})) : '&nbsp;';
       return `<div class="podium-col rank${rank + 1}"><div class="podium-faces">${faces}</div><div class="podium-score">${score}</div><div class="step">${rank + 1}</div></div>`;
     };
     const order = [[0], [1, 0], [1, 0, 2]][steps.length - 1];
@@ -259,14 +297,14 @@ class HoplaFamilyCard extends HTMLElement {
     let right;
     if (flash) right = `<span class="flash">${escape(flash)}</span>`;
     else {
-      const approval = task => this._config.show_approval ? `
+      const approval = task => this._config.show_approval && this._access.parent ? `
         <button class="icon-btn ok" data-action="approve" data-task="${task.id}" ${busy ? 'disabled' : ''} aria-label="${escape(this.t('approve'))}">${svg('check', 18)}</button>
         <button class="icon-btn no" data-action="reject" data-task="${task.id}" ${busy ? 'disabled' : ''} aria-label="${escape(this.t('reject'))}">${svg('cross', 16)}</button>` : '';
       right = row.slots.map(({member: m, task, state}) => {
         if (state === 'pending') return `<span class="slot waiting" title="${escape(m.name)}">${this.face(m, 48)}${this.badge('wait', 'clock')}</span>${approval(task)}`;
         if (state === 'done') return `<span class="slot" title="${escape(m.name)}">${this.face(m, 48)}${this.badge('done', 'check')}</span>`;
         return `<button class="slot tap${busy && this._busy.get(busy.id) === m.id ? ' busy' : ''}" data-action="complete" data-task="${task.id}" data-member="${m.id}"
-          ${busy ? 'disabled' : ''} aria-label="${escape(`${m.name} : ${row.name}`)}">${this.face(m, 48)}</button>`;
+          ${busy ? 'disabled' : ''} aria-label="${escape(this.t('common.on_task', {action: m.name, task: row.name}))}">${this.face(m, 48)}</button>`;
       }).join('') + (row.unknownPending ? approval(row.unknownPending) : '');
     }
     const waiting = row.pending ? `<span class="hourglass">${svg('hourglass', 18, this.t('pending'))}</span>` : '';
@@ -275,30 +313,67 @@ class HoplaFamilyCard extends HTMLElement {
   renderDone(item) {
     return `<div class="row small"><span class="name muted">${escape(item.name)}</span>${this.points(item.points, true)}<span class="faces"><span class="slot" title="${escape(item.member.name)}">${this.face(item.member, 40)}${this.badge('done', 'check')}</span></span></div>`;
   }
-  renderReward(reward, members) {
+  renderReward(reward, members, requests) {
     const period = reward.quota_count > 0 && reward.quota_period ? `<span class="sub">${escape(this.t(reward.quota_period, {n: reward.quota_count}))}</span>` : '';
     const slots = members.map(m => {
+      const request = requests.find(item => item.reward_id === reward.id && item.user_id === m.id);
+      if (request) {
+        const busy = this._busy.has(`request-${request.redemption_id}`) ? 'disabled' : '';
+        const buttons = this._access.parent ? `
+          <button class="icon-btn ok" data-action="approve-request" data-request="${request.redemption_id}" ${busy} aria-label="${escape(this.t('common.on_task', {action: this.t('approve'), task: `${m.name} · ${reward.name}`}))}">${svg('check', 18)}</button>
+          <button class="icon-btn no" data-action="reject-request" data-request="${request.redemption_id}" ${busy} aria-label="${escape(this.t('common.on_task', {action: this.t('reject'), task: `${m.name} · ${reward.name}`}))}">${svg('cross', 16)}</button>` : '';
+        return `<span class="slot waiting" title="${escape(this.t('common.on_task', {action: m.name, task: this.t('request_pending')}))}">${this.face(m, 44)}${this.badge('wait', 'hourglass')}</span>${buttons}`;
+      }
       const state = rewardState(reward, m);
       const key = `reward-${reward.id}-${m.id}`;
       if (state.kind === 'quota') {
         const time = state.resetsAt ? this.duration(state.resetsAt) : '';
-        return `<span class="slot off" title="${escape(`${m.name} : ${this.t('quota', {time})}`)}">${this.face(m, 44, ' grey')}${this.badge('gray', 'clock', time)}</span>`;
+        return `<span class="slot off" title="${escape(this.t('common.on_task', {action: m.name, task: this.t('quota', {time})}))}">${this.face(m, 44, ' grey')}${this.badge('gray', 'clock', time)}</span>`;
       }
       if (state.kind === 'points') {
-        return `<span class="slot off" title="${escape(`${m.name} : ${this.t('missing', {n: state.missing})}`)}">${this.face(m, 44, ' grey')}${this.badge('gray', 'lock', `−${state.missing}`)}</span>`;
+        return `<span class="slot off" title="${escape(this.t('common.on_task', {action: m.name, task: this.t('missing', {n: state.missing})}))}">${this.face(m, 44, ' grey')}${this.badge('gray', 'lock', `−${state.missing}`)}</span>`;
       }
       const content = `${this.face(m, 44)}${this.badge('gift', 'gift')}`;
       return this._config.allow_redeem
         ? `<button class="slot tap${this._armed === key ? ' armed' : ''}" data-action="redeem" data-reward="${reward.id}" data-member="${m.id}" ${this._busy.has(key) ? 'disabled' : ''}
-            aria-label="${escape(`${m.name} : ${this._armed === key ? this.t('confirm') : this.t('available')} ${reward.name}`)}">${content}</button>`
+            aria-label="${escape(this.t('common.on_task', {action: m.name, task: `${this._armed === key ? this.t('confirm') : this.t('available')} ${reward.name}`}))}">${content}</button>`
         : `<span class="slot" title="${escape(m.name)}">${content}</span>`;
     }).join('');
-    const armed = members.some(m => this._armed === `reward-${reward.id}-${m.id}`) ? `<span class="sub armed-text">${escape(this.t('confirm'))}</span>` : period;
+    const flash = members.map(m => this._flash.get(`reward-${reward.id}-${m.id}`)).find(Boolean);
+    const armed = flash ? `<span class="sub armed-text">${escape(flash)}</span>`
+      : members.some(m => this._armed === `reward-${reward.id}-${m.id}`) ? `<span class="sub armed-text">${escape(this.t('confirm'))}</span>` : period;
     return `<div class="row"><span class="name"><span>${escape(reward.name)}</span>${armed}</span>${this.points(reward.points_cost, false, true)}<span class="faces">${slots}</span></div>`;
+  }
+  renderParentButton() {
+    const access = this._access;
+    if (!access.guarded || access.account) return '';
+    const label = access.unlocked ? this.t('parent_close', {time: this.duration(access.until)}) : this.t('parent_open');
+    return `<button class="parent-btn${access.unlocked ? ' open' : ''}" data-action="parent" ${this._busy.has('parent') ? 'disabled' : ''}
+      aria-label="${escape(label)}" title="${escape(label)}">${svg(access.unlocked ? 'unlock' : 'lock', 18)}${access.unlocked ? `<span>${escape(this.duration(access.until))}</span>` : ''}</button>`;
+  }
+  renderPinPad() {
+    if (this._pin === null) return '';
+    const busy = this._busy.has('parent') ? 'disabled' : '';
+    const dots = [0, 1, 2, 3].map(i => `<span class="dot${i < this._pin.length ? ' full' : ''}"></span>`).join('');
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(d => `<button class="key" data-action="pin-digit" data-digit="${d}" ${busy}>${d}</button>`).join('');
+    const message = this._pinError || (this._access.hasPin ? this.t('pin_prompt') : this.t('pin_missing'));
+    return `<div class="pin-pad" role="dialog" aria-label="${escape(this.t('parent_open'))}">
+      <div class="pin-title">${svg('lock', 18)}${escape(this.t('parent_mode'))}</div>
+      <div class="dots" aria-hidden="true">${dots}</div>
+      <div class="pin-message${this._pinError ? ' error-text' : ''}" role="status">${escape(message)}</div>
+      <div class="keys">${keys}
+        <button class="key small" data-action="pin-cancel">${escape(this.t('cancel'))}</button>
+        <button class="key" data-action="pin-digit" data-digit="0" ${busy}>0</button>
+        <button class="key small" data-action="pin-back" aria-label="${escape(this.t('erase'))}" ${this._pin ? '' : 'disabled'}>${svg('back', 22)}</button>
+      </div></div>`;
   }
   render() {
     if (!this._config || !this._hass) return;
     const data = this._data = boardData(this._hass, this._config);
+    this._access = parentAccess(this._hass);
+    // Parent mode closes by itself; show the board locked again on time.
+    clearTimeout(this._lockTimer);
+    if (this._access.until) this._lockTimer = setTimeout(() => this.render(), Math.max(0, this._access.until - new Date()) + 500);
     const title = this._config.title ?? (this._config.due === 'today' ? this.t('today') : this.t('all'));
     const empty = data.members.length ? (this._config.due === 'today' ? this.t('allDone') : this.t('noTasks')) : this.t('noMembers');
     const rewards = this._config.show_rewards && data.members.length ? data.rewards : [];
@@ -368,12 +443,30 @@ class HoplaFamilyCard extends HTMLElement {
       .flash { font-weight: 700; color: var(--success-color, var(--dt-green)); }
       .empty-text { font-size: 17px; padding: 14px 2px 4px; }
       .error { color: var(--error-color); margin: 8px 0; }
+      ha-card { position: relative; display: block; }
+      .parent-btn { position: absolute; top: 10px; right: 10px; z-index: 1; display: flex; align-items: center; gap: 4px; height: 36px; min-width: 36px;
+        padding: 0 9px; border-radius: 18px; white-space: nowrap; color: var(--secondary-text-color); background: rgba(127,127,127,.1); font-size: 13px; font-weight: 700; justify-content: center; }
+      .parent-btn.open { color: var(--dt-green); background: rgba(30,142,62,.14); }
+      .pin-pad { position: absolute; inset: 0; z-index: 2; border-radius: inherit; background: var(--card-background-color, #fff);
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 16px; }
+      .pin-title { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 700; }
+      .dots { display: flex; gap: 14px; }
+      .dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--dt-ring); box-sizing: border-box; }
+      .dot.full { background: var(--dt-ring); }
+      .pin-message { min-height: 20px; font-size: 14px; color: var(--secondary-text-color); text-align: center; }
+      .error-text { color: var(--error-color, #d93025); }
+      .keys { display: grid; grid-template-columns: repeat(3, 72px); gap: 12px; }
+      .key { height: 64px; border-radius: 32px; background: rgba(99,102,241,.1); font-size: 26px; font-weight: 600; touch-action: manipulation;
+        display: grid; place-items: center; }
+      .key.small { font-size: 14px; background: none; }
+      .key:not(:disabled):active { transform: scale(.94); }
     </style><ha-card>
+      ${this.renderParentButton()}${this.renderPinPad()}
       ${this._config.show_points && data.members.length ? this.renderPodium(data.members) : ''}
       ${this._config.show_todo ? `<section>${this.header('todo', 'todo', title, data.rows.length)}
         ${data.rows.length ? data.rows.map(row => this.renderTask(row)).join('') : `<div class="empty-text">${escape(empty)}</div>`}</section>` : ''}
       ${done.length ? `<section>${this.header('check', 'done', this.t('done'), done.length)}${done.map(item => this.renderDone(item)).join('')}</section>` : ''}
-      ${rewards.length ? `<section>${this.header('gift', 'gift', this.t('rewards'), rewards.length)}${rewards.map(r => this.renderReward(r, data.members)).join('')}</section>` : ''}
+      ${rewards.length ? `<section>${this.header('gift', 'gift', this.t('rewards'), rewards.length)}${rewards.map(r => this.renderReward(r, data.members, data.requests)).join('')}</section>` : ''}
       ${this._error ? `<div class="error">${escape(this._error)}</div>` : ''}
     </ha-card>`;
   }
@@ -382,6 +475,11 @@ class HoplaFamilyCard extends HTMLElement {
 class HoplaFamilyCardEditor extends HTMLElement {
   setConfig(config) { this._config = {...config}; this.render(); }
   set hass(hass) { const first = !this._hass; this._hass = hass; if (first) this.render(); }
+  t(key, values) {
+    const language = this._hass?.locale?.language || this._hass?.language || browserLanguage();
+    if (this._language !== language) { this._language = language; this._t = translator(language, () => this.render()); }
+    return this._t(key, values);
+  }
   render() {
     if (!this._hass || !this._config) return;
     const {members} = boardData(this._hass, {});
@@ -391,9 +489,7 @@ class HoplaFamilyCardEditor extends HTMLElement {
     }
     if (!this._form) {
       this._form = document.createElement('ha-form');
-      this._form.computeLabel = schema => ({title: 'Title', members: 'Members with a photo button', labels: 'Only tasks with these labels',
-        due: 'Tasks shown', show_points: 'Show the points podium', show_todo: 'Show tasks to do', show_done: 'Show tasks done today', show_rewards: 'Show rewards',
-        show_approval: 'Show approve and reject buttons', allow_redeem: 'Allow redeeming rewards from the card'}[schema.name] ?? schema.name);
+      this._form.computeLabel = schema => this.t(`family.editor.${schema.name}`);
       this._form.addEventListener('value-changed', event => {
         event.stopPropagation();
         const config = {...event.detail.value};
@@ -409,7 +505,7 @@ class HoplaFamilyCardEditor extends HTMLElement {
       {name: 'title', selector: {text: {}}},
       {name: 'members', selector: {select: {multiple: true, options: members.map(m => ({value: String(m.id), label: m.name}))}}},
       {name: 'labels', selector: {select: {multiple: true, custom_value: true, options: [...labels]}}},
-      {name: 'due', selector: {select: {mode: 'dropdown', options: [{value: 'today', label: 'Due today or overdue'}, {value: 'all', label: 'All'}]}}},
+      {name: 'due', selector: {select: {mode: 'dropdown', options: [{value: 'today', label: this.t('family.editor.due_today')}, {value: 'all', label: this.t('family.editor.due_all')}]}}},
       {name: 'show_points', selector: {boolean: {}}},
       {name: 'show_todo', selector: {boolean: {}}},
       {name: 'show_done', selector: {boolean: {}}},
@@ -425,4 +521,7 @@ class HoplaFamilyCardEditor extends HTMLElement {
 if (!customElements.get('hopla-family-card')) customElements.define('hopla-family-card', HoplaFamilyCard);
 if (!customElements.get('hopla-family-card-editor')) customElements.define('hopla-family-card-editor', HoplaFamilyCardEditor);
 window.customCards = window.customCards || [];
-if (!window.customCards.some(card => card.type === 'hopla-family-card')) window.customCards.push({type: 'hopla-family-card', name: 'Hopla Family Board', description: "A points podium, today's tasks with a photo per member to mark who did it, what is done, and rewards"});
+if (!window.customCards.some(card => card.type === 'hopla-family-card')) {
+  const t = translator(browserLanguage());
+  window.customCards.push({type: 'hopla-family-card', name: t('family.card_name'), description: t('family.card_description')});
+}

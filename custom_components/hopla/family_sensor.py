@@ -203,4 +203,4 @@ class HoplaRewardsSensor(_FamilySensor):
                 "quota_resets_at": r.quota_resets_at.isoformat() if r.quota_resets_at else None,
             }
             for r in self._rewards
-        ]}
+        ], "requests": self.coordinator.pending_rewards}

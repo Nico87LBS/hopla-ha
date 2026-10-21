@@ -7,19 +7,24 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.event import async_track_point_in_utc_time
+from homeassistant.helpers.event import async_call_later, async_track_point_in_utc_time
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from homeassistant.exceptions import HomeAssistantError
-from .const import DOMAIN, CONF_URL, CONF_TOKEN, CONF_SHOW_DUE_IN, LIVE_REFRESH_INTERVAL, OFFLINE_REFRESH_INTERVAL
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.util import dt as dt_util
+from .const import (DOMAIN, CONF_URL, CONF_TOKEN, CONF_SHOW_DUE_IN, LIVE_REFRESH_INTERVAL, OFFLINE_REFRESH_INTERVAL,
+                    CONF_PARENT_USERS, CONF_PARENT_PIN_HASH, CONF_PARENT_PIN_SALT)
 from .api import HoplaApiClient
 from .frontend import async_setup_frontend
 from .completion_history import async_completed_occurrences
 from .approval import ApprovalTracker, STATUS_PENDING_APPROVAL, pending_approvals, member_name
 from .realtime import RealtimeListener
 from .reminders import ReminderScheduler
+from .parental import (ParentGuard, ParentModeError, RewardRequestTracker, pending_rewards,
+                       PARENT_MODE_DURATION)
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS = [Platform.TODO, Platform.SENSOR, Platform.SWITCH, Platform.NUMBER, Platform.TEXT, Platform.CALENDAR]
+PLATFORMS = [Platform.TODO, Platform.SENSOR, Platform.SWITCH, Platform.NUMBER, Platform.TEXT, Platform.CALENDAR,
+             Platform.BINARY_SENSOR]
 
 EVENT_TASK_COMPLETED = "hopla_task_completed"
 
@@ -33,6 +38,14 @@ SERVICE_POSTPONE_TASK = "postpone_task"
 SERVICE_APPROVE_TASK = "approve_task"
 SERVICE_REJECT_TASK = "reject_task"
 SERVICE_REDEEM_REWARD = "redeem_reward"
+SERVICE_APPROVE_REWARD = "approve_reward"
+SERVICE_REJECT_REWARD = "reject_reward"
+SERVICE_UNLOCK_PARENT_MODE = "unlock_parent_mode"
+SERVICE_LOCK_PARENT_MODE = "lock_parent_mode"
+SERVICES = [SERVICE_COMPLETE_TASK, SERVICE_CREATE_TASK, SERVICE_UPDATE_TASK, SERVICE_DELETE_TASK, SERVICE_SKIP_TASK,
+            SERVICE_COMPLETE_ASSIGNED_TASK, SERVICE_POSTPONE_TASK, SERVICE_APPROVE_TASK, SERVICE_REJECT_TASK,
+            SERVICE_REDEEM_REWARD, SERVICE_APPROVE_REWARD, SERVICE_REJECT_REWARD,
+            SERVICE_UNLOCK_PARENT_MODE, SERVICE_LOCK_PARENT_MODE]
 
 COMPLETE_TASK_SCHEMA = vol.Schema({
     vol.Required("task_id"): vol.Coerce(int),
@@ -90,6 +103,37 @@ REDEEM_REWARD_SCHEMA = vol.Schema({
     vol.Optional("config_entry_id"): cv.string,
 })
 
+REWARD_REQUEST_SCHEMA = vol.Schema({
+    vol.Required("redemption_id"): vol.All(vol.Coerce(int), vol.Range(min=1)),
+    vol.Optional("config_entry_id"): cv.string,
+})
+
+UNLOCK_PARENT_MODE_SCHEMA = vol.Schema({
+    vol.Required("pin"): cv.string,
+    vol.Optional("config_entry_id"): cv.string,
+})
+
+LOCK_PARENT_MODE_SCHEMA = vol.Schema({
+    vol.Optional("config_entry_id"): cv.string,
+})
+
+
+def _parent_error(err: ParentModeError) -> ServiceValidationError:
+    """Explain in the user's language why a parent action was refused."""
+    placeholders = {"attempts_left": str(err.details.get("attempts_left", "")), "minutes": ""}
+    if until := err.details.get("until"):
+        placeholders["minutes"] = str(max(1, round((until - dt_util.utcnow()).total_seconds() / 60)))
+    return ServiceValidationError(translation_domain=DOMAIN, translation_key=err.reason,
+                                  translation_placeholders=placeholders)
+
+
+def require_parent(config: dict, call: ServiceCall) -> None:
+    """Refuse a parent action from anyone else, such as the family tablet."""
+    try:
+        config["parental"].require_parent(call.context.user_id)
+    except ParentModeError as err:
+        raise _parent_error(err) from err
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Hopla from a config entry."""
     hass.data.setdefault(DOMAIN, {})
@@ -110,6 +154,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.bus.async_fire,
     )
     entry.async_on_unload(reminders.cancel_all)
+    reward_requests = RewardRequestTracker(hass.bus.async_fire)
+
+    @callback
+    def parent_mode_changed() -> None:
+        # Entities read parent mode from the guard; tell them to write their state.
+        coordinator.async_update_listeners()
+
+    parental = ParentGuard(entry.data.get(CONF_PARENT_USERS, []), entry.data.get(CONF_PARENT_PIN_HASH),
+                           entry.data.get(CONF_PARENT_PIN_SALT), on_change=parent_mode_changed)
+    entry.async_on_unload(parental.lock)
 
     async def async_update_tasks():
         tasks = await client.async_get_tasks()
@@ -123,6 +177,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             coordinator.rewards = await client.async_get_rewards()
         except Exception as err:
             _LOGGER.debug("Failed to refresh rewards: %s", err)
+        if coordinator.rewards is not None:
+            try:
+                coordinator.pending_rewards = pending_rewards(
+                    await client.async_get_redemptions("pending"), circle_members)
+                reward_requests.update(coordinator.pending_rewards, entry.entry_id)
+            except Exception as err:
+                _LOGGER.debug("Failed to refresh reward requests: %s", err)
         coordinator.pending_approvals = pending_approvals(tasks, history, circle_members)
         approvals.update(coordinator.pending_approvals, entry.entry_id)
         reminders.update(tasks, circle_members, entry.entry_id)
@@ -137,6 +198,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     coordinator.rewards = None
     coordinator.pending_approvals = []
+    coordinator.pending_rewards = []
     await coordinator.async_config_entry_first_refresh()
 
     @callback
@@ -167,6 +229,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "client": client,
         "circle_members": circle_members,
         "listener": listener,
+        "parental": parental,
     }
     
     # Register services before setting up platforms
@@ -248,6 +311,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.services.async_register(DOMAIN, SERVICE_REDEEM_REWARD, redeem_handler,
                                  schema=REDEEM_REWARD_SCHEMA,
                                  supports_response=SupportsResponse.OPTIONAL)
+
+    async def approve_reward_handler(call: ServiceCall) -> None:
+        await async_resolve_reward_service(hass, call, approve=True)
+
+    async def reject_reward_handler(call: ServiceCall) -> None:
+        await async_resolve_reward_service(hass, call, approve=False)
+
+    async def unlock_handler(call: ServiceCall) -> ServiceResponse:
+        return await async_unlock_parent_mode_service(hass, call)
+
+    async def lock_handler(call: ServiceCall) -> None:
+        config = await _get_config(hass, call)
+        config["parental"].lock()
+
+    hass.services.async_register(DOMAIN, SERVICE_APPROVE_REWARD, approve_reward_handler,
+                                 schema=REWARD_REQUEST_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_REJECT_REWARD, reject_reward_handler,
+                                 schema=REWARD_REQUEST_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_UNLOCK_PARENT_MODE, unlock_handler,
+                                 schema=UNLOCK_PARENT_MODE_SCHEMA,
+                                 supports_response=SupportsResponse.OPTIONAL)
+    hass.services.async_register(DOMAIN, SERVICE_LOCK_PARENT_MODE, lock_handler,
+                                 schema=LOCK_PARENT_MODE_SCHEMA)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     entry.add_update_listener(async_reload_entry)
@@ -294,6 +380,7 @@ async def async_resolve_approval_service(hass: HomeAssistant, call: ServiceCall,
     if not entry:
         raise HomeAssistantError("No matching Hopla integration found")
     config = hass.data[DOMAIN][entry.entry_id]
+    require_parent(config, call)
     try:
         if approve:
             await config["client"].async_approve_task(task_id)
@@ -306,19 +393,53 @@ async def async_resolve_approval_service(hass: HomeAssistant, call: ServiceCall,
 
 
 async def async_redeem_reward_service(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
-    """Spend a member's points on a reward."""
-    entry = await _get_config_entry(hass, call.data.get("config_entry_id"))
-    if not entry:
-        raise HomeAssistantError("No matching Hopla integration found")
-    config = hass.data[DOMAIN][entry.entry_id]
+    """Spend a member's points on a reward.
+
+    From a parent it is approved at once. From anyone else, such as the family
+    tablet, it becomes a request that a parent approves.
+    """
+    config = await _get_config(hass, call)
+    request = not config["parental"].is_parent(call.context.user_id)
     try:
-        redemption = await config["client"].async_redeem_reward(call.data["reward_id"], call.data.get("user_id"))
+        redemption = await config["client"].async_redeem_reward(
+            call.data["reward_id"], call.data.get("user_id"), request=request)
     except Exception as err:
         raise HomeAssistantError(str(err)) from err
     finally:
         await config["coordinator"].async_refresh()
     return {"redemption_id": redemption.id, "approved": redemption.status == 1,
-            "points_cost": redemption.points_cost}
+            "pending": redemption.status == 0, "points_cost": redemption.points_cost}
+
+
+async def async_resolve_reward_service(hass: HomeAssistant, call: ServiceCall, *, approve: bool) -> None:
+    """Approve or reject a reward request."""
+    config = await _get_config(hass, call)
+    require_parent(config, call)
+    try:
+        await config["client"].async_resolve_redemption(call.data["redemption_id"], approve)
+    except Exception as err:
+        raise HomeAssistantError(str(err)) from err
+    finally:
+        await config["coordinator"].async_refresh()
+
+
+async def async_unlock_parent_mode_service(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
+    """Open parent mode with the parent code; it closes again by itself."""
+    config = await _get_config(hass, call)
+    parental = config["parental"]
+    try:
+        until = parental.unlock(call.data["pin"])
+    except ParentModeError as err:
+        raise _parent_error(err) from err
+    async_call_later(hass, PARENT_MODE_DURATION.total_seconds() + 1, lambda _now: parental.expire())
+    return {"unlocked_until": until.isoformat()}
+
+
+async def _get_config(hass: HomeAssistant, call: ServiceCall) -> dict:
+    entry = await _get_config_entry(hass, call.data.get("config_entry_id"))
+    if not entry:
+        raise HomeAssistantError("No matching Hopla integration found")
+    return hass.data[DOMAIN][entry.entry_id]
 
 async def async_create_task_service(hass: HomeAssistant, call: ServiceCall) -> None:
     """Handle the create_task service call."""
@@ -335,6 +456,7 @@ async def async_create_task_service(hass: HomeAssistant, call: ServiceCall) -> N
     
     # Get API client and coordinator
     config = hass.data[DOMAIN][entry.entry_id]
+    require_parent(config, call)
     client = config["client"]
     coordinator = config["coordinator"]
 
@@ -366,6 +488,7 @@ async def async_update_task_service(hass: HomeAssistant, call: ServiceCall) -> N
     
     # Get API client and coordinator
     config = hass.data[DOMAIN][entry.entry_id]
+    require_parent(config, call)
     client = config["client"]
     coordinator = config["coordinator"]
 
@@ -400,6 +523,7 @@ async def async_delete_task_service(hass: HomeAssistant, call: ServiceCall) -> N
     
     # Get API client and coordinator
     config = hass.data[DOMAIN][entry.entry_id]
+    require_parent(config, call)
     client = config["client"]
     coordinator = config["coordinator"]
 
@@ -426,6 +550,7 @@ async def async_skip_task_service(hass: HomeAssistant, call: ServiceCall) -> Non
         return
 
     config = hass.data[DOMAIN][entry.entry_id]
+    require_parent(config, call)
     client = config["client"]
     coordinator = config["coordinator"]
 
@@ -477,6 +602,8 @@ async def async_task_row_action(hass: HomeAssistant, call: ServiceCall, *, compl
     if entry is None:
         raise HomeAssistantError("No matching Hopla integration found")
     config = hass.data[DOMAIN][entry.entry_id]
+    if not complete:
+        require_parent(config, call)
     client = config["client"]
     try:
         tasks = await client.async_get_tasks()
@@ -507,7 +634,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         
         # Remove services if this is the last config entry
         if not hass.data[DOMAIN]:
-            for service_name in [SERVICE_COMPLETE_TASK, SERVICE_CREATE_TASK, SERVICE_UPDATE_TASK, SERVICE_DELETE_TASK, SERVICE_SKIP_TASK, SERVICE_COMPLETE_ASSIGNED_TASK, SERVICE_POSTPONE_TASK, SERVICE_APPROVE_TASK, SERVICE_REJECT_TASK, SERVICE_REDEEM_REWARD]:
+            for service_name in SERVICES:
                 if hass.services.has_service(DOMAIN, service_name):
                     hass.services.async_remove(DOMAIN, service_name)
             _LOGGER.debug("Removed services: %s.%s, %s.%s, %s.%s, %s.%s", 

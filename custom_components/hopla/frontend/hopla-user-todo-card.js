@@ -2,6 +2,16 @@
 // custom-element registry and HTMLElement with its scoped-registry polyfill.
 // Wait before defining classes so they use the final registry and base class.
 await customElements.whenDefined('home-assistant');
+const {translator, browserLanguage} = await import(new URL(`./hopla-i18n.js${new URL(import.meta.url).search}`, import.meta.url));
+const english = translator('en');
+const hassLanguage = hass => hass?.locale?.language || hass?.language || browserLanguage();
+// Each element keeps a translator for its HA language and renders again when
+// a language file finishes loading.
+function elementTranslator(element) {
+  const language = hassLanguage(element._hass);
+  if (element._language !== language) { element._language = language; element._t = translator(language, () => element.render()); }
+  return element._t;
+}
 
 function compareTasks(a, b, sortBy, language) {
   const timestamp = value => Number.isFinite(Date.parse(value)) ? Date.parse(value) : Infinity;
@@ -28,16 +38,13 @@ export function completedTasks(state, userId, now = new Date(), config = {}) {
   const limit = Number(config.completed_limit ?? 0);
   return limit > 0 ? tasks.slice(0, limit) : tasks;
 }
-export function recurrenceText(task) {
-  const fixed = {daily:'Daily', weekly:'Weekly', monthly:'Monthly', yearly:'Yearly',
-    adaptive:'Adaptive', trigger:'Event-based', always:'Always available',
-    days_of_the_week:'Selected weekdays', day_of_the_month:'Monthly schedule'};
-  if (task.frequency_type !== 'interval') return Object.hasOwn(fixed, task.frequency_type) ? fixed[task.frequency_type] : '';
-  const units = {hours:'hour', days:'day', weeks:'week', months:'month', years:'year'};
-  const unit = Object.hasOwn(units, task.interval_type) ? units[task.interval_type] : null;
+export function recurrenceText(task, t = english) {
+  const fixed = ['daily', 'weekly', 'monthly', 'yearly', 'adaptive', 'trigger', 'always', 'days_of_the_week', 'day_of_the_month'];
+  if (task.frequency_type !== 'interval') return fixed.includes(task.frequency_type) ? t(`todo.recurrence.${task.frequency_type}`) : '';
+  const units = ['hours', 'days', 'weeks', 'months', 'years'];
   const count = task.frequency;
-  if (!unit || !Number.isInteger(count) || count < 1) return '';
-  return `Every ${count} ${count === 1 ? unit : task.interval_type}`;
+  if (!units.includes(task.interval_type) || !Number.isInteger(count) || count < 1) return '';
+  return t(`todo.recurrence.${task.interval_type}`, {count});
 }
 export function taskLabels(value) {
   const labels = typeof value === 'string' ? value.split(',') : Array.isArray(value) ? value : [];
@@ -102,13 +109,13 @@ export function userTasks(state, userId, displayFilter = 'all', now = new Date()
     })
     .sort((a, b) => compareTasks(a, b, sortBy, language));
 }
-export function dueText(value, language, now = new Date(), timeFormat, display = 'date') {
+export function dueText(value, language, now = new Date(), timeFormat, display = 'date', t = translator(language)) {
   const dateOnly = typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
   const date = value ? new Date(dateOnly ? `${value}T12:00:00` : value) : null;
-  if (!date || isNaN(date)) return 'No due date';
+  if (!date || isNaN(date)) return t('todo.no_due');
   const day = value => Date.UTC(value.getFullYear(), value.getMonth(), value.getDate());
   const days = Math.round((day(date) - day(now)) / 86400000);
-  let label = days < 0 ? `Overdue · ${-days} day${days === -1 ? '' : 's'}` : days === 0 ? 'Today' : days === 1 ? 'Tomorrow'
+  let label = days < 0 ? t('todo.overdue_days', {count: -days}) : days === 0 ? t('todo.today') : days === 1 ? t('todo.tomorrow')
     : date.toLocaleDateString(language, {weekday: 'short', month: 'short', day: 'numeric'});
   if (display !== 'date') {
     const relative = new Intl.RelativeTimeFormat(language, {numeric:'auto'});
@@ -139,16 +146,19 @@ export function isOverdue(value, now = new Date()) {
   const cutoff = dateOnly ? new Date(now.getFullYear(), now.getMonth(), now.getDate()) : now;
   return !isNaN(due) && due < cutoff;
 }
-export function emptyMessage(config, userName) {
+export function emptyMessage(config, userName, t = english) {
   const filters = dateFilters(config);
   let filter = config.display_filters !== undefined
-    ? filters.length ? filters.map(value=>({overdue:'Overdue',today:'Today',future:'Future',undated:'Without a due date'}[value])).join(', ') : 'All tasks'
-    : {all:'All tasks',overdue:'Overdue',today:'Today',upcoming:'Upcoming'}[config.display_filter || 'all'];
+    ? filters.length ? filters.map(value=>t(`todo.filters.${value}`)).join(', ') : t('todo.filters.all')
+    : t(`todo.filters.${config.display_filter || 'all'}`);
   if ((config.display_filter === 'upcoming' && config.display_filters === undefined) || filters.includes('future')) {
     const days = upcomingDayLimit(config.upcoming_days);
-    filter += days === 0 ? ' (no day limit)' : ` (${days} day${days === 1 ? '' : 's'} ahead)`;
+    filter = days === 0 ? t('todo.filters.no_limit', {filter}) : t('todo.filters.ahead', {filter, count: days});
   }
-  return `${config.user_id === 'all' ? 'No tasks for all users' : `No tasks for ${userName}${config.include_anyone ? ' or Anyone' : ''}`} · Filter: ${filter}${config.labels?.length ? ` · Labels: ${config.labels.join(config.label_match === 'all' ? ' AND ' : ', ')}` : ''}`;
+  let message = config.user_id === 'all' ? t('todo.empty.all_users') : t(config.include_anyone ? 'todo.empty.user_anyone' : 'todo.empty.user', {name: userName});
+  message = t('todo.empty.filter', {message, filter});
+  if (config.labels?.length) message = t('todo.empty.labels', {message, labels: config.labels.join(t(config.label_match === 'all' ? 'todo.empty.and' : 'todo.empty.or'))});
+  return message;
 }
 export function actionData(state, task) {
   const data = {task_id: task.task_id, config_entry_id: state.attributes.config_entry_id};
@@ -214,24 +224,26 @@ class HoplaUserTodoCard extends HTMLElement {
     finally { this._loadingForm = false; }
   }
   disconnectedCallback() { document.removeEventListener('pointerdown', this._outside); }
+  t(key, values) { return elementTranslator(this)(key, values); }
   setConfig(config) {
     const signature = JSON.stringify(config);
     if (signature === this._configInputSignature) return;
-    if (!config.entity?.startsWith('todo.')) throw new Error('Choose a Hopla todo list');
-    if (config.task_view && !['both','pending','completed'].includes(config.task_view)) throw new Error('Choose a valid task view');
-    if (config.completed_filter !== undefined && !['all','matching'].includes(config.completed_filter)) throw new Error('Choose a valid completed task filter');
+    const error = key => new Error(this.t(`todo.errors.${key}`));
+    if (!config.entity?.startsWith('todo.')) throw error('entity');
+    if (config.task_view && !['both','pending','completed'].includes(config.task_view)) throw error('task_view');
+    if (config.completed_filter !== undefined && !['all','matching'].includes(config.completed_filter)) throw error('completed_filter');
     for (const [key, min, max] of [['completed_days',1,7],['completed_limit',0,500]]) {
-      if (config[key] != null && (config[key] === '' || typeof config[key] === 'boolean' || !Number.isInteger(Number(config[key])) || Number(config[key]) < min || Number(config[key]) > max)) throw new Error(`${key === 'completed_days' ? 'Completed history days' : 'Completed task limit'} must be a whole number from ${min} to ${max}`);
+      if (config[key] != null && (config[key] === '' || typeof config[key] === 'boolean' || !Number.isInteger(Number(config[key])) || Number(config[key]) < min || Number(config[key]) > max)) throw new Error(this.t(`todo.errors.${key}`, {min, max}));
     }
-    if (config.user_id !== undefined && config.user_id !== 'all' && (!Number.isInteger(Number(config.user_id)) || Number(config.user_id) < 1)) throw new Error('Choose a Hopla user');
-    if (config.display_filter && !['all','overdue','today','upcoming'].includes(config.display_filter)) throw new Error('Choose a valid display filter');
-    if (config.display_filters !== undefined && (!Array.isArray(config.display_filters) || config.display_filters.some(filter=>!['overdue','today','future','undated'].includes(filter)))) throw new Error('Choose valid task date groups');
-    if (config.labels !== undefined && (!Array.isArray(config.labels) || config.labels.some(label => typeof label !== 'string' || !label.trim()))) throw new Error('Labels must be a list of label names');
-    if (config.label_match !== undefined && !['any','all'].includes(config.label_match)) throw new Error('Choose any or all for label matching');
-    if (config.sort_by && !['due_date','priority','name'].includes(config.sort_by)) throw new Error('Choose a valid sort order');
-    if (config.due_display && !['date','relative','both'].includes(config.due_display)) throw new Error('Choose a valid due date display');
-    if (config.row_spacing !== undefined && !['auto','compact','comfortable'].includes(config.row_spacing)) throw new Error('Choose valid task spacing');
-    if (config.upcoming_days !== undefined && (!Number.isInteger(Number(config.upcoming_days)) || Number(config.upcoming_days) < 0 || Number(config.upcoming_days) > 365)) throw new Error('Days ahead must be a whole number from 0 to 365');
+    if (config.user_id !== undefined && config.user_id !== 'all' && (!Number.isInteger(Number(config.user_id)) || Number(config.user_id) < 1)) throw error('user');
+    if (config.display_filter && !['all','overdue','today','upcoming'].includes(config.display_filter)) throw error('display_filter');
+    if (config.display_filters !== undefined && (!Array.isArray(config.display_filters) || config.display_filters.some(filter=>!['overdue','today','future','undated'].includes(filter)))) throw error('display_filters');
+    if (config.labels !== undefined && (!Array.isArray(config.labels) || config.labels.some(label => typeof label !== 'string' || !label.trim()))) throw error('labels');
+    if (config.label_match !== undefined && !['any','all'].includes(config.label_match)) throw error('label_match');
+    if (config.sort_by && !['due_date','priority','name'].includes(config.sort_by)) throw error('sort_by');
+    if (config.due_display && !['date','relative','both'].includes(config.due_display)) throw error('due_display');
+    if (config.row_spacing !== undefined && !['auto','compact','comfortable'].includes(config.row_spacing)) throw error('row_spacing');
+    if (config.upcoming_days !== undefined && (!Number.isInteger(Number(config.upcoming_days)) || Number(config.upcoming_days) < 0 || Number(config.upcoming_days) > 365)) throw error('upcoming_days');
     this._config = {task_view:'both', completed_days:1, completed_filter:'all', completed_limit:0, row_spacing:'auto', display_filter:'all', sort_by:'due_date', button_style: 'text', button_size: 'compact', button_shape: 'rounded',
       button_content: 'icon', complete_control: 'checkbox', include_overdue:true, include_anyone:false, due_display:'date', show_labels:false, show_points:false, show_recurrence:false, use_label_colors:false, show_assignee:true, show_complete:true, show_postpone:true, show_due_date:true, show_reassign:true, ...config, completed_days:config.completed_days ?? 1, completed_limit:config.completed_limit ?? 0, labels:taskLabels(config.labels), user_id: config.user_id === undefined || config.user_id === 'all' ? 'all' : Number(config.user_id), upcoming_days:upcomingDayLimit(config.upcoming_days)};
     if (this._panel && this._panel.kind !== 'details' && !this._config[{skip:'show_postpone',date:'show_due_date',assign:'show_reassign'}[this._panel.kind]]) this._panel = null;
@@ -348,14 +360,16 @@ class HoplaUserTodoCard extends HTMLElement {
     card.dataset.size = this._config.button_size;
     card.dataset.shape = this._config.button_shape;
     card.dataset.spacing = this._config.row_spacing;
+    const t = (key, values) => this.t(key, values);
+    const onTask = (action, task) => t('common.on_task', {action, task: task.name});
     const addText = (parent, tag, text, cls) => { const el = document.createElement(tag); el.textContent = text; if(cls) el.className = cls; parent.append(el); return el; };
-    addText(card, 'h2', this._config.title || (userId === 'all' ? 'All users — Tasks' : `${member?.display_name || 'User ' + userId} — Tasks`));
+    addText(card, 'h2', this._config.title || (userId === 'all' ? t('todo.title_all') : t('todo.title_user', {name: member?.display_name || t('common.user', {id: userId})})));
     if (this._error && !this._panel) addText(card, 'p', this._error, 'error');
-    if (!state || ['unavailable', 'unknown'].includes(state.state)) { addText(card, 'p', 'Hopla list unavailable', 'empty'); return; }
+    if (!state || ['unavailable', 'unknown'].includes(state.state)) { addText(card, 'p', t('todo.unavailable'), 'empty'); return; }
     const tasks = this._config.task_view === 'completed' ? [] : this.filteredTasks(state);
     for (const task of this._completed.values()) if (this._config.task_view !== 'completed' && !tasks.some(item => item.task_id === task.task_id) && this.filteredTasks({attributes:{tasks:[task]}}).length) tasks.push(task);
     tasks.sort((a,b) => compareTasks(a,b,this._config.sort_by,this._hass.locale?.language));
-    if (!tasks.length && this._config.task_view !== 'completed') addText(card, 'p', emptyMessage({...this._config,user_id:userId}, member?.display_name || member?.username || `User ${userId}`), 'empty');
+    if (!tasks.length && this._config.task_view !== 'completed') addText(card, 'p', emptyMessage({...this._config,user_id:userId}, member?.display_name || member?.username || t('common.user', {id: userId}), t), 'empty');
     for (const task of tasks) {
       const row = document.createElement('div'); row.className = 'row'; card.append(row);
       const completed = this._completed.has(task.task_id);
@@ -364,8 +378,8 @@ class HoplaUserTodoCard extends HTMLElement {
         const target = document.createElement('label'); target.className = 'complete-checkbox'; row.append(target);
         const checkbox = document.createElement('input'); checkbox.type = 'checkbox';
         checkbox.disabled = this._pending.has(task.task_id) || completed; checkbox.checked = this._pending.get(task.task_id) === true || completed;
-        checkbox.setAttribute('aria-label', `Complete: ${task.name}`);
-        checkbox.title = `Complete: ${task.name}`;
+        checkbox.setAttribute('aria-label', onTask(t('todo.complete'), task));
+        checkbox.title = onTask(t('todo.complete'), task);
         checkbox.addEventListener('change', () => this.act(task, true)); target.append(checkbox);
       }
       const hasDescription = !!descriptionText(task.description);
@@ -373,7 +387,7 @@ class HoplaUserTodoCard extends HTMLElement {
       if (hasDescription) {
       text.type = 'button';
       text.dataset.action = 'details'; text.dataset.taskId = task.task_id;
-      text.title = `Show description: ${task.name}`;
+      text.title = onTask(t('todo.show_description'), task);
       text.setAttribute('aria-label', text.title);
       text.setAttribute('aria-expanded', String(this._panel?.taskId === task.task_id && this._panel.kind === 'details'));
       text.setAttribute('aria-controls', `description-${task.task_id}`);
@@ -382,9 +396,9 @@ class HoplaUserTodoCard extends HTMLElement {
       }
       const name = addText(text, 'span', task.name, 'name');
       if (this._config.show_points && Number.isFinite(task.points)) {
-        const label = `${task.points} ${task.points === 1 ? 'point' : 'points'}`;
+        const label = t('common.points', {count: task.points});
         const badge = addText(name, 'span', String(task.points), 'task-points');
-        badge.title = `Task value: ${label}`; badge.setAttribute('aria-label', label);
+        badge.title = t('todo.task_value', {label}); badge.setAttribute('aria-label', label);
         const star = document.createElement('ha-icon'); star.setAttribute('icon', 'mdi:star-outline');
         star.setAttribute('aria-hidden', 'true'); badge.prepend(star);
       }
@@ -395,24 +409,24 @@ class HoplaUserTodoCard extends HTMLElement {
       }
       const dateOnly = typeof task.next_due_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(task.next_due_date);
       const due = task.next_due_date ? new Date(dateOnly ? `${task.next_due_date}T12:00:00` : task.next_due_date) : null;
-      const dueLabel = addText(text, 'span', dueText(task.next_due_date, this._hass.locale?.language, new Date(), this._hass.locale?.time_format, this._config.due_display), 'due');
+      const dueLabel = addText(text, 'span', dueText(task.next_due_date, this._hass.locale?.language, new Date(), this._hass.locale?.time_format, this._config.due_display, t), 'due');
       if (!completed && isOverdue(task.next_due_date)) dueLabel.classList.add('overdue');
       if (due && !isNaN(due)) {
         const clock = document.createElement('ha-icon'); clock.className = 'due-clock';
         clock.setAttribute('icon', 'mdi:clock'); clock.setAttribute('aria-hidden', 'true'); dueLabel.prepend(clock);
       }
       if (due && !isNaN(due)) dueLabel.title = due.toLocaleString(this._hass.locale?.language, {dateStyle:'full',timeStyle:hasDueTime(task.next_due_date) ? 'short' : undefined});
-      const recurrence = this._config.show_recurrence ? recurrenceText(task) : '';
+      const recurrence = this._config.show_recurrence ? recurrenceText(task, t) : '';
       if (!recurrence && (task.is_recurring ?? task.can_postpone)) {
         const recurring = document.createElement('ha-icon'); recurring.className = 'recurring';
-        recurring.setAttribute('icon', 'mdi:autorenew'); recurring.title = 'Recurring task';
-        recurring.setAttribute('role', 'img'); recurring.setAttribute('aria-label', 'Recurring task');
+        recurring.setAttribute('icon', 'mdi:autorenew'); recurring.title = t('todo.recurring');
+        recurring.setAttribute('role', 'img'); recurring.setAttribute('aria-label', t('todo.recurring'));
         dueLabel.prepend(recurring);
       }
       if (this._config.show_assignee && (userId !== 'all' && this._config.include_anyone || userId === 'all' && state.attributes.circle_members?.length > 1)) {
         const assignee = state.attributes.circle_members.find(member => member.user_id === task.assigned_to);
-        const name = assignee?.display_name || assignee?.username || (task.assigned_to ? `User ${task.assigned_to}` : 'Anyone');
-        const label = addText(dueLabel, 'span', `· ${name}`, 'assignee'); label.title = `Assigned to: ${name}`;
+        const name = assignee?.display_name || assignee?.username || (task.assigned_to ? t('common.user', {id: task.assigned_to}) : t('common.anyone'));
+        const label = addText(dueLabel, 'span', `· ${name}`, 'assignee'); label.title = t('todo.assigned_to', {name});
       }
       if (recurrence) {
         const label = addText(text, 'span', recurrence, 'task-recurrence'); label.title = recurrence;
@@ -432,7 +446,7 @@ class HoplaUserTodoCard extends HTMLElement {
         }
       }
       const actions = document.createElement('div'); actions.className = 'actions'; row.append(actions);
-      for (const [label, complete] of [[this._config.complete_label || 'Complete', true], [this._config.postpone_label || 'Skip occurrence', false]]) {
+      for (const [label, complete] of [[this._config.complete_label || t('todo.complete'), true], [this._config.postpone_label || t('todo.skip'), false]]) {
         if (complete && (!this._config.show_complete || this._config.complete_control === 'checkbox')) continue;
         if (!complete && (!this._config.show_postpone || !task.can_postpone)) continue;
         const button = document.createElement('button'); actions.append(button); button.type = 'button';
@@ -444,7 +458,7 @@ class HoplaUserTodoCard extends HTMLElement {
         if (this._config.button_content !== 'icon') button.append(document.createTextNode(label));
         const color = actionColor(this._config[complete ? 'complete_color' : 'postpone_color']);
         if (color) button.style.setProperty(this._config.button_style === 'filled' ? 'background-color' : 'color', color);
-        button.title = `${label}: ${task.name}`;
+        button.title = onTask(label, task);
         button.setAttribute('aria-label', button.title);
         if (!complete) { button.dataset.action = 'skip'; button.dataset.taskId = task.task_id; button.setAttribute('aria-expanded', String(this._panel?.taskId === task.task_id && this._panel.kind === 'skip')); }
         button.addEventListener('click', () => complete ? this.act(task, true) : this.togglePanel(task, 'skip'));
@@ -452,7 +466,7 @@ class HoplaUserTodoCard extends HTMLElement {
       if (this._config.show_due_date) {
       const changeDate = document.createElement('button'); changeDate.type = 'button';
       changeDate.className = 'date-action';
-      const dateLabel = this._config.due_date_label || 'Change due date';
+      const dateLabel = this._config.due_date_label || t('todo.change_due');
       if (this._config.button_content !== 'label') {
         const icon = document.createElement('ha-icon'); icon.setAttribute('icon', this._config.due_date_icon || 'mdi:calendar-edit'); changeDate.append(icon);
       }
@@ -460,14 +474,14 @@ class HoplaUserTodoCard extends HTMLElement {
       const dueColor = actionColor(this._config.due_date_color);
       if (dueColor) changeDate.style.setProperty(this._config.button_style === 'filled' ? 'background-color' : 'color', dueColor);
       changeDate.disabled = this._pending.has(task.task_id) || completed;
-      changeDate.title = `${dateLabel}: ${task.name}`; changeDate.setAttribute('aria-label', changeDate.title);
+      changeDate.title = onTask(dateLabel, task); changeDate.setAttribute('aria-label', changeDate.title);
       changeDate.dataset.action = 'date'; changeDate.dataset.taskId = task.task_id;
       changeDate.setAttribute('aria-expanded', String(this._panel?.taskId === task.task_id && this._panel.kind === 'date'));
       changeDate.addEventListener('click', () => this.togglePanel(task, 'date')); actions.append(changeDate);
       }
       if (this._config.show_reassign) {
         const reassign = document.createElement('button'); reassign.type = 'button';
-        const label = this._config.reassign_label || 'Reassign';
+        const label = this._config.reassign_label || t('todo.reassign');
         if (this._config.button_content !== 'label') {
           const icon = document.createElement('ha-icon'); icon.setAttribute('icon', this._config.reassign_icon || 'mdi:account-switch-outline'); reassign.append(icon);
         }
@@ -475,7 +489,7 @@ class HoplaUserTodoCard extends HTMLElement {
         const color = actionColor(this._config.reassign_color);
         if (color) reassign.style.setProperty(this._config.button_style === 'filled' ? 'background-color' : 'color', color);
         reassign.disabled = this._pending.has(task.task_id) || completed;
-        reassign.title = `${label}: ${task.name}`; reassign.setAttribute('aria-label', reassign.title);
+        reassign.title = onTask(label, task); reassign.setAttribute('aria-label', reassign.title);
         reassign.dataset.action = 'assign'; reassign.dataset.taskId = task.task_id;
         reassign.setAttribute('aria-expanded', String(this._panel?.taskId === task.task_id && this._panel.kind === 'assign'));
         reassign.addEventListener('click', () => this.togglePanel(task, 'assign')); actions.append(reassign);
@@ -485,16 +499,17 @@ class HoplaUserTodoCard extends HTMLElement {
     }
     if (this._config.task_view !== 'pending') {
       const history = completedTasks(state, this._config.user_id, new Date(), this._config);
-      const period = Number(this._config.completed_days) === 1 ? 'today' : `in the last ${this._config.completed_days} days`;
-      addText(card, 'h3', `Completed ${period} · ${history.length}`, 'history-heading');
-      if (!history.length) addText(card, 'p', this._config.completed_filter === 'matching' ? `No completed tasks ${period} match the task date filter` : `No tasks completed ${period}`, 'empty');
+      const days = Number(this._config.completed_days);
+      const suffix = days === 1 ? 'today' : 'days';
+      addText(card, 'h3', t('todo.history_heading', {period: t(`todo.completed_${suffix}`, {days}), count: history.length}), 'history-heading');
+      if (!history.length) addText(card, 'p', t(`todo.none_${this._config.completed_filter === 'matching' ? 'matching_' : ''}${suffix}`, {days}), 'empty');
       for (const task of history) {
         const row = document.createElement('div'); row.className = 'row completed history-row'; row.dataset.uid = task.uid; card.append(row);
-        const check = document.createElement('ha-icon'); check.className = 'history-check'; check.setAttribute('icon','mdi:check-circle-outline'); check.setAttribute('aria-label','Completed'); row.append(check);
+        const check = document.createElement('ha-icon'); check.className = 'history-check'; check.setAttribute('icon','mdi:check-circle-outline'); check.setAttribute('aria-label',t('todo.completed')); row.append(check);
         const text = document.createElement('div'); text.className = 'task'; row.append(text);
         addText(text, 'span', task.name, 'name');
         const performer = state.attributes.circle_members?.find(member => member.user_id === task.completed_by);
-        const name = performer?.display_name || performer?.username || (task.completed_by ? `User ${task.completed_by}` : 'Unknown user');
+        const name = performer?.display_name || performer?.username || (task.completed_by ? t('common.user', {id: task.completed_by}) : t('common.unknown_user'));
         const time = Number(this._config.completed_days) > 1
           ? new Date(task.completed_at).toLocaleString(this._hass.locale?.language, {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:this._hass.locale?.time_format === '12' ? true : this._hass.locale?.time_format === '24' ? false : undefined})
           : new Date(task.completed_at).toLocaleTimeString(this._hass.locale?.language, {hour:'2-digit', minute:'2-digit', hour12:this._hass.locale?.time_format === '12' ? true : this._hass.locale?.time_format === '24' ? false : undefined});
@@ -513,6 +528,7 @@ class HoplaUserTodoCard extends HTMLElement {
       description.textContent = content;
       row.after(description); return;
     }
+    const t = (key, values) => this.t(key, values);
     const busy = this._pending.has(task.task_id);
     const form = document.createElement('form'); form.className = 'action-panel'; row.after(form);
     const controls = document.createElement('div'); controls.className = 'panel-actions';
@@ -529,7 +545,7 @@ class HoplaUserTodoCard extends HTMLElement {
       if (!save) return;
       save.disabled = busy || !changed() || (panel.kind === 'assign' && panel.assignedTo !== null && !assignableMembers(this._hass.states[this._config.entity], task).some(member => member.user_id === panel.assignedTo));
     };
-    form.setAttribute('aria-label', `${panel.kind === 'date' ? 'Change due date' : panel.kind === 'assign' ? 'Reassign' : 'Skip occurrence'}: ${task.name}`);
+    form.setAttribute('aria-label', t('common.on_task', {action: t(panel.kind === 'date' ? 'todo.change_due' : panel.kind === 'assign' ? 'todo.reassign' : 'todo.skip'), task: task.name}));
     const iconButton = (label, icon, handler) => {
       const node=document.createElement('button'); node.type='button'; node.disabled=busy;
       node.title=label; node.setAttribute('aria-label',label); node.dataset.field=`control-${label}`;
@@ -548,9 +564,9 @@ class HoplaUserTodoCard extends HTMLElement {
         form.classList.add('date-panel');
         const fields = document.createElement('ha-form'); fields.dataset.field = 'date-fields';
         fields.dataset.withTime = String(panel.showTime);
-        fields.setAttribute('aria-label', 'Due date and time');
+        fields.setAttribute('aria-label', t('todo.due_date_time'));
         fields.hass = this._hass; fields.disabled = busy;
-        fields.computeLabel = schema => schema.name === 'date' ? 'Due date' : '';
+        fields.computeLabel = schema => schema.name === 'date' ? t('todo.due_date') : '';
         fields.schema = [{name:'',type:'grid',column_min_width:'150px',schema:[
           // Save validates the date below; omitting required avoids HA's empty hint row.
           {name:'date',selector:{date:{}}},
@@ -567,31 +583,31 @@ class HoplaUserTodoCard extends HTMLElement {
         });
         form.append(fields);
       } else {
-      field('date','Due date',panel.date,event => { panel.date=event.target.value; updateSave(); });
+      field('date',t('todo.due_date'),panel.date,event => { panel.date=event.target.value; updateSave(); });
       if (panel.showTime) {
-        const input=field('time',`Time (${Intl.DateTimeFormat().resolvedOptions().timeZone})`,panel.time,event => { panel.time=event.target.value; updateSave(); }); input.step='1';
+        const input=field('time',t('todo.time_zone', {zone: Intl.DateTimeFormat().resolvedOptions().timeZone}),panel.time,event => { panel.time=event.target.value; updateSave(); }); input.step='1';
       }
       }
-      const time=iconButton(panel.showTime ? 'Hide time' : 'Set time','mdi:clock-outline', () => { panel.showTime=!panel.showTime; this.render(); });
+      const time=iconButton(t(panel.showTime ? 'todo.hide_time' : 'todo.set_time'),'mdi:clock-outline', () => { panel.showTime=!panel.showTime; this.render(); });
       time.setAttribute('aria-expanded',String(panel.showTime));
     } else if (panel.kind === 'assign') {
       const state = this._hass.states[this._config.entity];
       const members = assignableMembers(state, task);
       const select = document.createElement('select'); select.required = true; select.disabled = busy;
       select.style.colorScheme = this._hass.themes?.darkMode ? 'dark' : 'light';
-      select.dataset.field = 'assignee'; select.setAttribute('aria-label', 'Assigned user');
-      const anyone = document.createElement('option'); anyone.value = 'anyone'; anyone.textContent = 'Anyone'; select.append(anyone);
+      select.dataset.field = 'assignee'; select.setAttribute('aria-label', t('todo.assigned_user'));
+      const anyone = document.createElement('option'); anyone.value = 'anyone'; anyone.textContent = t('common.anyone'); select.append(anyone);
       for (const member of members) {
-        const option = document.createElement('option'); option.value = String(member.user_id); option.textContent = member.display_name || member.username || `User ${member.user_id}`; select.append(option);
+        const option = document.createElement('option'); option.value = String(member.user_id); option.textContent = member.display_name || member.username || t('common.user', {id: member.user_id}); select.append(option);
       }
       select.value = panel.assignedTo === null ? 'anyone' : String(panel.assignedTo);
       select.addEventListener('change', event => { panel.assignedTo = event.target.value === 'anyone' ? null : Number(event.target.value); updateSave(); }); form.append(select);
-    } else addText(form,'span','Move to the next scheduled date?', 'skip-prompt');
+    } else addText(form,'span',t('todo.skip_prompt'), 'skip-prompt');
     save = document.createElement('button'); save.type = 'submit'; save.className = 'save-action';
     const saveIcon = document.createElement('ha-icon');
     saveIcon.setAttribute('icon', panel.kind === 'skip' ? 'mdi:skip-next-outline' : 'mdi:content-save-outline');
     save.append(saveIcon);
-    save.setAttribute('aria-label', panel.kind === 'date' ? 'Save due date' : panel.kind === 'assign' ? 'Save assignee' : 'Confirm skip');
+    save.setAttribute('aria-label', t(panel.kind === 'date' ? 'todo.save_due' : panel.kind === 'assign' ? 'todo.save_assignee' : 'todo.confirm_skip'));
     save.title = save.getAttribute('aria-label');
     controls.append(save); updateSave();
     form.append(controls);
@@ -601,12 +617,12 @@ class HoplaUserTodoCard extends HTMLElement {
       event.preventDefault(); if (busy || !form.reportValidity() || form.querySelector('ha-form')?.reportValidity?.() === false) return;
       if (panel.kind === 'skip') { this.act(task,false); return; }
       if (panel.kind === 'assign') {
-        if (panel.assignedTo !== null && !assignableMembers(this._hass.states[this._config.entity], task).some(member => member.user_id === panel.assignedTo)) { this._error = 'Choose an eligible assignee'; this.render(); return; }
+        if (panel.assignedTo !== null && !assignableMembers(this._hass.states[this._config.entity], task).some(member => member.user_id === panel.assignedTo)) { this._error = t('todo.choose_assignee'); this.render(); return; }
         if (!changed()) return;
         this.act(task, false, undefined, panel.assignedTo); return;
       }
       const date = draftDate();
-      if (!date) { this._error='Choose a valid date and time'; this.render(); return; }
+      if (!date) { this._error=t('todo.choose_date'); this.render(); return; }
       if (!changed()) return;
       this.act(task,false,date.toISOString());
     });
@@ -617,9 +633,8 @@ const EDITOR_DEFAULTS = {
   completed_days:1, completed_filter:'all', completed_limit:0,
   row_spacing:'auto',
   display_filters:[], label_match:'any', sort_by:'due_date', upcoming_days:7, include_anyone:false, due_display:'date', show_labels:false, show_points:false, show_recurrence:false, use_label_colors:false, show_assignee:true, show_complete:true, show_postpone:true, show_due_date:true, show_reassign:true, complete_control:'checkbox', button_style:'text', button_size:'compact',
-  button_shape:'rounded', button_content:'icon', complete_label:'Complete', postpone_label:'Skip occurrence',
-  due_date_label:'Change due date', complete_icon:'mdi:check', postpone_icon:'mdi:calendar-arrow-right',
-  due_date_icon:'mdi:calendar-edit', reassign_label:'Reassign', reassign_icon:'mdi:account-switch-outline', complete_color:'primary', postpone_color:'primary', due_date_color:'primary', reassign_color:'primary'
+  button_shape:'rounded', button_content:'icon', complete_icon:'mdi:check', postpone_icon:'mdi:calendar-arrow-right',
+  due_date_icon:'mdi:calendar-edit', reassign_icon:'mdi:account-switch-outline', complete_color:'primary', postpone_color:'primary', due_date_color:'primary', reassign_color:'primary'
 };
 const STYLE_PRESETS = {
   todo:{complete_control:'checkbox',button_style:'text',button_size:'compact',button_shape:'rounded',button_content:'icon'},
@@ -628,41 +643,8 @@ const STYLE_PRESETS = {
   filled:{complete_control:'checkbox',button_style:'filled',button_size:'normal',button_shape:'rounded',button_content:'icon'}
 };
 const ACTION_OVERRIDES = ['complete','postpone','due_date','reassign'].flatMap(action=>['label','icon','color'].map(part=>`${action}_${part}`));
-const EDITOR_LABELS = {entity:'Hopla task list',user_id:'Assigned user',include_anyone:'Include tasks assigned to Anyone',display_filters:'Pending task dates',show_points:'Show task points',show_recurrence:'Show recurrence',upcoming_days:'Days ahead',include_overdue:'Include overdue tasks',due_display:'Due date display',title:'Card title (optional)',appearance_preset:'Starting style',appearance:'Appearance',complete_control:'Complete tasks with',button_style:'Action button style',button_size:'Tap target size',button_shape:'Button corners',button_content:'Show on action buttons'};
-const EDITOR_HELP = {
-  task_view:'Show pending tasks, completed occurrences, or both. Completed entries are read-only and attributed to the person who completed them.',
-  completed_days:'Today is 1 day. Leave empty for today. Includes today and the previous days, up to 7 days of history. The most recent completions appear first.',
-  completed_filter:'All completions includes tasks finished in this period regardless of their due date. Match task date filter uses the occurrence’s original due date, so Tomorrow’s next occurrence does not hide a task completed today.',
-  completed_limit:'Maximum completed entries to show, newest first. Use 0 for all matching entries. Does not limit pending tasks.',
-  show_points:'Show a small points badge beside the task name. Tasks without points omit the badge.',
-  show_recurrence:'Show the recurrence on its own muted line, including the unit for interval schedules.',
-  row_spacing:'Auto adds space to tasks with visible labels. Compact keeps all rows tight; Comfortable adds space to every task.',
-  labels:'Filter by selected labels. Leave empty for all labels. Choices come from this list’s tasks; set the integration’s task window to 0 to include distant tasks.',
-  label_match:'Any (OR) matches at least one selected label. All (AND) requires every selected label. User and date filters still apply.',
-  show_labels:'Show small label chips below each task’s due date. Hidden by default; long names wrap within the task column.',
-  use_label_colors:'Use each label’s Hopla background color and matching readable text. Labels without a valid color keep the neutral style.',
-  entity:'Choose All Tasks to make tasks for every circle user available.',
-  user_id:'Show one user’s tasks or all users. Completion is credited to each task’s current assignee, or the API token owner for Anyone tasks.',
-  include_anyone:'Show Anyone tasks alongside the selected user’s tasks, using the same date filters and sorting.',
-  show_assignee:'Show the assigned name beside the due date. Available when the list can contain multiple users.',
-  show_reassign:'Show a user-switch action on each row. Changes are saved only after confirmation.',
-  show_complete:'Show the completion checkbox or button. Turn off for a display-only task list.',
-  show_postpone:'Show Skip occurrence for tasks with a recurring schedule.',
-  show_due_date:'Show the action to choose a due date manually, including for one-off tasks.',
-  display_filters:'Show tasks in any selected group. Leave empty for all tasks. Today includes deadlines earlier today; Future starts tomorrow. Choose Overdue to include past deadlines and Without a due date for undated tasks.',
-  due_display:'Show a date, relative time such as Tomorrow or In 3 days, or both. The full due date is always available in the tooltip.',
-  sort_by:'Due date: earliest first, undated last. Priority: urgent first, then due date. Name: A–Z using your HA language.',
-  upcoming_days:'Maximum days ahead; leave empty or use 0 for no limit. The integration’s task window must also include those days.',
-  title:'Leave empty to use the selected user’s name.',
-  appearance_preset:'Choose a ready-made style. Applying a preset resets custom action icons, labels and colors.',
-  complete_control:'Checkbox stays on the left; Button places completion beside the other actions on the right.',
-  button_style:'Flat follows HA todo styling. Filled uses the action color as its background.',
-  button_size:'Compact: 44 px. Standard: 48 px. Large: 52 px. All remain easy to tap.',
-  button_content:'Icons save space. Labels explain actions, but may make narrow cards wider.',
-  button_shape:'Changes action buttons; the completion checkbox stays the same.'
-};
-EDITOR_LABELS.task_view = 'Task view';
-Object.assign(EDITOR_LABELS, {completed_days:'History period (days)',completed_filter:'Completed tasks to include',completed_limit:'Maximum completed entries'});
+// Action labels follow the editor's language, so they are not fixed defaults.
+const actionLabels = t => ({complete_label:t('todo.complete'), postpone_label:t('todo.skip'), due_date_label:t('todo.change_due'), reassign_label:t('todo.reassign')});
 export function actionColor(value) {
   if (!value || value === 'none') return null;
   if (value === 'primary' || value === 'accent') return `var(--${value}-color)`;
@@ -691,7 +673,7 @@ class HoplaUserTodoEditor extends HTMLElement {
       await card.constructor.getConfigElement();
       if (!customElements.get('ha-form')) throw new Error('HA form controls are unavailable');
       this._loadError='';
-    } catch { this._loadError='Could not load Home Assistant editor controls. Reload the dashboard and reopen this editor.'; }
+    } catch { this._loadError=this.t('editor.load_error'); }
     finally { this._loading=false; this.render(); }
   }
   setConfig(config) {
@@ -708,8 +690,10 @@ class HoplaUserTodoEditor extends HTMLElement {
     this._hass=hass; this._editorLists=lists;
     if (!unchanged) this.render();
   }
+  t(key, values) { return elementTranslator(this)(key, values); }
   preset() {
-    if (ACTION_OVERRIDES.some(key=>this._config[key] && this._config[key] !== EDITOR_DEFAULTS[key])) return 'custom';
+    const defaults={...EDITOR_DEFAULTS,...actionLabels(this.t.bind(this))};
+    if (ACTION_OVERRIDES.some(key=>this._config[key] && this._config[key] !== defaults[key])) return 'custom';
     return Object.keys(STYLE_PRESETS).find(name=>Object.entries(STYLE_PRESETS[name]).every(([key,value])=>(this._config[key] ?? EDITOR_DEFAULTS[key])===value)) || 'custom';
   }
   formChanged(event) {
@@ -750,7 +734,7 @@ class HoplaUserTodoEditor extends HTMLElement {
   render() {
     if (!this._hass || !this._config) return;
     if (!customElements.get('ha-form')) {
-      this.shadowRoot.textContent=this._loadError || 'Loading Home Assistant editor controls…';
+      this.shadowRoot.textContent=this._loadError || this.t('editor.loading');
       if (!this._loadError) this.ensureForm();
       return;
     }
@@ -758,8 +742,10 @@ class HoplaUserTodoEditor extends HTMLElement {
       this.shadowRoot.innerHTML='<style>:host{display:block}ha-form{display:block}ha-alert{display:block;margin-bottom:16px}ha-alert[hidden]{display:none}</style>';
       this._warning=document.createElement('ha-alert');this._warning.setAttribute('alert-type','info');this.shadowRoot.append(this._warning);
       this._form=document.createElement('ha-form');this.shadowRoot.append(this._form);
-      this._form.computeLabel=schema=>schema.title || {row_spacing:'Task spacing',show_labels:'Show labels',use_label_colors:'Use Hopla label colors',label_match:'Match labels',labels:'Labels',sort_by:'Sort tasks by',show_assignee:'Show assigned user',show_complete:'Complete task',show_postpone:'Skip occurrence',show_due_date:'Change due date',show_reassign:'Reassign task'}[schema.name] || EDITOR_LABELS[schema.name] || schema.name;
-      this._form.computeHelper=schema=>EDITOR_HELP[schema.name] || (schema.name.endsWith('_color') ? 'Theme color. Used for the icon/text, or the background of filled buttons.' : schema.name.endsWith('_icon') ? 'Choose an icon using HA’s searchable icon picker.' : schema.name.endsWith('_label') ? 'Also used in tooltips and accessibility labels, even with icons only.' : undefined);
+      // A missing text comes back as its key, which means there is no label or help.
+      const text=(key,fallback)=>{ const value=this.t(key); return value===key ? fallback : value; };
+      this._form.computeLabel=schema=>schema.title || this._actionLabels?.[schema.name] || text(`editor.labels.${schema.name}`,schema.name);
+      this._form.computeHelper=schema=>text(`editor.help.${schema.name}`) || (schema.name.endsWith('_color') ? this.t('editor.help.color') : schema.name.endsWith('_icon') ? this.t('editor.help.icon') : schema.name.endsWith('_label') ? this.t('editor.help.label') : undefined);
       this._form.addEventListener('value-changed',event=>this.formChanged(event));
     }
     const entities=Object.keys(this._hass.states).filter(id=>id.startsWith('todo.') && this._hass.states[id].attributes.circle_members);
@@ -771,10 +757,14 @@ class HoplaUserTodoEditor extends HTMLElement {
     const labels=[...new Set([...[...(attributes.tasks || []),...(attributes.anyone_tasks || []),...(attributes.completed_tasks || [])].flatMap(task=>taskLabels(task.labels)), ...taskLabels(this._config.labels)])]
       .sort((a,b)=>a.localeCompare(b,this._hass.locale?.language));
     this._warning.hidden=owner !== undefined || !!members.length;
-    this._warning.textContent='Select a Hopla list with circle members to choose its users. The integration must be loaded.';
+    this._warning.textContent=this.t('editor.no_members');
+    const t=(key,values)=>this.t(key,values);
+    const option=key=>t(`editor.options.${key}`);
     const select=(name,options)=>({name,selector:{select:{mode:'dropdown',options:options.map(([value,label])=>({value,label}))}}});
+    const choices=(name,prefix,values)=>select(name,values.map(value=>[value,option(`${prefix}_${value}`)]));
     this._groupSchemas.clear();
-    const group=(name,title,schema)=>{
+    const group=(name,schema)=>{
+      const title=t(`editor.groups.${name}`);
       const expanded=this._expandedGroups.get(name) ?? ['basics','filters'].includes(name);
       this._groupSchemas.set(name,schema);
       // HA creates nested forms even in collapsed panels. Keep expensive
@@ -786,62 +776,63 @@ class HoplaUserTodoEditor extends HTMLElement {
     const matchesCompleted = hasCompleted && this._config.completed_filter === 'matching';
     const labelFields = [
       {name:'labels',selector:{select:{mode:'dropdown',multiple:true,options:labels.map(label=>({value:label,label}))}}},
-      ...(taskLabels(this._config.labels).length > 1 ? [select('label_match',[['any','Any selected label (OR)'],['all','All selected labels (AND)']])] : [])
+      ...(taskLabels(this._config.labels).length > 1 ? [choices('label_match','match',['any','all'])] : [])
     ];
+    this._actionLabels={};
     const actionGroup=(action,title)=>{
       const fields=[{name:`${action}_icon`,selector:{icon:{}}},{name:`${action}_label`,selector:{text:{}}},{name:`${action}_color`,selector:{ui_color:{default_color:'primary'}}}];
-      fields.forEach((field,index)=>{EDITOR_LABELS[field.name]=`${title} · ${['Icon','Label','Color'][index]}`;});
+      fields.forEach((field,index)=>{this._actionLabels[field.name]=t('editor.labels.action_part',{action:title,part:t(`editor.labels.${['icon','label','color'][index]}`)});});
       return {name:action,type:'grid',flatten:true,column_min_width:'150px',schema:fields};
     };
     const actionFields=[
-      ...(this._config.show_complete !== false && this._config.complete_control==='button' ? [actionGroup('complete','Complete task')] : []),
-      ...(this._config.show_postpone !== false ? [actionGroup('postpone','Skip occurrence')] : []),
-      ...(this._config.show_due_date !== false ? [actionGroup('due_date','Change due date')] : []),
-      ...(this._config.show_reassign !== false ? [actionGroup('reassign','Reassign task')] : [])
+      ...(this._config.show_complete !== false && this._config.complete_control==='button' ? [actionGroup('complete',t('editor.labels.show_complete'))] : []),
+      ...(this._config.show_postpone !== false ? [actionGroup('postpone',t('editor.labels.show_postpone'))] : []),
+      ...(this._config.show_due_date !== false ? [actionGroup('due_date',t('editor.labels.show_due_date'))] : []),
+      ...(this._config.show_reassign !== false ? [actionGroup('reassign',t('editor.labels.show_reassign'))] : [])
     ];
     const schema=[
-      {...group('basics','Basics',[
+      {...group('basics',[
       {name:'entity',required:true,selector:{entity:{include_entities:entities,filter:{domain:'todo'}}}},
-      ...(owner === undefined ? [{...select('user_id',[...(members.length > 1 ? [['all','All users']] : []), ...members.map(member=>[String(member.user_id),member.display_name || member.username || `User ${member.user_id}`])]),required:true,disabled:!members.length}] : []),
+      ...(owner === undefined ? [{...select('user_id',[...(members.length > 1 ? [['all',option('all_users')]] : []), ...members.map(member=>[String(member.user_id),member.display_name || member.username || t('common.user',{id:member.user_id})])]),required:true,disabled:!members.length}] : []),
       ...(hasPending && selectedUser(this._hass.states[this._config.entity], this._config.user_id) !== 'all' ? [{name:'include_anyone',selector:{boolean:{}}}] : []),
       {name:'title',selector:{text:{}}},
-      select('task_view',[['both','Pending and completed'],['pending','Pending tasks only'],['completed','Completed tasks only']])
+      choices('task_view','view',['both','pending','completed'])
       ])},
-      {...group('filters','Task filters',[
+      {...group('filters',[
       ...labelFields,
       ...(hasPending || matchesCompleted ? [
-      {name:'display_filters',title:hasPending ? 'Pending task dates' : 'Original due dates',selector:{select:{mode:'dropdown',multiple:true,options:[{value:'overdue',label:'Overdue'},{value:'today',label:'Today'},{value:'future',label:'Future'},{value:'undated',label:'Without a due date'}]}}},
-      ...(filters.includes('future') ? [{name:'upcoming_days',selector:{number:{min:0,max:365,step:1,mode:'box',unit_of_measurement:'days'}}}] : [])
+      {name:'display_filters',title:t(hasPending ? 'editor.labels.display_filters' : 'editor.labels.original_due_dates'),selector:{select:{mode:'dropdown',multiple:true,options:['overdue','today','future','undated'].map(value=>({value,label:t(`todo.filters.${value}`)}))}}},
+      ...(filters.includes('future') ? [{name:'upcoming_days',selector:{number:{min:0,max:365,step:1,mode:'box',unit_of_measurement:t('editor.days')}}}] : [])
       ] : []),
-      ...(hasPending ? [select('sort_by',[['due_date','Due date — earliest first'],['priority','Priority — highest first'],['name','Name — A–Z']])] : [])
+      ...(hasPending ? [choices('sort_by','sort',['due_date','priority','name'])] : [])
       ])},
-      ...(hasCompleted ? [group('completed_options','Completed tasks',[
-        {name:'completed_days',selector:{number:{min:1,max:7,step:1,mode:'box',unit_of_measurement:'days'}}},
-        select('completed_filter',[['all','All completions in the period'],['matching','Match task date filter']]),
+      ...(hasCompleted ? [group('completed_options',[
+        {name:'completed_days',selector:{number:{min:1,max:7,step:1,mode:'box',unit_of_measurement:t('editor.days')}}},
+        choices('completed_filter','completed',['all','matching']),
         {name:'completed_limit',selector:{number:{min:0,max:500,step:1,mode:'box'}}}
       ])] : []),
-      ...(hasPending ? [group('display_options','Task details',[
+      ...(hasPending ? [group('display_options',[
       ...(selectedUser(this._hass.states[this._config.entity], this._config.user_id) !== 'all' && this._config.include_anyone || this._config.user_id === 'all' && !this._hass.states[this._config.entity]?.attributes.hopla_user_id && members.length > 1 ? [{name:'show_assignee',selector:{boolean:{}}}] : []),
-      select('due_display',[['date','Date and time'],['relative','Relative — Tomorrow, In 3 days, Next week'],['both','Relative and date/time']]),
+      choices('due_display','due',['date','relative','both']),
       ...['show_labels',...(this._config.show_labels ? ['use_label_colors'] : []),'show_points','show_recurrence'].map(name=>({name,selector:{boolean:{}}}))
       ])] : []),
-      ...(hasPending ? [group('actions_options','Available actions',[
+      ...(hasPending ? [group('actions_options',[
         ...['show_complete','show_postpone','show_due_date','show_reassign'].map(name=>({name,selector:{boolean:{}}}))
       ])] : []),
-      ...(hasPending ? [group('appearance','Appearance',[
-        select('appearance_preset',[['todo','HA todo — compact icons'],['labeled','Icons with labels'],['outlined','Outlined buttons'],['filled','Filled buttons'],['custom','Custom style']]),
-        select('row_spacing',[['auto','Auto — extra space for labels'],['compact','Compact'],['comfortable','Comfortable']]),
-        ...(this._config.show_complete !== false ? [select('complete_control',[['checkbox','Checkbox on the left'],['button','Button on the right']])] : []),
-        select('button_content',[['icon','Icons only'],['icon_and_label','Icons and labels'],['label','Labels only']]),
-        select('button_style',[['text','Flat — HA style'],['outlined','Outlined'],['filled','Filled']]),
-        select('button_size',[['compact','Compact — 44 px'],['normal','Standard — 48 px'],['large','Large — 52 px']]),
-        select('button_shape',[['rounded','Rounded'],['pill','Pill'],['square','Square']])
+      ...(hasPending ? [group('appearance',[
+        choices('appearance_preset','preset',['todo','labeled','outlined','filled','custom']),
+        choices('row_spacing','spacing',['auto','compact','comfortable']),
+        ...(this._config.show_complete !== false ? [choices('complete_control','control',['checkbox','button'])] : []),
+        choices('button_content','content',['icon','icon_and_label','label']),
+        choices('button_style','style',['text','outlined','filled']),
+        choices('button_size','size',['compact','normal','large']),
+        choices('button_shape','shape',['rounded','pill','square'])
       ])] : []),
-      ...(hasPending && actionFields.length ? [group('customization_options','Customize action icons, labels and colors',actionFields)] : [])
+      ...(hasPending && actionFields.length ? [group('customization_options',actionFields)] : [])
     ];
     const signature=JSON.stringify(schema);
     if (signature!==this._schemaSignature) {this._schemaSignature=signature;this._form.schema=schema;}
-    const formData={...EDITOR_DEFAULTS,...this._config,display_filters:filters,labels:taskLabels(this._config.labels),user_id:String(owner ?? this._config.user_id ?? 'all'),appearance_preset:this.preset()};
+    const formData={...EDITOR_DEFAULTS,...actionLabels(t),...this._config,display_filters:filters,labels:taskLabels(this._config.labels),user_id:String(owner ?? this._config.user_id ?? 'all'),appearance_preset:this.preset()};
     const dataSignature=JSON.stringify(formData);
     if (this._form.hass !== this._hass) this._form.hass=this._hass;
     if (dataSignature !== this._formDataSignature) {
@@ -852,4 +843,7 @@ class HoplaUserTodoEditor extends HTMLElement {
 if (!customElements.get('hopla-user-todo-card')) customElements.define('hopla-user-todo-card', HoplaUserTodoCard);
 if (!customElements.get('hopla-user-todo-editor')) customElements.define('hopla-user-todo-editor', HoplaUserTodoEditor);
 window.customCards = window.customCards || [];
-if (!window.customCards.some(card => card.type === 'hopla-user-todo-card')) window.customCards.push({type: 'hopla-user-todo-card', name: 'Hopla User Tasks', description: 'Tasks for one user with Complete and Postpone controls'});
+if (!window.customCards.some(card => card.type === 'hopla-user-todo-card')) {
+  const t = translator(browserLanguage());
+  window.customCards.push({type: 'hopla-user-todo-card', name: t('todo.card_name'), description: t('todo.card_description')});
+}
