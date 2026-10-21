@@ -64,7 +64,8 @@ TODAY = {
 class GamesTodayTests(unittest.TestCase):
     def test_shape(self):
         today = games.games_today(TODAY)
-        self.assertEqual(today["surprise"], {"task_id": 12, "task_name": "Dents", "points": 5, "day": "2026-10-21"})
+        self.assertEqual(today["surprise"], {"task_id": 12, "task_ids": [12], "task_name": "Dents", "points": 5,
+                                             "day": "2026-10-21"})
         self.assertEqual(today["bonus_period"]["multiplier"], 2)
         self.assertEqual(today["streaks"][2], {"current": 4, "best": 9, "done_today": True})
         self.assertEqual(today["streak_every"], 7)

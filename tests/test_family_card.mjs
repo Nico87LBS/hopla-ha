@@ -58,6 +58,13 @@ const withDone = {states: {...hass.states,
 data = boardData(withDone, {due: 'today', members: [2, 3]}, now);
 assert.deepEqual(data.done.map(d => `${d.name}:${d.member.name}`), ['Chat:Anna', 'Lit:Elena']);
 assert.deepEqual(boardData(withDone, {due: 'today', members: [2, 3], labels: ['enfants']}, now).done, [], 'label filter applies to done tasks');
+// A task done by each child shows once, with both faces.
+const twice = {states: {...hass.states,
+  'sensor.hopla_points_elena': recent(2, 'Elena', 5, [{task_id: 30, name: 'Lit', points: 8, completed_at: '2026-10-20T07:00:00Z', labels: []}]),
+  'sensor.hopla_points_anna': recent(3, 'Anna', 2, [{task_id: 31, name: 'lit ', points: 3, completed_at: '2026-10-20T09:00:00Z', labels: []},
+    {task_id: 22, name: 'Chat', points: 2, completed_at: '2026-10-20T08:00:00Z', labels: []}])}};
+data = boardData(twice, {due: 'today', members: [2, 3]}, now);
+assert.deepEqual(data.doneRows.map(r => `${r.name}:${r.items.map(i => i.member.name).join('+')}:${r.points}`), ['lit:Anna+Elena:8', 'Chat:Anna:2']);
 
 // Podium: one step per member up to three, ties share a step.
 const m = (id, points) => ({id, points});
@@ -128,6 +135,10 @@ const games = boardData(withGames, {}, now);
 assert.equal(games.period.multiplier, 2);
 assert.equal(games.tasks.find(t => t.id === 12).surprise, 5);
 assert.equal(games.tasks.find(t => t.id === 11).surprise, 0);
+// Each child's copy of the surprise task, with the same name, keeps the bonus.
+const dents = Object.values(withGames.states).find(s => s.attributes.task_id === 12);
+const withCopy = {...withGames, states: {...withGames.states, 'sensor.dents_anna': {...dents, attributes: {...dents.attributes, task_id: 99}}}};
+assert.equal(boardData(withCopy, {}, now).tasks.find(t => t.id === 99).surprise, 5);
 assert.equal(games.members.find(m => m.id === 2).streak, 4);
 assert.equal(games.rewards.length, 1, 'the games sensor is not taken for another one');
 assert.equal(boardData(hass, {}, now).period, null);
