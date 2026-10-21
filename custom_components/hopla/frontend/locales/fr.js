@@ -59,6 +59,8 @@ export default {
     rank_next_one: 'Encore {count} point pour {name}',
     rank_next_other: 'Encore {count} points pour {name}',
     rank_top: 'Rang le plus haut atteint',
+    to_spend_one: '{count} pt à dépenser',
+    to_spend_other: '{count} pts à dépenser',
     rank_star_one: 'Encore {count} point pour une étoile ⭐',
     rank_star_other: 'Encore {count} points pour une étoile ⭐',
     quests: 'Quêtes',

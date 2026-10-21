@@ -73,6 +73,8 @@ assert.deepEqual(podium([m(1, 5), m(2, 3)]).map(step => step.map(x => x.id)), [[
 assert.deepEqual(podium([m(1, 4), m(2, 4)]).map(step => step.map(x => x.id)), [[1, 2], []]);
 assert.deepEqual(podium([m(1, 4), m(2, 4), m(3, 1)]).map(step => step.map(x => x.id)), [[1, 2], [3], []]);
 assert.deepEqual(podium([m(1, 9), m(2, 7), m(3, 5), m(4, 1)]).map(step => step.map(x => x.id)), [[1], [2], [3]]);
+// Points earned since the start rank the podium, not the balance left after rewards.
+assert.deepEqual(podium([{id: 1, points: 2, earned: 90}, {id: 2, points: 30, earned: 40}]).map(step => step.map(x => x.id)), [[1], [2]]);
 
 // Rewards: available, missing points, or out of quota until the reset.
 const elena = {id: 2, points: 5};

@@ -24,12 +24,16 @@ function isHopla(hass, id) {
 
 const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
+// The podium ranks the points earned since the start: spending on a reward
+// does not make a child drop. The balance left to spend is the fallback.
+const podiumScore = member => member.earned ?? member.points;
+
 // Members on the podium: one step per member up to three, ties share a step
 // and leave the lower steps empty.
 export function podium(members) {
-  const scores = [...new Set(members.map(m => m.points))].sort((a, b) => b - a);
+  const scores = [...new Set(members.map(podiumScore))].sort((a, b) => b - a);
   return [0, 1, 2].slice(0, Math.min(3, members.length))
-    .map(rank => scores[rank] === undefined ? [] : members.filter(m => m.points === scores[rank]));
+    .map(rank => scores[rank] === undefined ? [] : members.filter(m => podiumScore(m) === scores[rank]));
 }
 
 const sameName = name => String(name ?? '').trim().toLowerCase();
@@ -337,9 +341,9 @@ class HoplaFamilyCard extends HTMLElement {
     const step = (group, rank) => {
       const size = rank === 0 ? 76 : 60;
       const faces = group.length
-        ? group.map(m => `<div class="podium-member">${rank === 0 && m.points > 0 ? `<span class="crown">${svg('crown', 30)}</span>` : ''}${this.face(m, size, rank === 0 && m.points > 0 ? ' leader' : '')}<div class="podium-name">${escape(m.name)}</div>${this.rank(m)}${this.streak(m)}</div>`).join('')
+        ? group.map(m => `<div class="podium-member">${rank === 0 && podiumScore(m) > 0 ? `<span class="crown">${svg('crown', 30)}</span>` : ''}${this.face(m, size, rank === 0 && podiumScore(m) > 0 ? ' leader' : '')}<div class="podium-name">${escape(m.name)}</div>${podiumScore(m) !== m.points ? `<div class="podium-spend">${escape(this.t('to_spend', {count: m.points}))}</div>` : ''}${this.rank(m)}${this.streak(m)}</div>`).join('')
         : `<div class="podium-member"><span class="face empty" style="width:${size}px;height:${size}px"></span><div class="podium-name">&nbsp;</div></div>`;
-      const score = group.length ? escape(this.t('common.pts', {count: group[0].points})) : '&nbsp;';
+      const score = group.length ? escape(this.t('common.pts', {count: podiumScore(group[0])})) : '&nbsp;';
       return `<div class="podium-col rank${rank + 1}"><div class="podium-faces">${faces}</div><div class="podium-score">${score}</div><div class="step">${rank + 1}</div></div>`;
     };
     const order = [[0], [1, 0], [1, 0, 2]][steps.length - 1];
@@ -511,6 +515,7 @@ class HoplaFamilyCard extends HTMLElement {
       .podium-member { display: flex; flex-direction: column; align-items: center; }
       .crown { line-height: 0; margin-bottom: 2px; }
       .podium-name { margin-top: 6px; font-weight: 600; font-size: 15px; }
+      .podium-spend { font-size: 12px; color: var(--secondary-text-color); }
       .podium-score { font-size: 13px; color: var(--secondary-text-color); margin: 2px 0 8px; }
       .step { width: 100%; border-radius: 14px 14px 0 0; display: grid; place-items: center; font-weight: 800; }
       .rank1 .step { height: 96px; font-size: 26px; background: rgba(245,180,0,.16); color: #a87300; }

@@ -204,8 +204,9 @@ fichier par langue.
 ### Carte famille
 
 `custom:hopla-family-card` est faite pour une tablette murale. Un podium classe
-les membres par points, avec une couronne pour le premier (les ex æquo partagent
-la marche). Chaque tâche du jour tient sur une ligne : son nom, ses points et une
+les membres par points gagnés depuis le début, pour qu'une récompense échangée ne
+fasse pas reculer, avec une couronne pour le premier (les ex æquo partagent la
+marche). Sous chaque prénom, les points qui restent à dépenser. Chaque tâche du jour tient sur une ligne : son nom, ses points et une
 photo par membre assigné ; toucher une photo termine la tâche pour ce membre. Une
 tâche à valider reste affichée avec un sablier et la photo de qui l'a faite,
 jusqu'à la réponse d'un parent. Les tâches déjà faites aujourd'hui suivent, avec
