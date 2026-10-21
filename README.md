@@ -1,355 +1,236 @@
-
 # Hopla pour Home Assistant
 
 Intégration Home Assistant (HACS) pour [Hopla](https://github.com/Nico87LBS/hopla) :
-listes de tâches, capteurs de points et de récompenses, approbations,
-« objets » Hopla et cartes de tableau de bord. C'est elle qui envoie les
-notifications, le serveur Hopla n'en envoie aucune.
-
-## Features
-
-### 📋 Todo Lists
-- **Multiple Todo Lists**: "All Tasks" view, individual assignee lists, and optional project lists
-- **Task Management**: Create, update, delete, and complete tasks
-- **Task attributes**: Task descriptions, due dates can be managed in Home Assistant
-
-
-### Task sensors
-
-Each task sensor exposes `points` and `interval_type` alongside its existing attributes.
-For interval tasks, `interval_type` is `hours`, `days`, `weeks`, `months`, or `years`:
-`frequency: 6` and `interval_type: weeks` means every six weeks.
-The interval type is `null` for other schedules or missing interval metadata.
-Points preserve an explicit zero; tasks without a point value expose `null`.
-
-### 🔧 Things Integration  
-- **Sync things**: Control Hopla "things" as Home Assistant entities
-- **Multiple Entity Types**: 
-  - **Switch**: Boolean things (true/false)
-  - **Number**: Numeric things with increment/decrement
-  - **Text**: Text input things
-
-### 🔧 Services
-- `hopla.create_task` - Create new tasks
-- `hopla.update_task` - Update existing tasks
-- `hopla.delete_task` - Delete tasks
-- `hopla.complete_task` - Mark tasks complete with user attribution. A task with "Require approval" waits for an admin instead; the response returns `pending_approval: true`
-- `hopla.approve_task` / `hopla.reject_task` - Resolve a completion waiting for approval
-- `hopla.redeem_reward` - Spend points on a reward, optionally for another member (`user_id`); that redemption is approved at once
-
-To reactivate an archived task with `hopla.update_task`, set `force_unarchive: true`. This requires a Hopla server that supports `forceUnarchive`.
-
-To assign a task, call `hopla.update_task` with `task_id` and `assigned_to` set to a Hopla user ID, or `null` for Anyone. The user must already be in that task's assignee list, unless the task is currently assigned to Anyone. Switching to or from Anyone uses Hopla's task editor and requires permission to edit the task.
-
-### ⭐ Points, approvals and rewards
-
-- **Points sensors**: one per circle member, such as `sensor.hopla_points_elena`. The state is the points the member can still spend; `total_points` and `points_redeemed` are attributes, and the entity picture is the member's Hopla profile photo.
-- **`sensor.hopla_pending_approvals`**: how many completions wait for approval, with the task, who did it and the points in the `tasks` attribute.
-- **`sensor.hopla_rewards`**: the active rewards and their cost.
-- Task sensors also expose `status`, `pending_approval` and `assignee_ids`.
-- **Events**: `hopla_task_pending_approval` fires when a task starts waiting for approval (`task_id`, `task_name`, `points`, `completed_by`, `completed_by_name`), and `hopla_task_approval_resolved` when it stops waiting, whether it was approved or rejected here or in Hopla.
-
-### ⚡ Live updates
-
-The integration keeps one connection open to Hopla's live event stream with the
-same API token. Every change made in Hopla (a task created, completed, approved
-or edited, a reward, a thing, a family member) refreshes Home Assistant within a
-few seconds. There is no refresh interval to set: while the stream is connected,
-a full refresh still runs every 30 minutes as a safety net, and every 5 minutes
-while it is down. The connection comes back on its own, waiting a little longer
-after each failed attempt (up to 5 minutes).
-
-- **`hopla_task_completed`** fires when a task is completed, in Hopla or here
-  (`task_id`, `task_name`, `points`, `completed_by`, `completed_by_name`). A
-  completion waiting for approval fires `hopla_task_pending_approval` instead.
-
-### ⏰ Task reminders
-
-Hopla sends no notifications itself. The reminders set on a task in Hopla
-(before the due date, at the due date or after it) become a
-**`hopla_task_reminder`** event at each of those moments, with `task_id`,
-`task_name`, `due_date`, `reminder_at`, `offset_minutes` (negative before the due
-date), `kind` (`before`, `due` or `after`), `assigned_to`, `assigned_to_name`,
-`assignee_ids` and `points`. Completing or rescheduling the task cancels its
-pending reminders. Reminders whose time passed while Home Assistant was stopped
-are not sent afterwards.
-
-Import [`blueprints/automation/hopla/task_reminder.yaml`](blueprints/automation/hopla/task_reminder.yaml)
-once per person: pick their Hopla points sensor, then a notify service (such as
-their phone) and/or any other actions, such as an announcement on a speaker.
-
-### 📱 Approval notification blueprint
-
-Import [`blueprints/automation/hopla/approval_notification.yaml`](blueprints/automation/hopla/approval_notification.yaml) (Settings → Automations & scenes → Blueprints → Import blueprint, paste the file's GitHub URL) and pick your phone. Each completion waiting for approval sends a notification with Approve and Reject buttons, and the notification disappears once the task is resolved anywhere.
+listes de tâches, capteurs de points et de récompenses, validations, « objets »
+Hopla et cartes de tableau de bord. C'est elle qui envoie les notifications, le
+serveur Hopla n'en envoie aucune.
 
 ## Installation
 
-### Via HACS
-1. Open HACS in Home Assistant
-2. Navigate to Integrations  
-3. Click "⋮" → "Custom repositories"
-4. Add repository: `https://github.com/Nico87LBS/hopla-ha`
-5. Category: Integration
-6. Search for "Hopla" and install
-7. Restart Home Assistant
+### Avec HACS
 
-## Configuration
+1. Ouvre HACS dans Home Assistant.
+2. Menu « ⋮ » → **Dépôts personnalisés**.
+3. Ajoute `https://github.com/Nico87LBS/hopla-ha`, catégorie **Intégration**.
+4. Cherche « Hopla », installe-la, puis redémarre Home Assistant.
 
-Configure via **Settings** → **Devices & Services** → **Add Integration** → **Hopla**
+### Configuration
 
-**Required:**
-- **Server URL**: `http://your-host:2021` (or your port)
-- **API Token**: Generate from Hopla user settings
+**Paramètres** → **Appareils et services** → **Ajouter une intégration** → **Hopla**.
 
-**Optional:**
-- **Show Due In**: Days ahead to display upcoming tasks (default: 7)
-- **Create Unified List**: Enable "All Tasks" todo list (default: true)  
-- **Create Assignee Lists**: Individual todo lists per user (default: false) 
+- **Adresse du serveur Hopla** : par exemple `http://ton-serveur:2021`.
+- **Jeton d'API** : à créer dans les réglages de ton compte Hopla.
+- **Nombre de jours de tâches à venir** (7 par défaut, 0 pour toutes).
+- **Liste « Toutes les tâches »**, **une liste par personne**, **une liste par projet**.
 
-## Per-user task card
+Les options de l'intégration ajoutent la sécurité de la tablette (voir plus bas).
 
-The existing card includes a **Completed today** section by default, showing the
-completion time and performer. **Task view** can show pending tasks, completed
-tasks only, or both (`task_view: pending`, `completed`, or `both`). History survives
-a browser refresh and includes completions made outside Home Assistant.
+## Ce que l'intégration crée
 
-Expand **Completed tasks** in the editor to adjust:
+### Listes de tâches
 
-| Setting | Default | Options |
+Des listes natives de Home Assistant : « Toutes les tâches », une par personne et
+une par projet si tu les actives. On peut y créer, modifier, terminer et supprimer
+des tâches. Les tâches terminées aujourd'hui y apparaissent aussi, en lecture
+seule.
+
+### Capteurs
+
+- **Un capteur par tâche**, avec `points`, `status`, `pending_approval`,
+  `assignee_ids`, `frequency`, `interval_type` (`hours`, `days`, `weeks`,
+  `months` ou `years`) et l'échéance.
+- **Un capteur de points par membre**, par exemple `sensor.hopla_points_elena` :
+  l'état est le nombre de points encore disponibles, avec `total_points`,
+  `points_redeemed` et la photo de profil Hopla du membre.
+- **`sensor.hopla_pending_approvals`** : les tâches qui attendent une validation,
+  avec qui les a faites (attribut `tasks`).
+- **`sensor.hopla_rewards`** : les récompenses actives et leur coût (attribut
+  `rewards`), et les demandes de récompense en attente (attribut `requests`).
+- **`sensor.hopla_bonus_et_penalites`** : les préréglages de bonus et de
+  pénalités réglés dans Hopla (attribut `points_presets`, avec `id`, `name` et
+  `points`, négatif pour une pénalité) et les derniers mouvements de points
+  (attribut `recent`).
+- **`binary_sensor.hopla_mode_parent`** : allumé quand le mode parent est ouvert
+  sur la tablette.
+
+### Objets Hopla
+
+Les « objets » Hopla deviennent des interrupteurs (oui/non), des nombres ou des
+textes dans Home Assistant.
+
+## Synchro en temps réel
+
+L'intégration garde une connexion ouverte avec le flux d'événements de Hopla,
+avec le même jeton d'API. Chaque changement fait dans Hopla (tâche créée,
+terminée, validée ou modifiée, récompense, objet, membre) arrive dans Home
+Assistant en quelques secondes. Il n'y a pas d'intervalle à régler : tant que la
+connexion tient, une mise à jour complète passe quand même toutes les 30 minutes
+par sécurité, et toutes les 5 minutes quand elle est coupée. La connexion revient
+toute seule, en attendant un peu plus après chaque échec (jusqu'à 5 minutes).
+
+## Événements pour les automatisations
+
+| Événement | Quand | Données |
 | --- | --- | --- |
-| History period | Today | 1–7 calendar days, including today (`completed_days`) |
-| Completed tasks to include | All completions in the period | Match task date filter uses the completed occurrence's original due date (`completed_filter: matching`); `all` ignores due-date filters |
-| Maximum completed entries | All | 0 for all, or 1–500 entries, newest first (`completed_limit`) |
+| `hopla_task_completed` | Une tâche est terminée, dans Hopla ou ici | `task_id`, `task_name`, `points`, `completed_by`, `completed_by_name` |
+| `hopla_task_pending_approval` | Une tâche attend la validation d'un parent | `task_id`, `task_name`, `points`, `completed_by`, `completed_by_name` |
+| `hopla_task_approval_resolved` | Elle a été validée ou refusée, ici ou dans Hopla | `task_id`, `task_name` |
+| `hopla_reward_requested` | Un enfant demande une récompense depuis la tablette | `redemption_id`, `reward_id`, `reward_name`, `points_cost`, `user_id`, `user_name` |
+| `hopla_reward_request_resolved` | La demande a été validée ou refusée | `redemption_id`, `reward_name`, `user_id` |
+| `hopla_points_changed` | Les points d'un membre bougent : tâche, tâche annulée, récompense, bonus ou pénalité | `user_id`, `user_name`, `action` (`task`, `undo`, `redeem`, `bonus` ou `penalty`), `points`, `delta` (signé), `reason`, `created_by_name` |
+| `hopla_task_reminder` | À chaque rappel réglé sur une tâche dans Hopla | voir ci-dessous |
 
-These settings disappear in pending-only mode and are preserved when switching
-views or appearance presets. Completed entries are always filtered by the selected
-performer and list/project. For tasks due today with their completed occurrences:
+### Rappels de tâches
 
-```yaml
-type: custom:hopla-user-todo-card
-entity: todo.all_tasks
-user_id: all
-display_filters: [today]
-task_view: both
-completed_filter: matching
-completed_days: 1
-```
+Les rappels réglés sur une tâche dans Hopla (avant l'échéance, à l'échéance ou
+après) deviennent un événement `hopla_task_reminder` au bon moment, avec
+`task_id`, `task_name`, `due_date`, `reminder_at`, `offset_minutes` (négatif avant
+l'échéance), `kind` (`before`, `due` ou `after`), `assigned_to`,
+`assigned_to_name`, `assignee_ids` et `points`. Terminer ou décaler la tâche
+annule ses rappels. Les rappels dont l'heure est passée pendant que Home
+Assistant était arrêté ne sont pas envoyés après coup.
 
-Change `completed_filter` to `all` to also include tasks completed today that were
-due earlier or had no due date. Increase `completed_days` for a longer history,
-or use `task_view: completed` for a separate history card with the same component.
+## Blueprints
 
-The editor starts with **Basics** (list, user, title, task view), followed by
-**Task filters**, **Completed tasks**, **Task details**, **Available actions**, and **Appearance**.
-Shared label filters always stay in Task filters, with choices from pending,
-Anyone, and completed tasks as well as saved selections. Basics and task filters
-start open; detailed settings stay collapsed. Completed-only
-mode hides pending actions, sorting, and button appearance. If completion filtering
-uses original due dates, its date controls remain available. Action icon, label, and
-color settings sit together in a separate **Customize action icons, labels and colors**
-section, without nested expandable sections. Task details contains points, recurrence,
-labels and date display; Available actions controls completion, skipping, date changes
-and reassignment. Appearance contains the preset and button layout controls.
-Editable fields can be cleared before typing a replacement without restoring defaults.
-Collapsed editor sections load their controls only when opened and retain their
-values when closed. Unrelated HA state updates leave the editor and preview intact.
+Pour importer un blueprint : **Paramètres** → **Automatisations et scènes** →
+**Blueprints** → **Importer un blueprint**, puis colle l'adresse GitHub du fichier.
 
-Native Home Assistant to-do lists also expose today's completed occurrences.
-Recurring tasks keep their next pending occurrence separately. Completed records
-have distinct history IDs and are read-only; edit or remove history in Hopla.
-Per-user lists attribute completions to the performer, even if the next occurrence
-is assigned to someone else. The integration retrieves seven days of history and
-the native list selects today in the Home Assistant timezone. The card uses the
-browser's local calendar days for its configured history period.
-History requires access to Hopla's `/api/v1/chores/history` endpoint; unavailable
-history leaves pending-task functionality intact.
+- [`task_reminder.yaml`](blueprints/automation/hopla/task_reminder.yaml) : un
+  rappel par personne. Choisis son capteur de points Hopla, puis un service de
+  notification (son téléphone par exemple) et d'autres actions si tu veux, comme
+  une annonce sur une enceinte.
+- [`approval_notification.yaml`](blueprints/automation/hopla/approval_notification.yaml) :
+  sur le téléphone d'un parent, une notification avec les boutons Valider et
+  Refuser pour chaque tâche à valider et chaque demande de récompense. Elle
+  disparaît dès que la demande est traitée, où que ce soit.
 
-Under **Task details**, enable **Show task points** or **Show recurrence** to display
-points as a small badge beside the task name and recurrence on a separate muted line.
-The due date and assignee keep their existing layout. Both options are off by default and also work in YAML:
-`show_points: true` and `show_recurrence: true`. For example, an interval task can show
-`10 points · Every 6 weeks`. Explicit zero points are shown; unset points and incomplete
-interval metadata are omitted. The task sensors expose these values independently
-of the card options.
+## Sécurité de la tablette
 
-Choose one or more **Labels** in the card editor. With two or more selected, **Match labels** offers **Any selected label (OR)** (the default) or **All selected labels (AND)**. Leave the selection empty to show all labels, including unlabelled tasks. Label names are matched exactly and combine with the assigned-user, date and sorting settings. Choices come from tasks in the selected Hopla list; saved selections remain available even when no current task has those labels. YAML supports `label_match: any` or `label_match: all`.
+Pour une tablette que toute la famille utilise, crée dans Home Assistant un
+utilisateur dédié qui n'est pas administrateur, par exemple « Tablette ». Puis,
+dans les options de l'intégration Hopla :
 
-**Show labels** is off by default. Enable it to display small label chips below each task's due date; long names and multiple labels wrap within the task column. Tasks without labels keep their existing layout. YAML supports `show_labels: true`.
+- **Parents** : choisis les comptes Home Assistant des parents.
+- **Code parent** : quatre chiffres. Seul un condensé du code est enregistré.
 
-Enable **Use Hopla label colors** under **Task details** after enabling **Show labels**
-to match each label's Hopla background and black or white text. This is off by
-default; labels without color metadata or a valid hex color keep the neutral style.
-YAML supports `use_label_colors: true` alongside `show_labels: true`.
+Ensuite :
 
-**Task spacing** under **Appearance** controls row padding. YAML supports
-`row_spacing: auto` (default; extra space for visible labels), `compact`, or `comfortable`
-(extra space for every task). Appearance presets preserve this setting.
+- Tout le monde peut terminer des tâches et demander des récompenses.
+- Valider ou refuser une tâche, créer, modifier, passer ou supprimer une tâche,
+  et valider une demande de récompense sont réservés aux parents.
+- Sur la tablette, le cadenas de la carte famille ouvre le mode parent avec le
+  code parent, pour deux minutes. Il se referme tout seul, ou d'une touche.
+- Une récompense échangée depuis la tablette devient une demande : les points ne
+  sont dépensés qu'une fois qu'un parent l'a validée.
+- Les bonus et pénalités sont réservés aux parents.
+- Après cinq codes faux, il faut attendre cinq minutes.
+- Les automatisations comptent comme des parents, puisque ce sont eux qui les
+  écrivent.
 
-For a maintenance dashboard with tasks due months ahead, set the integration's upcoming-task window to **0** (unlimited). Then leave **Pending task dates** empty for all tasks, or select **Overdue**, **Today** and **Future** with **Days ahead** empty or **0**. A card cannot show tasks excluded by the integration's window. YAML supports the same selections:
+Sans parent choisi, rien ne change : tout le monde garde tous les droits.
 
-```yaml
-type: custom:hopla-user-todo-card
-entity: todo.all_tasks
-user_id: all
-labels:
-  - maintenance
-  - technical
-display_filters: [overdue, today, future]
-upcoming_days: 0
-```
+## Services
 
+| Service | Rôle | Réservé aux parents |
+| --- | --- | --- |
+| `hopla.complete_task` | Terminer une tâche, éventuellement pour un membre (`completed_by`). Une tâche à valider attend un parent, et la réponse contient `pending_approval: true` | |
+| `hopla.complete_assigned_task` | Terminer une tâche pour son membre assigné | |
+| `hopla.redeem_reward` | Échanger une récompense pour un membre (`user_id`). Venant d'un parent, c'est validé tout de suite ; sinon c'est une demande (`pending: true`) | |
+| `hopla.approve_task` / `hopla.reject_task` | Valider ou refuser une tâche en attente | ✓ |
+| `hopla.approve_reward` / `hopla.reject_reward` | Valider ou refuser une demande de récompense (`redemption_id`) | ✓ |
+| `hopla.create_task`, `hopla.update_task`, `hopla.delete_task` | Créer, modifier, supprimer une tâche | ✓ |
+| `hopla.skip_task`, `hopla.postpone_task` | Passer une tâche à sa prochaine occurrence | ✓ |
+| `hopla.adjust_points` | Donner un bonus ou une pénalité à un membre (`user_id`), avec `points` (négatif pour une pénalité) ou un préréglage (`preset_id`), et une raison (`reason`) si tu veux. Une pénalité ne fait jamais passer le solde sous zéro | ✓ |
+| `hopla.unlock_parent_mode` | Ouvrir le mode parent pour deux minutes avec le code (`pin`) | |
+| `hopla.lock_parent_mode` | Refermer le mode parent | |
 
-The **Hopla User Tasks** card is bundled with the integration and loaded
-automatically when Hopla is set up, for both UI and YAML dashboards. No separate
-card installation or dashboard resource registration is required. Reload your browser
-after updating the integration, then add **Hopla User Tasks** to any dashboard.
-Its visual editor lets you choose
-a Hopla todo entity, the assigned user, a title and button appearance.
-Use the All Tasks entity to display any user's tasks; individual assignee entities also work.
-Enable **Include tasks assigned to Anyone** to show Anyone tasks alongside the selected
-user's tasks. This is off by default and works with both All Tasks and individual
-assignee entities. YAML supports `include_anyone: true`. Date filters and sorting
-apply to both groups, and Anyone completions are credited to the API token owner.
-Select **All users** to combine their tasks. **Show assigned user** adds the assignee's
-name beside the due date in this view, or when Anyone tasks are included beside a selected user.
-Views containing only one user's tasks omit the name. The setting depends on the view's scope, so it stays
-useful even when the current filter happens to match only one user's tasks.
-**Allow reassignment** enables a user-switch icon on each row.
-Tap it to choose **Anyone** or a user, then confirm with the save icon; tap again to close.
-The picker includes Anyone even in a single-user circle. User choices are current
-circle members in that task's Hopla assignee list, or all circle members when
-the task has no assignee list. Selecting Anyone disables automatic user assignment;
-selecting a user for an Anyone task keeps that user assigned on future occurrences.
-Switching to or from Anyone requires permission to edit the task. This uses `hopla.update_task`
-with `assigned_to`, preserves recurrence, and refreshes all lists. A reassigned task
-leaves its previous user's card. Future completion uses the new current assignee.
-YAML supports `user_id: all`, `show_assignee: false`, and `show_reassign: false`.
-For a per-user task list such as **admin's Tasks**, the editor hides **Assigned user** and the card uses the list's owner automatically. YAML can omit `user_id` for these lists; any older user selection is overridden by the list's owner.
-The editor's **Toggles** section groups label display, assigned names, completion, Skip
-occurrence, Change due date, and reassignment. Completion visibility applies to both
-the checkbox and button styles. Turn all four off for a display-only card with no
-unused action space. Appearance presets preserve these visibility choices.
-YAML also supports `show_complete: false`, `show_postpone: false`, and
-`show_due_date: false`. All actions remain enabled by default.
-The card respects the integration's upcoming-task window. Set it to 0 to show all tasks.
+Pour réactiver une tâche archivée avec `hopla.update_task`, mets
+`force_unarchive: true`. Pour l'assigner, donne `assigned_to` avec l'ID Hopla d'un
+membre, ou `null` pour n'importe qui.
 
-```yaml
-type: custom:hopla-user-todo-card
-entity: todo.all_tasks
-user_id: 1
-display_filters: []
-button_style: text
-button_size: compact
-button_shape: pill
-button_content: icon
-```
+## Cartes
 
-Choose one or more groups in **Pending task dates**: **Overdue** (due date/time has passed),
-**Today** (due on the current local date), **Future** (from tomorrow onward), and
-**Without a due date**. A task appears if it matches any selected group, without duplicates.
-Leave the selection empty for all tasks. Today includes tasks overdue earlier today.
-Overdue due text uses your theme's warning color, with a clock icon beside the due text.
-YAML supports `display_filters: [overdue, today, future, undated]` or `display_filters: []`.
-The editor replaces **Include overdue tasks** with the **Overdue** selection. Existing
-`display_filter: all/overdue/today/upcoming` and `include_overdue` YAML settings keep
-their original behavior until you change **Pending task dates**. New `display_filters`
-selections take precedence over those legacy settings.
-Each card stores its own filter. Empty cards show the selected user, active filter and
-Future day limit so you can see which settings to adjust.
-**Sort tasks by** offers earliest due date (the default, with undated tasks last),
-highest priority (Urgent through Low, then unspecified), or alphabetical name using
-your HA language. Priority ties use due date. YAML supports `sort_by: due_date`,
-`sort_by: priority`, and `sort_by: name`. Card visibility remains controlled by HA.
-When Future is selected, **Days ahead** limits that group (default 7; empty or 0 means unlimited).
-Clearing the field keeps it empty and saves `upcoming_days: null`, without restoring 7.
-For example, 3 includes tomorrow through the third day from today, including the whole
-last day. The other selected groups remain visible regardless of this limit.
-Set `upcoming_days: 3` in YAML or use the card editor's number field.
-Filters use the tasks supplied by the integration. Set its upcoming-task window to 0
-if you want every future task available to the card.
+Les deux cartes sont fournies avec l'intégration et chargées automatiquement :
+rien à installer à part. Recharge le navigateur après une mise à jour. Elles
+suivent la langue de Home Assistant, en français ou en anglais ; leurs textes
+sont dans [`frontend/locales`](custom_components/hopla/frontend/locales), un
+fichier par langue.
 
-**Due date display** offers **Date and time** (the existing default), **Relative**
-(for example, In 3 days, Tomorrow, Next week, or 13 hours ago), and **Relative and
-date/time**. Relative labels follow your HA language and count calendar days across
-daylight-saving changes. Date-only deadlines remain due for their whole day.
-The full date is available in the tooltip in every mode. YAML supports
-`due_display: date`, `due_display: relative`, or `due_display: both`.
+### Carte famille
 
-Complete fetches the current task from Hopla and attributes completion to its actual
-assigned user, even if someone else clicks the button. Tasks assigned to **Anyone** are
-completed as the Hopla user who owns the integration's API token. This also applies
-to completion from native Home Assistant to-do lists. **Skip occurrence** (the `hopla.postpone_task` action) uses Hopla's internal skip/rescheduling endpoint to advance
-to the next occurrence. Hopla records a skipped occurrence, keeps the assignee and
-calculates the next date from the task's schedule. Tasks without a recurring schedule
-have Skip occurrence hidden. Tap the icon to open a confirmation; tap it again to close
-without changing the task. Confirming Skip advances the schedule. Actions refresh the list
-and show errors in the card.
+`custom:hopla-family-card` est faite pour une tablette murale. Un podium classe
+les membres par points, avec une couronne pour le premier (les ex æquo partagent
+la marche). Chaque tâche du jour tient sur une ligne : son nom, ses points et une
+photo par membre assigné ; toucher une photo termine la tâche pour ce membre. Une
+tâche à valider reste affichée avec un sablier et la photo de qui l'a faite,
+jusqu'à la réponse d'un parent. Les tâches déjà faites aujourd'hui suivent, avec
+la photo de qui les a faites. Toute photo qu'on peut toucher a un anneau.
 
-Each row shows a **Change due date** calendar-edit icon beside the other actions, including
-for one-off tasks. Tap to open a slim inline editor below that row, or tap again to close.
-Choose a date, then tap the save icon. Save is enabled only for a valid changed date or time.
-The clock icon toggles the optional time
-field. Tap the original action again to close without saving. The editor stays inline
-without an extra task heading.
-The inline editor uses HA's native date and time selectors, including its standard
-calendar dialog and locale-aware time fields. Browser inputs provide a fallback if
-HA's controls cannot be loaded. Tap the task name or due text to expand its description
-below the row; tap again to collapse it. Descriptions preserve line breaks and display
-as readable plain text, with HTML tags and embedded scripts removed while paragraphs,
-line breaks, lists, and decoded entities are preserved. A subtle chevron beside the name indicates an available description
-and points upward while expanded. Tasks without a description are plain text and
-do not open a panel.
-The current time is preserved unless edited with Set time; undated tasks default to 09:00.
-Only Save changes the task. Tapping the original action, Escape or tapping outside dismisses the editor.
-This uses `hopla.update_task` without skipping an occurrence or changing recurrence.
-Dates use your browser's time zone; its name appears only when editing the time. Requests
-send explicit UTC timestamps. The editor stays open after a service failure for retry.
+Pour une tâche que chacun doit faire, comme faire son lit, crée-la dans Hopla une
+fois par membre. La carte regroupe les tâches de même nom sur une ligne.
 
-By default each compact row has a completion checkbox on the left, the task and date in
-the middle, and horizontal action icons on the right: calendar-arrow-right to skip to
-the next occurrence, and calendar-edit to choose a date. The checkbox and buttons have
-at least 44 × 44 pixel tap targets, with spacing between buttons,
-accessible action names and hover tooltips. Due text shows Today, Tomorrow or Overdue,
-including the local due time when available (following HA's 12/24-hour preference).
-Overdue labels use the theme's warning color. Local 23:59 end-of-day placeholders are
-hidden from the label and tooltip. The full date is available in a tooltip.
-Tasks sort by due date, with undated tasks last. Completion
-briefly shows a checked, struck-through row. Successful actions update the list without
-extra confirmation text; failures remain visible.
-The card editor uses native Home Assistant form controls: entity and user selectors,
-searchable icon pickers, theme color choices, and helper text explaining each setting.
-Choose a **Starting style** (HA todo, icons with labels, outlined or filled buttons), then
-expand **Fine-tune appearance** or **Customize individual actions** when needed. Presets
-reset action icon, label and color overrides while preserving the list, user, filter and
-title. Completion-specific action customization appears when completion uses a button.
-The HA dashboard editor's live preview reflects each change. Existing YAML options remain
-supported, including custom CSS colors and variables such as `var(--success-color)`.
+Les récompenses montrent une photo par membre : un cadeau quand il peut la
+prendre, un cadenas avec les points qui manquent, une horloge avec le temps
+restant quand la limite de la période est atteinte, ou un sablier quand une
+demande attend un parent. Les limites se règlent sur la récompense dans Hopla.
 
+Quand des parents sont choisis, un cadenas en haut à droite ouvre le pavé du code
+parent. En mode parent, il affiche le temps restant et referme le mode d'une
+touche. Les boutons Valider et Refuser n'apparaissent que pour un parent.
 
-## Family board card
-
-`custom:hopla-family-card` is made for a wall tablet. A podium ranks the members by points, with one step per member up to three and a crown on the leader (members with the same score share a step). Each task due today is one line: its name, its points and a photo button for each member it is assigned to; tapping a photo completes the task for that member. A task that requires approval stays in the list with an hourglass and only the photo of the member who did it, until an admin answers. Tasks done today follow in the same style, with the photo of who did them. Every photo you can tap has a ring around it.
-
-For a task that each member must do, such as making their bed, create it in Hopla once per member, each assigned to one of them. The card shows tasks with the same name as one line: each photo completes that member's own task, and a member who already did it today gets a check.
-
-The rewards list shows a photo per member on each reward: a gift badge when they can take it, a padlock with the missing points, or a clock with the time left when they have used up the reward's limit for the period. Limits are set on the reward in Hopla ("Limit per member", per day, week or month).
+En mode parent, ou pour un parent, la carte montre aussi les bonus et pénalités
+préréglés dans Hopla (onglet Jeux de la page Points) : touche deux fois la photo
+d'un enfant pour lui donner « Chambre rangée (+5) » ou « Dispute (−3) ».
 
 ```yaml
 type: custom:hopla-family-card
-members: [2, 3]        # Hopla user IDs with a photo button; default: everyone
-labels: [kids]         # only tasks with one of these labels; default: all tasks
-due: today             # today (due today, overdue or undated) or all
-show_points: true     # the points podium
-show_todo: true       # tasks to do
-show_done: true       # tasks done today
-show_rewards: true
-show_approval: false   # show Approve and Reject buttons on waiting tasks
-allow_redeem: false    # let members spend points from the card (tap twice to confirm)
+members: [2, 3]        # membres avec un bouton photo (par défaut : tout le monde)
+labels: [enfants]      # seulement les tâches avec une de ces étiquettes
+due: today             # today (du jour, en retard ou sans date) ou all
+show_points: true      # le podium
+show_todo: true        # les tâches à faire
+show_done: true        # les tâches faites aujourd'hui
+show_rewards: true     # les récompenses
+show_approval: false   # boutons Valider et Refuser, pour les parents
+allow_redeem: false    # échanger des récompenses depuis la carte (deux touches)
+show_bonus: true       # les bonus et pénalités, pour les parents
 ```
 
-Each part can be turned off, so the same card can show only the rewards on another dashboard view: set `show_points`, `show_todo` and `show_done` to `false`.
+Chaque partie peut être masquée : la même carte peut n'afficher que les
+récompenses sur une autre vue. Les photos viennent des profils Hopla ; un parent
+règle celle d'un enfant dans Hopla, sous Réglages → Comptes gérés.
 
-Photos come from the members' Hopla profiles; a parent sets a child account's photo in Hopla under Settings → Managed Accounts. The card is translated into English and French.
+### Carte des tâches d'un membre
+
+`custom:hopla-user-todo-card` affiche les tâches d'un membre (ou de tous) avec
+une case pour terminer et des boutons pour passer une occurrence, changer
+l'échéance et réassigner. Son éditeur visuel regroupe les réglages en sections :
+Essentiel, Filtres des tâches, Tâches terminées, Détails des tâches, Actions
+disponibles et Apparence.
+
+```yaml
+type: custom:hopla-user-todo-card
+entity: todo.toutes_les_taches
+user_id: all                    # un ID de membre, ou all
+display_filters: [overdue, today, future]   # vide pour toutes ; undated pour sans date
+upcoming_days: 7                # jours à l'avance pour « À venir » (0 : sans limite)
+task_view: both                 # pending, completed ou both
+completed_days: 1               # jours d'historique (1 à 7)
+completed_filter: all           # matching : suivre le filtre de dates
+labels: [maison]                # filtrer par étiquettes
+label_match: any                # any (OU) ou all (ET)
+sort_by: due_date               # due_date, priority ou name
+due_display: date               # date, relative ou both
+show_points: true
+show_recurrence: true
+show_labels: false
+include_anyone: false           # ajouter les tâches pour n'importe qui
+```
+
+Terminer une tâche la crédite au membre assigné, même si quelqu'un d'autre
+touche le bouton ; une tâche pour n'importe qui est créditée au propriétaire du
+jeton d'API. Les actions qui modifient une tâche (passer, changer l'échéance,
+réassigner) demandent un parent quand la sécurité de la tablette est active.
 
 ## Licence
 

@@ -33,11 +33,314 @@
         "title": "Options Hopla",
         "description": "Ajuster les réglages de l'intégration Hopla",
         "data": {
+          "parent_users": "Parents",
+          "parent_pin": "Code parent",
           "show_due_in": "Nombre de jours de tâches à venir à afficher",
           "show_no_due_date": "Afficher les tâches sans échéance",
           "create_unified_list": "Créer la liste « Toutes les tâches »",
           "create_project_lists": "Créer une liste par projet",
           "create_assignee_lists": "Créer une liste par personne"
+        },
+        "data_description": {
+          "parent_users": "Les utilisateurs Home Assistant qui peuvent valider, modifier les tâches et dépenser les points. Laisse vide pour que tout le monde le puisse.",
+          "parent_pin": "Quatre chiffres qui ouvrent le mode parent pour deux minutes sur la tablette familiale. Laisse vide pour garder le code actuel."
+        }
+      }
+    },
+    "error": {
+      "invalid_pin": "Le code parent doit faire exactement quatre chiffres."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "parent_mode": {
+        "name": "Mode parent"
+      }
+    },
+    "sensor": {
+      "bonus_penalties": {
+        "name": "Bonus et pénalités"
+      }
+    }
+  },
+  "exceptions": {
+    "parent_required": {
+      "message": "Seul un parent peut faire ça. Ouvre le mode parent avec le code parent."
+    },
+    "pin_wrong": {
+      "message": "Code parent incorrect. Encore {attempts_left} essais."
+    },
+    "pin_locked": {
+      "message": "Trop de codes incorrects. Réessaie dans {minutes} min."
+    },
+    "pin_not_set": {
+      "message": "Aucun code parent n'est choisi. Un parent peut en choisir un dans les options de l'intégration Hopla."
+    }
+  },
+  "services": {
+    "complete_task": {
+      "name": "Terminer une tâche",
+      "description": "Termine une tâche Hopla, éventuellement pour un membre donné. Une tâche à valider attend un parent, et la réponse renvoie pending_approval à true.",
+      "fields": {
+        "task_id": {
+          "name": "ID de la tâche",
+          "description": "L'ID de la tâche à terminer"
+        },
+        "completed_by": {
+          "name": "Faite par",
+          "description": "L'ID Hopla du membre qui a fait la tâche (facultatif)"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
+    },
+    "create_task": {
+      "name": "Créer une tâche",
+      "description": "Crée une tâche Hopla. Réservé aux parents.",
+      "fields": {
+        "name": {
+          "name": "Nom",
+          "description": "Le nom de la tâche"
+        },
+        "description": {
+          "name": "Description",
+          "description": "La description de la tâche (facultatif)"
+        },
+        "due_date": {
+          "name": "Échéance",
+          "description": "L'échéance au format RFC 3339 (facultatif, par exemple 2026-07-28T18:00:00Z)"
+        },
+        "created_by": {
+          "name": "Créée par",
+          "description": "L'ID Hopla du membre qui crée la tâche (facultatif)"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
+    },
+    "update_task": {
+      "name": "Modifier une tâche",
+      "description": "Modifie une tâche Hopla. Une tâche archivée le reste sauf si Réactiver est activé. Réservé aux parents.",
+      "fields": {
+        "task_id": {
+          "name": "ID de la tâche",
+          "description": "L'ID de la tâche à modifier"
+        },
+        "name": {
+          "name": "Nom",
+          "description": "Le nouveau nom de la tâche (facultatif)"
+        },
+        "description": {
+          "name": "Description",
+          "description": "La nouvelle description (facultatif, un texte vide l'efface)"
+        },
+        "due_date": {
+          "name": "Échéance",
+          "description": "La nouvelle échéance au format RFC 3339 (facultatif, par exemple 2026-07-28T18:00:00Z)"
+        },
+        "force_unarchive": {
+          "name": "Réactiver",
+          "description": "Réactive la tâche si elle est archivée (facultatif, désactivé par défaut)"
+        },
+        "assigned_to": {
+          "name": "Assignée à",
+          "description": "L'ID Hopla d'un membre possible, ou null en YAML pour n'importe qui"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
+    },
+    "skip_task": {
+      "name": "Passer une tâche",
+      "description": "Passe une tâche récurrente à sa prochaine occurrence sans l'enregistrer comme faite. Réservé aux parents.",
+      "fields": {
+        "task_id": {
+          "name": "ID de la tâche",
+          "description": "L'ID de la tâche à passer"
+        },
+        "completed_by": {
+          "name": "Passée par",
+          "description": "L'ID Hopla du membre pour qui enregistrer le passage (facultatif)"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
+    },
+    "delete_task": {
+      "name": "Supprimer une tâche",
+      "description": "Supprime une tâche Hopla. Réservé aux parents.",
+      "fields": {
+        "task_id": {
+          "name": "ID de la tâche",
+          "description": "L'ID de la tâche à supprimer"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
+    },
+    "complete_assigned_task": {
+      "name": "Terminer pour le membre assigné",
+      "description": "Termine une tâche pour le membre assigné, ou pour le propriétaire du jeton d'API quand n'importe qui peut la faire.",
+      "fields": {
+        "task_id": {
+          "name": "ID de la tâche",
+          "description": "L'ID de la tâche à terminer"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
+    },
+    "postpone_task": {
+      "name": "Passer à la prochaine occurrence",
+      "description": "Déplace une tâche à sa prochaine occurrence prévue sans la terminer. Réservé aux parents.",
+      "fields": {
+        "task_id": {
+          "name": "ID de la tâche",
+          "description": "L'ID de la tâche à déplacer"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
+    },
+    "approve_task": {
+      "name": "Valider une tâche",
+      "description": "Valide une tâche en attente. La tâche est terminée et ses points vont au membre qui l'a faite. Réservé aux parents.",
+      "fields": {
+        "task_id": {
+          "name": "ID de la tâche",
+          "description": "L'ID de la tâche en attente de validation"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
+    },
+    "reject_task": {
+      "name": "Refuser une tâche",
+      "description": "Refuse une tâche en attente. Aucun point n'est donné et la tâche est de nouveau à faire. Réservé aux parents.",
+      "fields": {
+        "task_id": {
+          "name": "ID de la tâche",
+          "description": "L'ID de la tâche en attente de validation"
+        },
+        "note": {
+          "name": "Note",
+          "description": "Pourquoi la tâche est refusée (facultatif)"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
+    },
+    "redeem_reward": {
+      "name": "Échanger une récompense",
+      "description": "Dépense les points d'un membre pour une récompense. Venant d'un parent, c'est validé tout de suite ; venant de quelqu'un d'autre, comme la tablette familiale, cela devient une demande à faire valider par un parent.",
+      "fields": {
+        "reward_id": {
+          "name": "ID de la récompense",
+          "description": "L'ID de la récompense (voir le capteur des récompenses)"
+        },
+        "user_id": {
+          "name": "Membre",
+          "description": "L'ID Hopla du membre dont les points sont dépensés (facultatif, le propriétaire du jeton d'API par défaut)"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
+    },
+    "approve_reward": {
+      "name": "Valider une demande de récompense",
+      "description": "Valide la demande de récompense d'un membre et dépense ses points. Réservé aux parents.",
+      "fields": {
+        "redemption_id": {
+          "name": "ID de la demande",
+          "description": "L'ID de la demande (voir les demandes du capteur des récompenses)"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
+    },
+    "reject_reward": {
+      "name": "Refuser une demande de récompense",
+      "description": "Refuse la demande de récompense d'un membre. Aucun point n'est dépensé. Réservé aux parents.",
+      "fields": {
+        "redemption_id": {
+          "name": "ID de la demande",
+          "description": "L'ID de la demande (voir les demandes du capteur des récompenses)"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
+    },
+    "unlock_parent_mode": {
+      "name": "Ouvrir le mode parent",
+      "description": "Ouvre le mode parent pour deux minutes avec le code parent à quatre chiffres, par exemple sur la tablette familiale.",
+      "fields": {
+        "pin": {
+          "name": "Code parent",
+          "description": "Le code à quatre chiffres choisi dans les options de l'intégration"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
+    },
+    "lock_parent_mode": {
+      "name": "Fermer le mode parent",
+      "description": "Ferme le mode parent avant la fin des deux minutes.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
+    },
+    "adjust_points": {
+      "name": "Bonus ou pénalité",
+      "description": "Donne des points en plus à un membre, ou retire-lui-en. Réservé aux parents. Une pénalité ne fait jamais passer le solde sous zéro et ne baisse jamais les points gagnés sur lesquels reposent les rangs.",
+      "fields": {
+        "user_id": {
+          "name": "Membre",
+          "description": "L'ID Hopla du membre"
+        },
+        "points": {
+          "name": "Points",
+          "description": "Positif pour un bonus, négatif pour une pénalité (vide avec un préréglage)"
+        },
+        "preset_id": {
+          "name": "Préréglage",
+          "description": "L'ID d'un préréglage de bonus ou de pénalité (voir le capteur des bonus et pénalités), à la place des points"
+        },
+        "reason": {
+          "name": "Raison",
+          "description": "Pourquoi, affiché dans l'historique des points (facultatif, le nom du préréglage par défaut)"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
         }
       }
     }

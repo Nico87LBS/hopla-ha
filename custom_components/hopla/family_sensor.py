@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .const import CONF_URL, DOMAIN
+from .games import RECENT_LIMIT
 from .model import HoplaMember
 
 _LOGGER = logging.getLogger(__name__)
@@ -51,7 +52,7 @@ async def async_setup_family_sensors(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up one points sensor per member, the approvals sensor and the rewards sensor."""
+    """Set up one points sensor per member, and the approvals, rewards and bonus sensors."""
     config = hass.data[DOMAIN][config_entry.entry_id]
     coordinator = config["coordinator"]
     members: list[HoplaMember] = config["circle_members"]
@@ -59,6 +60,8 @@ async def async_setup_family_sensors(
     entities: list[SensorEntity] = [HoplaPendingApprovalSensor(coordinator, config_entry)]
     if coordinator.rewards is not None:
         entities.append(HoplaRewardsSensor(coordinator, config_entry))
+    if coordinator.points_presets is not None:
+        entities.append(HoplaBonusSensor(coordinator, config_entry))
 
     known: set[int] = set()
 
@@ -203,4 +206,27 @@ class HoplaRewardsSensor(_FamilySensor):
                 "quota_resets_at": r.quota_resets_at.isoformat() if r.quota_resets_at else None,
             }
             for r in self._rewards
-        ]}
+        ], "requests": self.coordinator.pending_rewards}
+
+
+class HoplaBonusSensor(_FamilySensor):
+    """Bonus and penalty presets, and the newest points changes."""
+
+    _attr_icon = "mdi:plus-minus-variant"
+    _attr_translation_key = "bonus_penalties"
+
+    def __init__(self, coordinator: DataUpdateCoordinator, config_entry: ConfigEntry) -> None:
+        super().__init__(coordinator, config_entry)
+        self._attr_unique_id = f"hopla_bonus_penalties_{config_entry.entry_id}"
+
+    @property
+    def native_value(self) -> int:
+        return len(self.coordinator.points_presets or [])
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "points_presets": self.coordinator.points_presets or [],
+            "recent": self.coordinator.points_history[:RECENT_LIMIT],
+            "config_entry_id": self._config_entry.entry_id,
+        }

@@ -1,170 +1,114 @@
+# Names and descriptions are in strings.json and translations/.
 complete_task:
-  name: Complete Task
-  description: Complete a Hopla task with optional user attribution. A task that requires approval waits for an admin instead, and the response returns pending_approval true.
   fields:
     task_id:
-      name: Task ID
-      description: The ID of the task to complete
       required: true
       selector:
         number:
           min: 1
           mode: box
     completed_by:
-      name: Completed By User ID
-      description: The Hopla user ID who completed the task (optional)
       required: false
       selector:
         number:
           min: 1
           mode: box
     config_entry_id:
-      name: Config Entry ID
-      description: The specific Hopla integration to use (optional, uses first if not specified)
       required: false
       selector:
         text:
-
 create_task:
-  name: Create Task
-  description: Create a new Hopla task
   fields:
     name:
-      name: Task Name
-      description: The name of the task
       required: true
       selector:
         text:
     description:
-      name: Description
-      description: Task description (optional)
       required: false
       selector:
         text:
           multiline: true
     due_date:
-      name: Due Date
-      description: Task due date in RFC3339 format (optional, e.g., 2025-07-28T18:00:00Z)
       required: false
       selector:
         text:
     created_by:
-      name: Created By User ID
-      description: The Hopla user ID who created the task (optional)
       required: false
       selector:
         number:
           min: 1
           mode: box
     config_entry_id:
-      name: Config Entry ID
-      description: The specific Hopla integration to use (optional, uses first if not specified)
       required: false
       selector:
         text:
-
 update_task:
-  name: Update Task
-  description: Update an existing Hopla task. Archived tasks remain archived unless Force Unarchive is enabled.
   fields:
     task_id:
-      name: Task ID
-      description: The ID of the task to update
       required: true
       selector:
         number:
           min: 1
           mode: box
     name:
-      name: Task Name
-      description: The new name of the task (optional)
       required: false
       selector:
         text:
     description:
-      name: Description
-      description: New task description (optional, empty string to clear)
       required: false
       selector:
         text:
           multiline: true
     due_date:
-      name: Due Date
-      description: New task due date in RFC3339 format (optional, e.g., 2025-07-28T18:00:00Z)
       required: false
       selector:
         text:
     force_unarchive:
-      name: Force Unarchive
-      description: Reactivate this task if it is archived (optional; defaults to false)
       required: false
       default: false
       selector:
         boolean:
     assigned_to:
-      name: Assignee User ID
-      description: Assign to an eligible Hopla user ID, or use null in YAML for Anyone. Switching to or from Anyone requires task edit permission.
       required: false
       selector:
         number:
           min: 1
           mode: box
     config_entry_id:
-      name: Config Entry ID
-      description: The specific Hopla integration to use (optional, uses first if not specified)
       required: false
       selector:
         text:
-
 skip_task:
-  name: Skip Task
-  description: Skip a recurring task, advancing to the next scheduled occurrence without recording a completion
   fields:
     task_id:
-      name: Task ID
-      description: The ID of the task to skip
       required: true
       selector:
         number:
           min: 1
           mode: box
     completed_by:
-      name: Completed By User ID
-      description: The Hopla user ID to attribute the skip to (optional)
       required: false
       selector:
         number:
           min: 1
           mode: box
     config_entry_id:
-      name: Config Entry ID
-      description: The specific Hopla integration to use (optional, uses first if not specified)
       required: false
       selector:
         text:
-
 delete_task:
-  name: Delete Task
-  description: Delete a Hopla task
   fields:
     task_id:
-      name: Task ID
-      description: The ID of the task to delete
       required: true
       selector:
         number:
           min: 1
           mode: box
     config_entry_id:
-      name: Config Entry ID
-      description: The specific Hopla integration to use (optional, uses first if not specified)
       required: false
       selector:
         text:
-
 complete_assigned_task:
-  name: Complete as assigned user
-  description: Complete a task as its current Hopla assignee, or as the API token owner for tasks assigned to Anyone.
   fields:
     task_id:
       required: true
@@ -176,8 +120,6 @@ complete_assigned_task:
       selector:
         text:
 postpone_task:
-  name: Reschedule task
-  description: Use Hopla's scheduler to skip to the next occurrence without completing the task.
   fields:
     task_id:
       required: true
@@ -189,70 +131,112 @@ postpone_task:
       selector:
         text:
 approve_task:
-  name: Approve task
-  description: Approve a completion waiting for approval. The task is completed and its points go to the member who did it.
   fields:
     task_id:
-      name: Task ID
-      description: The ID of the task waiting for approval
       required: true
       selector:
         number:
           min: 1
           mode: box
     config_entry_id:
-      name: Config Entry ID
-      description: The specific Hopla integration to use (optional, uses first if not specified)
       required: false
       selector:
         text:
 reject_task:
-  name: Reject task
-  description: Reject a completion waiting for approval. No points are given and the task is due again.
   fields:
     task_id:
-      name: Task ID
-      description: The ID of the task waiting for approval
       required: true
       selector:
         number:
           min: 1
           mode: box
     note:
-      name: Note
-      description: Why the completion was rejected (optional)
       required: false
       selector:
         text:
     config_entry_id:
-      name: Config Entry ID
-      description: The specific Hopla integration to use (optional, uses first if not specified)
       required: false
       selector:
         text:
 redeem_reward:
-  name: Redeem reward
-  description: Spend points on a Hopla reward. For another member (user_id), the API token owner must be an admin or manager and the redemption is approved at once.
   fields:
     reward_id:
-      name: Reward ID
-      description: The ID of the reward (see the rewards sensor)
       required: true
       selector:
         number:
           min: 1
           mode: box
     user_id:
-      name: Member user ID
-      description: The Hopla user ID whose points are spent (optional, defaults to the API token owner)
       required: false
       selector:
         number:
           min: 1
           mode: box
     config_entry_id:
-      name: Config Entry ID
-      description: The specific Hopla integration to use (optional, uses first if not specified)
+      required: false
+      selector:
+        text:
+approve_reward:
+  fields:
+    redemption_id:
+      required: true
+      selector: &id001
+        number:
+          min: 1
+          mode: box
+    config_entry_id:
+      required: false
+      selector: &id002
+        text:
+reject_reward:
+  fields:
+    redemption_id:
+      required: true
+      selector: *id001
+    config_entry_id:
+      required: false
+      selector: *id002
+unlock_parent_mode:
+  fields:
+    pin:
+      required: true
+      selector:
+        text:
+          type: password
+    config_entry_id:
+      required: false
+      selector: *id002
+lock_parent_mode:
+  fields:
+    config_entry_id:
+      required: false
+      selector: *id002
+adjust_points:
+  fields:
+    user_id:
+      required: true
+      selector:
+        number:
+          min: 1
+          mode: box
+    points:
+      required: false
+      selector:
+        number:
+          min: -1000
+          max: 1000
+          mode: box
+    preset_id:
+      required: false
+      selector:
+        number:
+          min: 1
+          mode: box
+    reason:
+      required: false
+      selector:
+        text:
+    config_entry_id:
       required: false
       selector:
         text:

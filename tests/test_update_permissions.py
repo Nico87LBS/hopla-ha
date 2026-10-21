@@ -130,7 +130,7 @@ class UpdatePermissionTests(unittest.IsolatedAsyncioTestCase):
         async def refresh():
             calls.append(("refresh", ()))
 
-        namespace = {"HomeAssistant": object, "ServiceCall": object, "DOMAIN": "hopla",
+        namespace = {"HomeAssistant": object, "ServiceCall": object, "DOMAIN": "hopla", "require_parent": lambda config, call: None,
                      "_get_config_entry": resolve, "HomeAssistantError": ValueError,
                      "_LOGGER": logging.getLogger(__name__)}
         exec(compile(ast.Module(body=[handler], type_ignores=[]), str(source), "exec"), namespace)
@@ -168,7 +168,7 @@ class UpdatePermissionTests(unittest.IsolatedAsyncioTestCase):
         async def delete(task_id):
             raise ValueError("Permission denied")
 
-        namespace = {"HomeAssistant": object, "ServiceCall": object, "DOMAIN": "hopla",
+        namespace = {"HomeAssistant": object, "ServiceCall": object, "DOMAIN": "hopla", "require_parent": lambda config, call: None,
                      "_get_config_entry": resolve, "HomeAssistantError": HomeAssistantError,
                      "_LOGGER": logging.getLogger(__name__)}
         exec(compile(ast.Module(body=[handler], type_ignores=[]), str(source), "exec"), namespace)

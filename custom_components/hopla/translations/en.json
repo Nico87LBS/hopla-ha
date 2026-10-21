@@ -33,11 +33,314 @@
         "title": "Configure Hopla Options",
         "description": "Adjust your Hopla integration settings",
         "data": {
+          "parent_users": "Parents",
+          "parent_pin": "Parent code",
           "show_due_in": "Days ahead to show upcoming tasks",
           "show_no_due_date": "Show tasks with no due date",
           "create_unified_list": "Create \"All Tasks\" list",
           "create_project_lists": "Create individual task lists per project",
           "create_assignee_lists": "Create individual task lists per person"
+        },
+        "data_description": {
+          "parent_users": "Home Assistant users who may approve, edit tasks and spend points. Leave empty to let everyone do it.",
+          "parent_pin": "Four digits that open parent mode for two minutes on the family tablet. Leave empty to keep the current code."
+        }
+      }
+    },
+    "error": {
+      "invalid_pin": "The parent code must be exactly four digits."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "parent_mode": {
+        "name": "Parent mode"
+      }
+    },
+    "sensor": {
+      "bonus_penalties": {
+        "name": "Bonuses and penalties"
+      }
+    }
+  },
+  "exceptions": {
+    "parent_required": {
+      "message": "Only a parent can do this. Open parent mode with the parent code."
+    },
+    "pin_wrong": {
+      "message": "Wrong parent code. {attempts_left} attempts left."
+    },
+    "pin_locked": {
+      "message": "Too many wrong codes. Try again in {minutes} min."
+    },
+    "pin_not_set": {
+      "message": "No parent code is set. A parent can choose one in the Hopla integration options."
+    }
+  },
+  "services": {
+    "complete_task": {
+      "name": "Complete task",
+      "description": "Complete a Hopla task, optionally for a given member. A task that needs approval waits for a parent instead, and the response returns pending_approval true.",
+      "fields": {
+        "task_id": {
+          "name": "Task ID",
+          "description": "The ID of the task to complete"
+        },
+        "completed_by": {
+          "name": "Done by",
+          "description": "The Hopla user ID of the member who did the task (optional)"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
+    },
+    "create_task": {
+      "name": "Create task",
+      "description": "Create a Hopla task. Parents only.",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "The name of the task"
+        },
+        "description": {
+          "name": "Description",
+          "description": "Task description (optional)"
+        },
+        "due_date": {
+          "name": "Due date",
+          "description": "Due date in RFC 3339 format (optional, for example 2026-07-28T18:00:00Z)"
+        },
+        "created_by": {
+          "name": "Created by",
+          "description": "The Hopla user ID of the member who created the task (optional)"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
+    },
+    "update_task": {
+      "name": "Update task",
+      "description": "Update a Hopla task. Archived tasks stay archived unless Reactivate is on. Parents only.",
+      "fields": {
+        "task_id": {
+          "name": "Task ID",
+          "description": "The ID of the task to update"
+        },
+        "name": {
+          "name": "Name",
+          "description": "The new name of the task (optional)"
+        },
+        "description": {
+          "name": "Description",
+          "description": "The new description (optional, an empty text clears it)"
+        },
+        "due_date": {
+          "name": "Due date",
+          "description": "The new due date in RFC 3339 format (optional, for example 2026-07-28T18:00:00Z)"
+        },
+        "force_unarchive": {
+          "name": "Reactivate",
+          "description": "Reactivate the task if it is archived (optional, off by default)"
+        },
+        "assigned_to": {
+          "name": "Assigned to",
+          "description": "The Hopla user ID of an eligible member, or null in YAML for anyone"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
+    },
+    "skip_task": {
+      "name": "Skip task",
+      "description": "Skip a recurring task to its next occurrence without recording a completion. Parents only.",
+      "fields": {
+        "task_id": {
+          "name": "Task ID",
+          "description": "The ID of the task to skip"
+        },
+        "completed_by": {
+          "name": "Skipped by",
+          "description": "The Hopla user ID to record the skip for (optional)"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
+    },
+    "delete_task": {
+      "name": "Delete task",
+      "description": "Delete a Hopla task. Parents only.",
+      "fields": {
+        "task_id": {
+          "name": "Task ID",
+          "description": "The ID of the task to delete"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
+    },
+    "complete_assigned_task": {
+      "name": "Complete as the assigned member",
+      "description": "Complete a task for its current assignee, or for the API token owner when anyone can do it.",
+      "fields": {
+        "task_id": {
+          "name": "Task ID",
+          "description": "The ID of the task to complete"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
+    },
+    "postpone_task": {
+      "name": "Move to next occurrence",
+      "description": "Move a task to its next scheduled occurrence without completing it. Parents only.",
+      "fields": {
+        "task_id": {
+          "name": "Task ID",
+          "description": "The ID of the task to move"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
+    },
+    "approve_task": {
+      "name": "Approve task",
+      "description": "Approve a completion waiting for approval. The task is completed and its points go to the member who did it. Parents only.",
+      "fields": {
+        "task_id": {
+          "name": "Task ID",
+          "description": "The ID of the task waiting for approval"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
+    },
+    "reject_task": {
+      "name": "Reject task",
+      "description": "Reject a completion waiting for approval. No points are given and the task is due again. Parents only.",
+      "fields": {
+        "task_id": {
+          "name": "Task ID",
+          "description": "The ID of the task waiting for approval"
+        },
+        "note": {
+          "name": "Note",
+          "description": "Why the completion was rejected (optional)"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
+    },
+    "redeem_reward": {
+      "name": "Redeem reward",
+      "description": "Spend a member's points on a reward. From a parent it is approved at once; from anyone else, such as the family tablet, it becomes a request for a parent to approve.",
+      "fields": {
+        "reward_id": {
+          "name": "Reward ID",
+          "description": "The ID of the reward (see the rewards sensor)"
+        },
+        "user_id": {
+          "name": "Member",
+          "description": "The Hopla user ID whose points are spent (optional, the API token owner by default)"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
+    },
+    "approve_reward": {
+      "name": "Approve reward request",
+      "description": "Approve a member's reward request and spend their points. Parents only.",
+      "fields": {
+        "redemption_id": {
+          "name": "Request ID",
+          "description": "The ID of the request (see the requests of the rewards sensor)"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
+    },
+    "reject_reward": {
+      "name": "Reject reward request",
+      "description": "Reject a member's reward request. No points are spent. Parents only.",
+      "fields": {
+        "redemption_id": {
+          "name": "Request ID",
+          "description": "The ID of the request (see the requests of the rewards sensor)"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
+    },
+    "unlock_parent_mode": {
+      "name": "Open parent mode",
+      "description": "Open parent mode for two minutes with the four-digit parent code, for example on the family tablet.",
+      "fields": {
+        "pin": {
+          "name": "Parent code",
+          "description": "The four-digit code set in the integration options"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
+    },
+    "lock_parent_mode": {
+      "name": "Close parent mode",
+      "description": "Close parent mode before the two minutes are up.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
+    },
+    "adjust_points": {
+      "name": "Bonus or penalty",
+      "description": "Give a member extra points, or take some away. Only for parents. A penalty never takes the balance below zero and never lowers the points earned that ranks are built on.",
+      "fields": {
+        "user_id": {
+          "name": "Member",
+          "description": "The Hopla ID of the member"
+        },
+        "points": {
+          "name": "Points",
+          "description": "Positive for a bonus, negative for a penalty (leave empty with a preset)"
+        },
+        "preset_id": {
+          "name": "Preset",
+          "description": "The ID of a bonus or penalty preset (see the bonuses and penalties sensor), instead of points"
+        },
+        "reason": {
+          "name": "Reason",
+          "description": "Why, shown in the points history (optional, the preset name by default)"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
         }
       }
     }

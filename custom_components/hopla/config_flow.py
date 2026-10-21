@@ -9,9 +9,16 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.selector import (
+    SelectSelector, SelectSelectorConfig, SelectSelectorMode,
+    TextSelector, TextSelectorConfig, TextSelectorType,
+)
 
-from .const import DOMAIN, CONF_URL, CONF_TOKEN, CONF_SHOW_DUE_IN, CONF_SHOW_NO_DUE_DATE, CONF_CREATE_PROJECT_LISTS, CONF_CREATE_UNIFIED_LIST, CONF_CREATE_ASSIGNEE_LISTS
+from .const import (DOMAIN, CONF_URL, CONF_TOKEN, CONF_SHOW_DUE_IN, CONF_SHOW_NO_DUE_DATE, CONF_CREATE_PROJECT_LISTS,
+                    CONF_CREATE_UNIFIED_LIST, CONF_CREATE_ASSIGNEE_LISTS, CONF_PARENT_USERS, CONF_PARENT_PIN,
+                    CONF_PARENT_PIN_HASH, CONF_PARENT_PIN_SALT)
 from .api import HoplaApiClient
+from .parental import hash_pin, valid_pin
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -105,8 +112,18 @@ class HoplaOptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Manage the options."""
-        if user_input is not None:
+        errors = {}
+        pin = (user_input or {}).get(CONF_PARENT_PIN) or ""
+        if pin and not valid_pin(pin):
+            errors[CONF_PARENT_PIN] = "invalid_pin"
+        if user_input is not None and not errors:
+            # A blank code keeps the current one; only its hash is stored.
+            pin_hash, pin_salt = hash_pin(pin) if pin else (
+                self.entry.data.get(CONF_PARENT_PIN_HASH), self.entry.data.get(CONF_PARENT_PIN_SALT))
             data = {
+                CONF_PARENT_USERS: user_input.get(CONF_PARENT_USERS, []),
+                CONF_PARENT_PIN_HASH: pin_hash,
+                CONF_PARENT_PIN_SALT: pin_salt,
                 CONF_URL: self.entry.data.get(CONF_URL),
                 CONF_TOKEN: self.entry.data.get(CONF_TOKEN),
                 CONF_SHOW_DUE_IN: user_input.get(CONF_SHOW_DUE_IN, 7),
@@ -127,11 +144,20 @@ class HoplaOptionsFlowHandler(config_entries.OptionsFlow):
             self.async_abort(reason="configuration updated")
             return self.async_create_entry(title="", data={})
 
-        # No additional data needed for display
+        users = [user for user in await self.hass.auth.async_get_users()
+                 if user.is_active and not user.system_generated]
+        user_options = [{"value": user.id, "label": user.name or user.id} for user in users]
 
         return self.async_show_form(
             step_id="init",
+            errors=errors,
             data_schema=vol.Schema({
+                vol.Optional(
+                    CONF_PARENT_USERS,
+                    default=self.entry.data.get(CONF_PARENT_USERS, []),
+                ): SelectSelector(SelectSelectorConfig(
+                    options=user_options, multiple=True, mode=SelectSelectorMode.LIST)),
+                vol.Optional(CONF_PARENT_PIN): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD)),
                 vol.Optional(
                     CONF_SHOW_DUE_IN,
                     default=self.entry.data.get(CONF_SHOW_DUE_IN, 7)

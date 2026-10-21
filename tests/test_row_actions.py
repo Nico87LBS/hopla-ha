@@ -51,7 +51,7 @@ class RowActionTests(unittest.IsolatedAsyncioTestCase):
         async def refresh():
             self.calls.append(('refresh',))
         namespace = dict(HomeAssistant=object, ServiceCall=object, HomeAssistantError=ValueError,
-                         DOMAIN='hopla', _get_config_entry=resolve)
+                         DOMAIN='hopla', _get_config_entry=resolve, require_parent=lambda config, call: None)
         exec(compile(ast.Module(body=[action], type_ignores=[]), str(source), 'exec'), namespace)
         self.action = namespace['async_task_row_action']
         self.hass = SimpleNamespace(data={'hopla': {'entry': {
