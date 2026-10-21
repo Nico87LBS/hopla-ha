@@ -149,6 +149,33 @@ Pour importer un blueprint : **Paramètres** → **Automatisations et scènes** 
   Refuser pour chaque tâche à valider et chaque demande de récompense. Elle
   disparaît dès que la demande est traitée, où que ce soit.
 
+## Mises à jour
+
+Chaque nouvelle version de l'intégration est publiée comme une *release* GitHub.
+HACS la voit et crée une entité de mise à jour, `update.hopla_update`. Home
+Assistant l'affiche alors dans **Paramètres**, avec un badge, et on l'installe
+d'une touche, puis on redémarre.
+
+Pour être prévenu sur ton téléphone, une automatisation sur cette entité suffit :
+
+```yaml
+alias: Hopla - mise à jour disponible
+triggers:
+  - trigger: state
+    entity_id: update.hopla_update
+    to: "on"
+actions:
+  - action: notify.mobile_app_ton_telephone
+    data:
+      title: "Mise à jour de Hopla"
+      message: >-
+        La version {{ state_attr('update.hopla_update', 'latest_version') }} est disponible
+        (installée : {{ state_attr('update.hopla_update', 'installed_version') }}).
+```
+
+L'icône de l'intégration est fournie dans `custom_components/hopla/brand/`.
+Home Assistant l'affiche à partir de la version 2026.3.
+
 ## Sécurité de la tablette
 
 Pour une tablette que toute la famille utilise, crée dans Home Assistant un
