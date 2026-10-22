@@ -74,7 +74,7 @@ export default {
     rank_goal_other: '{count} more points to become {name}',
     rank_got: 'reached',
     rank_here: 'here',
-    rank_explain: 'Ranks count the points earned: spending points on a reward never makes anyone drop. After the last rank comes a ⭐ star, and it starts again from the first rank.',
+    rank_explain: 'Ranks count the points earned: spending points on a reward never makes anyone drop, a penalty can. After the last rank comes a ⭐ star, and it starts again from the first rank.',
     earned_one: 'pt earned',
     earned_other: 'pts earned',
     close: 'Close',
