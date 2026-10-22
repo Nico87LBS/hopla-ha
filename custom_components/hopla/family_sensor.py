@@ -57,27 +57,32 @@ async def async_setup_family_sensors(
     coordinator = config["coordinator"]
     members: list[HoplaMember] = config["circle_members"]
 
-    entities: list[SensorEntity] = [HoplaPendingApprovalSensor(coordinator, config_entry)]
-    if coordinator.rewards is not None:
-        entities.append(HoplaRewardsSensor(coordinator, config_entry))
-    if coordinator.points_presets is not None:
-        entities.append(HoplaBonusSensor(coordinator, config_entry))
-    if coordinator.games_today is not None:
-        entities.append(HoplaGamesSensor(coordinator, config_entry))
+    async_add_entities([HoplaPendingApprovalSensor(coordinator, config_entry)])
 
     known: set[int] = set()
+    # The rewards, bonus and games sensors appear once Hopla first answers for
+    # them, which may be after setup if the server was unreachable or still
+    # starting then.
+    optional = {
+        "rewards": HoplaRewardsSensor,
+        "points_presets": HoplaBonusSensor,
+        "games_today": HoplaGamesSensor,
+    }
 
     @callback
-    def _add_new_members() -> None:
-        new = [HoplaPointsSensor(coordinator, config_entry, member.user_id)
-               for member in members if member.is_active and member.user_id not in known]
+    def _add_new_sensors() -> None:
+        new: list[SensorEntity] = [HoplaPointsSensor(coordinator, config_entry, member.user_id)
+                                   for member in members if member.is_active and member.user_id not in known]
         known.update(sensor.user_id for sensor in new)
+        for attribute, sensor_class in list(optional.items()):
+            if getattr(coordinator, attribute, None) is not None:
+                new.append(sensor_class(coordinator, config_entry))
+                del optional[attribute]
         if new:
             async_add_entities(new)
 
-    async_add_entities(entities)
-    _add_new_members()
-    coordinator.async_add_listener(_add_new_members)
+    _add_new_sensors()
+    config_entry.async_on_unload(coordinator.async_add_listener(_add_new_sensors))
 
 
 class _FamilySensor(CoordinatorEntity, SensorEntity):
