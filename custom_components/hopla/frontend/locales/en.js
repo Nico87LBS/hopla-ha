@@ -59,8 +59,6 @@ export default {
     rank_next_one: '{count} more point to {name}',
     rank_next_other: '{count} more points to {name}',
     rank_top: 'Top rank reached',
-    to_spend_one: '{count} pt to spend',
-    to_spend_other: '{count} pts to spend',
     rank_star_one: '{count} more point to a ⭐ star',
     rank_star_other: '{count} more points to a ⭐ star',
     rank_open: 'See {name}’s rank',

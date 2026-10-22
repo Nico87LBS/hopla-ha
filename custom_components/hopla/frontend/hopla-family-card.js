@@ -351,18 +351,13 @@ class HoplaFamilyCard extends HTMLElement {
     const step = (group, rank) => {
       const size = rank === 0 ? 76 : 60;
       const faces = group.length
-        ? group.map(m => `<div class="podium-member">${rank === 0 && podiumScore(m) > 0 ? `<span class="crown">${svg('crown', 30)}</span>` : ''}<span class="podium-face">${this.face(m, size, rank === 0 && podiumScore(m) > 0 ? ' leader' : '')}${this.coin(m)}</span><div class="podium-name">${escape(m.name)}${this.streak(m)}</div>${this.rank(m)}</div>`).join('')
+        ? group.map(m => `<div class="podium-member">${rank === 0 && podiumScore(m) > 0 ? `<span class="crown">${svg('crown', 30)}</span>` : ''}<span class="podium-face">${this.face(m, size, rank === 0 && podiumScore(m) > 0 ? ' leader' : '')}</span><div class="podium-name">${escape(m.name)}${this.streak(m)}</div>${this.rank(m)}</div>`).join('')
         : `<div class="podium-member"><span class="face empty" style="width:${size}px;height:${size}px"></span><div class="podium-name">&nbsp;</div></div>`;
       const score = group.length ? `<span class="score">${podiumScore(group[0])}</span><span class="unit">${escape(this.t('earned', {count: podiumScore(group[0])}))}</span>` : '';
       return `<div class="podium-col rank${rank + 1}"><div class="podium-faces">${faces}</div><div class="step">${score}</div></div>`;
     };
     const order = [[0], [1, 0], [1, 0, 2]][steps.length - 1];
     return `<div class="podium steps${steps.length}">${order.map(rank => step(steps[rank], rank)).join('')}</div>`;
-  }
-  // The points left to spend, as a pastille on the face.
-  coin(member) {
-    const label = this.t('to_spend', {count: member.points});
-    return `<span class="coin" title="${escape(label)}" aria-label="${escape(label)}">${svg('star', 12)}${member.points}</span>`;
   }
   streak(member) {
     if (!member.streak) return '';
@@ -576,9 +571,6 @@ class HoplaFamilyCard extends HTMLElement {
       .podium-member { display: flex; flex-direction: column; align-items: center; }
       .crown { line-height: 0; margin-bottom: 2px; }
       .podium-face { position: relative; line-height: 0; }
-      .coin { position: absolute; right: -10px; bottom: -4px; display: inline-flex; align-items: center; gap: 2px; padding: 2px 7px 2px 5px; border-radius: 999px;
-        background: #fff4cc; color: #8a5d00; font-size: 13px; font-weight: 800; line-height: 1.2; border: 2px solid var(--card-background-color, #fff); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
-      .coin svg { color: var(--dt-gold); }
       .podium-name { margin-top: 6px; font-weight: 700; font-size: 16px; display: flex; align-items: center; gap: 6px; }
       .step { width: 100%; margin-top: 10px; border-radius: 14px 14px 0 0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 800; }
       .step .score { font-size: 24px; line-height: 1; }
