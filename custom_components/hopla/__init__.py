@@ -5,7 +5,7 @@ import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse, callback
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_call_later, async_track_point_in_utc_time
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -24,8 +24,7 @@ from .parental import (ParentGuard, ParentModeError, RewardRequestTracker, pendi
                        PARENT_MODE_DURATION)
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS = [Platform.TODO, Platform.SENSOR, Platform.SWITCH, Platform.NUMBER, Platform.TEXT, Platform.CALENDAR,
-             Platform.BINARY_SENSOR]
+PLATFORMS = [Platform.TODO, Platform.SENSOR, Platform.CALENDAR, Platform.BINARY_SENSOR]
 
 EVENT_TASK_COMPLETED = "hopla_task_completed"
 
@@ -148,9 +147,19 @@ def require_parent(config: dict, call: ServiceCall) -> None:
     except ParentModeError as err:
         raise _parent_error(err) from err
 
+@callback
+def _remove_thing_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove the entities of Hopla objects (things), which no longer exist."""
+    registry = er.async_get(hass)
+    for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if (entity.unique_id or "").startswith("hopla_thing_"):
+            registry.async_remove(entity.entity_id)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Hopla from a config entry."""
     hass.data.setdefault(DOMAIN, {})
+    _remove_thing_entities(hass, entry)
     await async_setup_frontend(hass)
 
     session = async_get_clientsession(hass)

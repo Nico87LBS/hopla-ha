@@ -31,8 +31,6 @@ class TaskReassignmentTests(unittest.IsolatedAsyncioTestCase):
             "description": "Keep this", "priority": 2, "points": 4, "requireApproval": True,
             "notification": True, "notificationMetadata": {"templates": [{"value": 1, "unit": "h"}]},
             "labelsV2": [{"id": 8, "name": "Home"}, {"id": 10, "name": "Weekly"}], "subTasks": [{"id": 9, "name": "Step"}],
-            "completionActions": [{"type": "test"}],
-            "thingChore": {"thingId": 6, "triggerState": "on", "condition": "eq"},
         }
         self.requests = []
         self.put_response = Response({}, status=200)
@@ -57,7 +55,6 @@ class TaskReassignmentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["assignStrategy"], "no_assignee")
         self.assertEqual(payload["assignees"], [])
         self.assertEqual(payload["labelsV2"], [{"id": 8}, {"id": 10}])
-        self.assertEqual(payload["thingTrigger"], {"thingID": 6, "triggerState": "on", "condition": "eq"})
         for key, value in original.items():
             if key not in ("assignedTo", "assignStrategy", "assignees", "labelsV2"):
                 self.assertEqual(payload[key], value, key)

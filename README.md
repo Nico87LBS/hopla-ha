@@ -47,7 +47,6 @@ renommer ensuite ; les cartes Hopla retrouvent leurs capteurs sans dépendre du 
 | `sensor.hopla_bonus_et_penalites` | Nombre de préréglages | Les bonus et pénalités tout prêts, et les derniers mouvements de points |
 | `sensor.hopla_jeux_du_jour` | Nom de la tâche surprise du jour | La période bonus en cours et les défis |
 | `binary_sensor.hopla_mode_parent` | Allumé si le mode parent est ouvert | La sécurité de la tablette (voir plus bas) |
-| `switch`, `number`, `text` ou `sensor.hopla_things_<objet>` | La valeur de l'objet | Les « objets » Hopla : oui/non, nombre ou texte |
 
 ### Capteur de points d'un membre
 
@@ -223,6 +222,24 @@ Sans parent choisi, rien ne change : tout le monde garde tous les droits.
 Pour réactiver une tâche archivée avec `hopla.update_task`, mets
 `force_unarchive: true`. Pour l'assigner, donne `assigned_to` avec l'ID Hopla d'un
 membre, ou `null` pour n'importe qui.
+
+### Rendre une tâche à faire quand un état change
+
+Prépare la tâche dans Hopla (points, personne, répétition « Déclenchée de
+l'extérieur » si elle ne doit revenir que sur demande), puis donne-lui une
+échéance depuis une automatisation :
+
+```yaml
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.lave_vaisselle_termine
+    to: "on"
+actions:
+  - action: hopla.update_task
+    data:
+      task_id: 42
+      due_date: "{{ now().isoformat() }}"
+```
 
 ## Cartes
 
