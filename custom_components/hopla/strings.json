@@ -348,7 +348,7 @@
     },
     "adjust_points": {
       "name": "Bonus or penalty",
-      "description": "Give a member extra points, or take some away. Only for parents. A penalty never takes the balance below zero and never lowers the points earned that ranks are built on.",
+      "description": "Give a member extra points, or take some away. Only for parents. A penalty lowers the points earned, and so the rank, but never takes the balance below zero.",
       "fields": {
         "user_id": {
           "name": "Member",

@@ -57,12 +57,12 @@ dépenser.
 | Attribut | Contenu |
 | --- | --- |
 | `hopla_member_id`, `display_name`, `username`, `role` | Qui est ce membre |
-| `total_points` | Points gagnés depuis le début (c'est ce qui fixe le rang) |
-| `points_redeemed` | Points dépensés en récompenses ou perdus en pénalités |
+| `total_points` | Points gagnés depuis le début, moins les pénalités (c'est ce qui fixe le rang) |
+| `points_redeemed` | Points dépensés en récompenses |
 | `rank`, `rank_icon`, `rank_level` | Rang actuel, par exemple `Petit bondisseur`, `🌱`, `2` |
 | `rank_image`, `next_rank_image` | Badge dessiné du rang actuel et du suivant (`hopla-1` à `hopla-7`), vide si le rang n'en a pas. La carte famille l'affiche à la place de l'emoji |
 | `rank_points`, `next_rank`, `next_rank_icon`, `next_rank_points` | Points du rang actuel, et rang suivant avec les points qu'il demande (vide au dernier rang) |
-| `rank_stars` | Étoiles de prestige ⭐ : une de plus à chaque tour complet des rangs, gardées pour toujours |
+| `rank_stars` | Étoiles de prestige ⭐ : une de plus à chaque tour complet des rangs |
 | `rank_round_points`, `next_star_points` | Points gagnés dans le tour en cours, et points du tour qui donnent l'étoile suivante |
 | `streak`, `best_streak`, `streak_done_today` | Série : jours d'affilée avec au moins une tâche faite, record, et si aujourd'hui compte déjà |
 | `quests` | Quêtes en cours : `name`, `progress`, `target`, `reward`, `done`, `period` (`week` ou `month`), `ends_at` |
@@ -216,7 +216,7 @@ Sans parent choisi, rien ne change : tout le monde garde tous les droits.
 | `hopla.approve_reward` / `hopla.reject_reward` | Valider ou refuser une demande de récompense (`redemption_id`) | ✓ |
 | `hopla.create_task`, `hopla.update_task`, `hopla.delete_task` | Créer, modifier, supprimer une tâche | ✓ |
 | `hopla.skip_task`, `hopla.postpone_task` | Passer une tâche à sa prochaine occurrence | ✓ |
-| `hopla.adjust_points` | Donner un bonus ou une pénalité à un membre (`user_id`), avec `points` (négatif pour une pénalité) ou un préréglage (`preset_id`), et une raison (`reason`) si tu veux. Une pénalité ne fait jamais passer le solde sous zéro | ✓ |
+| `hopla.adjust_points` | Donner un bonus ou une pénalité à un membre (`user_id`), avec `points` (négatif pour une pénalité) ou un préréglage (`preset_id`), et une raison (`reason`) si tu veux. Une pénalité baisse les points gagnés, donc le rang et le podium, sans jamais faire passer le solde sous zéro | ✓ |
 | `hopla.unlock_parent_mode` | Ouvrir le mode parent pour deux minutes avec le code (`pin`) | |
 | `hopla.lock_parent_mode` | Refermer le mode parent | |
 

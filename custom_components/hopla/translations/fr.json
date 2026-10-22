@@ -348,7 +348,7 @@
     },
     "adjust_points": {
       "name": "Bonus ou pénalité",
-      "description": "Donne des points en plus à un membre, ou retire-lui-en. Réservé aux parents. Une pénalité ne fait jamais passer le solde sous zéro et ne baisse jamais les points gagnés sur lesquels reposent les rangs.",
+      "description": "Donne des points en plus à un membre, ou retire-lui-en. Réservé aux parents. Une pénalité baisse les points gagnés, donc le rang, mais ne fait jamais passer le solde sous zéro.",
       "fields": {
         "user_id": {
           "name": "Membre",

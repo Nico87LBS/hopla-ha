@@ -74,7 +74,7 @@ export default {
     rank_goal_other: 'Plus que {count} pts pour devenir {name}',
     rank_got: 'obtenu',
     rank_here: 'ici',
-    rank_explain: 'Les rangs comptent les points gagnés : dépenser ses points pour une récompense ne fait pas descendre. Après le dernier rang, on gagne une ⭐ et on repart du premier.',
+    rank_explain: 'Les rangs comptent les points gagnés : dépenser ses points pour une récompense ne fait pas descendre, une pénalité si. Après le dernier rang, on gagne une ⭐ et on repart du premier.',
     earned_one: 'pt gagné',
     earned_other: 'pts gagnés',
     close: 'Fermer',
