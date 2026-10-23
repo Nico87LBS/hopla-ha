@@ -167,6 +167,15 @@ const together = task => task.assign_strategy === 'together';
 export function isTaskFor(task, userId) {
   return together(task) ? (task.assignee_ids || []).includes(userId) : task.assigned_to === userId;
 }
+// How a task shared by several people works: a copy each (another task with
+// the same name), the first one to do it does it for all, or one at a time.
+export function taskMode(task, tasks) {
+  const name = String(task.name ?? '').trim().toLowerCase();
+  if (tasks.some(other => other.task_id !== task.task_id && String(other.name ?? '').trim().toLowerCase() === name)) return 'each';
+  if (together(task)) return 'first';
+  return (task.assignee_ids || []).length > 1 ? 'one' : '';
+}
+const MODE_ICONS = {each: 'mdi:account-multiple', first: 'mdi:lightning-bolt', one: 'mdi:account'};
 export function actionData(state, task) {
   const data = {task_id: task.task_id, config_entry_id: state.attributes.config_entry_id};
   return data;
@@ -338,6 +347,8 @@ class HoplaUserTodoCard extends HTMLElement {
       .due { display:flex; align-items:center; gap:4px; }
       .task-points { display:inline-flex; align-items:center; gap:3px; flex-shrink:0; padding:0 5px; border-radius:10px; background:var(--secondary-background-color); color:var(--secondary-text-color); font-size:11px; line-height:18px; }
       .task-points ha-icon { --mdc-icon-size:12px; }
+      .task-mode { display:flex; align-items:center; gap:4px; font-size:12px; font-weight:600; line-height:16px; } .task-mode ha-icon { --mdc-icon-size:14px; }
+      .task-mode.each { color:#3b6fd8; } .task-mode.first { color:#e8590c; } .task-mode.one { color:var(--secondary-text-color); }
       .task-recurrence { display:flex; align-items:center; gap:4px; color:var(--secondary-text-color); font-size:12px; line-height:16px; }
       .task-recurrence ha-icon { --mdc-icon-size:14px; flex-shrink:0; }
       .due .recurring, .due .due-clock { --mdc-icon-size:14px; flex-shrink:0; }
@@ -443,6 +454,12 @@ class HoplaUserTodoCard extends HTMLElement {
         const assignee = state.attributes.circle_members.find(member => member.user_id === task.assigned_to);
         const name = assignee?.display_name || assignee?.username || (task.assigned_to ? t('common.user', {id: task.assigned_to}) : t('common.anyone'));
         const label = addText(dueLabel, 'span', `· ${name}`, 'assignee'); label.title = t('todo.assigned_to', {name});
+      }
+      const mode = taskMode(task, [...(state.attributes.tasks || []), ...(state.attributes.anyone_tasks || [])]);
+      if (mode) {
+        const label = addText(text, 'span', t(`common.mode_${mode}`), `task-mode ${mode}`);
+        const icon = document.createElement('ha-icon'); icon.setAttribute('icon', MODE_ICONS[mode]);
+        icon.setAttribute('aria-hidden', 'true'); label.prepend(icon);
       }
       if (recurrence) {
         const label = addText(text, 'span', recurrence, 'task-recurrence'); label.title = recurrence;

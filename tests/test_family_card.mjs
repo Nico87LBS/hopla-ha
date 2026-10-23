@@ -224,3 +224,12 @@ const heads = Object.fromEntries(boardData(headsStates, {due: 'all'}, now).tasks
 assert.deepEqual(heads[40], [3]);
 assert.deepEqual(heads[41], [2, 3]);
 console.log('family card shows who has the task now');
+
+const modeStates = {states: {...headsStates.states,
+  'sensor.bed_elena': task(42, 'Faire son lit', {assigned_to_user_id: 2, assignee_ids: [2]}),
+  'sensor.bed_anna': task(43, ' faire son LIT', {assigned_to_user_id: 3, assignee_ids: [3]}),
+  'sensor.read': task(44, 'Lire', {assigned_to_user_id: 3, assignee_ids: [3]}),
+}};
+const modes = Object.fromEntries(boardData(modeStates, {due: 'all'}, now).rows.map(row => [row.key, row.mode]));
+assert.deepEqual(modes, {vaisselle: 'one', ranger: 'first', 'faire son lit': 'each', lire: ''});
+console.log('family card shows how a task shared by several people works');
