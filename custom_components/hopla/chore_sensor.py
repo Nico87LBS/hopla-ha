@@ -12,7 +12,7 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
 )
 
-from .approval import STATUS_PENDING_APPROVAL
+from .approval import STATUS_PENDING_APPROVAL, slot_attributes
 from .const import DOMAIN
 from .model import HoplaMember, HoplaTask
 
@@ -147,8 +147,10 @@ class HoplaChoreSensor(CoordinatorEntity, SensorEntity):
             "is_active": task.is_active,
             "description": task.description,
             "status": task.status,
-            "pending_approval": task.status == STATUS_PENDING_APPROVAL,
+            "pending_approval": task.status == STATUS_PENDING_APPROVAL
+            or any(slot.get("state") == "pending" for slot in task.slots_today or []),
             "assignee_ids": task.assignee_ids or [],
+            "slots_today": slot_attributes(task.slots_today),
         }
         return attrs
 

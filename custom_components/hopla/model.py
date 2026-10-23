@@ -177,6 +177,13 @@ class HoplaTask:
     notification: bool = False
     # Reminder offsets from the due date: [{"value": -30, "unit": "m"}, ...]
     reminder_templates: Optional[List[dict]] = None
+    # For a task done several times a day: today's slots and their state.
+    slots_today: Optional[List[dict]] = None
+
+    @property
+    def has_slots(self) -> bool:
+        """Return True when the task is done several times a day."""
+        return isinstance(self.frequency_metadata, dict) and bool(self.frequency_metadata.get("slots"))
 
     @property
     def interval_type(self) -> Optional[str]:
@@ -228,6 +235,7 @@ class HoplaTask:
             points=data.get("points"),
             notification=bool(data.get("notification")),
             reminder_templates=cls.reminder_templates_from(data.get("notificationMetadata")),
+            slots_today=[slot for slot in data.get("slotsToday") or [] if isinstance(slot, dict)],
         )
     
     @classmethod

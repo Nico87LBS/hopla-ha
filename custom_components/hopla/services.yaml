@@ -138,6 +138,13 @@ approve_task:
         number:
           min: 1
           mode: box
+    slot:
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 5
+          mode: box
     config_entry_id:
       required: false
       selector:
@@ -149,6 +156,13 @@ reject_task:
       selector:
         number:
           min: 1
+          mode: box
+    slot:
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 5
           mode: box
     note:
       required: false
@@ -236,6 +250,31 @@ adjust_points:
       required: false
       selector:
         text:
+    config_entry_id:
+      required: false
+      selector:
+        text:
+catch_up_slot:
+  fields:
+    task_id:
+      required: true
+      selector:
+        number:
+          min: 1
+          mode: box
+    slot:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 5
+          mode: box
+    completed_by:
+      required: false
+      selector:
+        number:
+          min: 1
+          mode: box
     config_entry_id:
       required: false
       selector:

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 globalThis.HTMLElement = class {};
 globalThis.customElements = {define() {}, get() {}, whenDefined() { return Promise.resolve(); }};
 globalThis.window = {};
-const {boardData, labelNames, parentAccess, podium, rewardState, taskRows} = await import('../custom_components/hopla/frontend/hopla-family-card.js');
+const {boardData, labelNames, liveSlot, parentAccess, podium, rewardState, taskRows} = await import('../custom_components/hopla/frontend/hopla-family-card.js');
 
 assert.deepEqual(labelNames([{name: 'Enfants '}, 'Maison', {name: ''}, null]), ['enfants', 'maison']);
 assert.deepEqual(labelNames('a, b'), ['a', 'b']);
@@ -175,3 +175,28 @@ assert.equal(withBadge('../evil'), null);
 assert.deepEqual(elenaProgress.quests, [quest]);
 assert.equal(progress.members.find(m => m.id === 3).rank, null);
 assert.deepEqual(progress.challenges.map(c => c.id), [1], 'ended challenges and other members’ ones are left out');
+
+// Tasks done several times a day: each child's copy brings today's slots.
+const slot = (index, name, opens, closes, state, extra = {}) => ({index, name, time: `${String(opens + 1).padStart(2, '0')}:00`,
+  at: `2026-10-20T${String(opens + 1).padStart(2, '0')}:00:00+02:00`, opens_at: `2026-10-20T${String(opens).padStart(2, '0')}:00:00+02:00`,
+  closes_at: `2026-10-20T${String(closes).padStart(2, '0')}:00:00+02:00`, state, ...extra});
+assert.equal(liveSlot(slot(0, 'Matin', 6, 10, 'open'), now).state, 'missed', 'closed since the last refresh');
+assert.equal(liveSlot(slot(1, 'Midi', 11, 18, 'upcoming'), now).state, 'open', 'opened since the last refresh');
+assert.equal(liveSlot(slot(1, 'Midi', 11, 18, 'pending'), now).state, 'pending');
+const slotted = (id, member, slots) => task(id, 'Dents', {assignee_ids: [member], points: 2, slots_today: slots,
+  pending_approval: slots.some(s => s.state === 'pending')});
+const withSlots = {states: {...hass.states,
+  'sensor.dents': slotted(12, 2, [slot(0, 'Matin', 6, 10, 'done', {completed_by: 2}), slot(1, 'Midi', 11, 18, 'pending', {completed_by: 2}), slot(2, 'Soir', 18, 23, 'upcoming')]),
+  'sensor.dents_anna': slotted(17, 3, [slot(0, 'Matin', 6, 10, 'open'), slot(1, 'Midi', 11, 18, 'open'), slot(2, 'Soir', 18, 23, 'upcoming')]),
+  'sensor.dents_hier': slotted(18, 2, [{...slot(0, 'Matin', 6, 10, 'done'), at: '2026-10-19T07:00:00+02:00'}])}};
+data = boardData(withSlots, {due: 'all', members: [2, 3]}, now);
+const dentsRow = data.rows.find(r => r.key === 'dents');
+assert.equal(dentsRow.slotted, true);
+assert.deepEqual(dentsRow.columns.map(c => c.name), ['Matin', 'Midi', 'Soir']);
+assert.deepEqual(dentsRow.slots.map(e => `${e.member.name}:${e.slots.map(s => s.state).join(',')}`),
+  ['Elena:done,pending,upcoming', 'Anna:missed,open,upcoming'], 'one ring per child, states as of now');
+assert.equal(dentsRow.pending, true);
+assert.deepEqual(data.tasks.find(t => t.id === 18).slots, [], "another day's slots wait for the next refresh");
+assert.equal(data.tasks.find(t => t.id === 12).completedBy, null, 'slots carry their own completer');
+console.log('family card slot tests passed');
+

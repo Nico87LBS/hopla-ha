@@ -42,6 +42,23 @@ export function podium(members) {
 
 const sameName = name => String(name ?? '').trim().toLowerCase();
 
+// A task done several times a day has slots. Between two refreshes, the state
+// that only depends on the time moves on: upcoming, open now, then missed once
+// closed. Done and waiting slots keep theirs.
+export function liveSlot(slot, now = new Date()) {
+  if (!['upcoming', 'open', 'missed'].includes(slot.state)) return slot;
+  const state = now < new Date(slot.opens_at) ? 'upcoming' : now < new Date(slot.closes_at) ? 'open' : 'missed';
+  return {...slot, state};
+}
+
+// Today's slots of a task, as of now; another day's (a board left open
+// overnight) wait for the next refresh.
+export function todaySlots(slots, now = new Date()) {
+  return (Array.isArray(slots) ? slots : []).filter(slot => slot.at && sameDay(new Date(slot.at), now)).map(slot => liveSlot(slot, now));
+}
+
+const slotNow = (slot, now = new Date()) => new Date(slot.opens_at) <= now && now < new Date(slot.closes_at);
+
 // One row per task name, so a task created once per child reads as one task:
 // each child's photo completes their own copy, and a child who already did it
 // today gets a check instead.
@@ -52,6 +69,15 @@ export function taskRows(tasks, done, members) {
     if (!row) rows.push(row = {key: sameName(task.name), name: task.name, points: task.points, due: task.due, tasks: [], slots: []});
     row.tasks.push(task);
     if (task.due && (!row.due || task.due < row.due)) row.due = task.due;
+    if (task.slots?.length) {
+      // Several times a day: each child's copy shows its slots on a ring.
+      row.slotted = true;
+      row.columns ??= task.slots;
+      for (const member of task.members) {
+        if (!row.slots.some(slot => slot.member.id === member.id)) row.slots.push({member, task, state: 'slots', slots: task.slots});
+      }
+      continue;
+    }
     if (task.pending) {
       if (task.completedBy) row.slots.push({member: task.completedBy, task, state: 'pending'});
       else row.unknownPending = task;
@@ -63,6 +89,7 @@ export function taskRows(tasks, done, members) {
   }
   for (const row of rows) {
     for (const item of done) {
+      if (row.slotted) break;
       if (sameName(item.name) === row.key && !row.slots.some(slot => slot.member.id === item.member.id)) {
         row.slots.push({member: item.member, state: 'done'});
       }
@@ -142,7 +169,7 @@ export function boardData(hass, config, now = new Date()) {
       // The state is the bare task name; friendly_name may carry the device name.
       tasks.push({id: a.task_id, entity: id, name: state.state || a.friendly_name, points: a.points,
         due: a.next_due_date ? new Date(a.next_due_date) : null, labels: labelNames(a.labels),
-        assignees: a.assignee_ids || [], pending: a.pending_approval === true});
+        assignees: a.assignee_ids || [], pending: a.pending_approval === true, slots: a.slots_today || []});
     } else if (a.hopla_games) {
       surprise = a.surprise || null;
       period = a.bonus_period || null;
@@ -170,7 +197,9 @@ export function boardData(hass, config, now = new Date()) {
       // Every child's copy of the surprise task, same name, is worth the bonus.
       const isSurprise = surprise && (surprise.task_id === task.id || (surprise.task_ids || []).includes(task.id)
         || sameName(surprise.task_name) === sameName(task.name));
-      return {...task, members: candidates, surprise: isSurprise ? surprise.points : 0, completedBy: task.pending ? shown.find(m => m.id === completers.get(task.id)) || null : null};
+      const slots = todaySlots(task.slots, now);
+      return {...task, slots, members: candidates, surprise: isSurprise ? surprise.points : 0,
+        completedBy: task.pending && !slots.length ? shown.find(m => m.id === completers.get(task.id)) || null : null};
     })
     .filter(task => task.members.length || task.pending)
     .sort((a, b) => (a.due ?? Infinity) - (b.due ?? Infinity) || a.name.localeCompare(b.name));
@@ -198,7 +227,8 @@ const icon = {
   bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="currentColor"/>',
   trophy: '<path d="M7 3h10v5a5 5 0 0 1-10 0zM7 5H3v2a4 4 0 0 0 4 4M17 5h4v2a4 4 0 0 1-4 4M12 13v4M8 21h8M9 17h6v4H9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
   flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>',
-  hourglass: '<path d="M6 2h12M6 22h12M7 2c0 5 10 5 10 10S7 17 7 22M17 2c0 5-10 5-10 10s10 5 10 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+  hourglass: '<path d="M6 2h12M6 22h12M7 2v3.5a3 3 0 0 0 .9 2.1L12 12l4.1-4.4A3 3 0 0 0 17 5.5V2M7 22v-3.5a3 3 0 0 1 .9-2.1L12 12l4.1 4.4a3 3 0 0 1 .9 2.1V22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>',
+  replay: '<path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>',
   cross: '<path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>',
   unlock: '<rect x="5" y="11" width="14" height="10" rx="2" fill="currentColor"/><path d="M8 11V8a4 4 0 0 1 7.5-2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
   back: '<path d="M21 6H8l-6 6 6 6h13zM12 9l6 6M18 9l-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
@@ -272,7 +302,7 @@ class HoplaFamilyCard extends HTMLElement {
     if (event.target.classList?.contains('rank-scrim')) { this._rankFor = null; this.render(); return; }
     const button = event.target.closest('button[data-action]');
     if (!button || button.disabled) return;
-    const {action, task, member, reward, request, digit, preset} = button.dataset;
+    const {action, task, member, reward, request, digit, preset, slot, tasks} = button.dataset;
     if (action === 'parent') {
       const access = parentAccess(this._hass);
       if (access.unlocked) await this.call('lock_parent_mode', {config_entry_id: access.entryId}, 'parent', null);
@@ -308,6 +338,15 @@ class HoplaFamilyCard extends HTMLElement {
       if (response) this.flash(taskId, response.pending_approval ? this.t('submitted') : this.t('bravo'));
     } else if (action === 'approve' || action === 'reject') {
       await this.call(`${action}_task`, {task_id: Number(task)}, Number(task), null);
+    } else if (action === 'slot-approve' || action === 'slot-reject') {
+      await this.call(action === 'slot-approve' ? 'approve_task' : 'reject_task', {task_id: Number(task), slot: Number(slot)}, Number(task), null);
+    } else if (action === 'slot-catchup') {
+      await this.call('catch_up_slot', {task_id: Number(task), slot: Number(slot), completed_by: Number(member)}, Number(task), Number(member));
+    } else if (action === 'approve-all') {
+      // Each child's copy: approving the task approves its waiting slots.
+      for (const id of tasks.split(',').map(Number)) {
+        if (await this.call('approve_task', {task_id: id}, id, null) === null) break;
+      }
     } else if (action === 'bonus') {
       // Two touches, like redeeming: a parent's tap on the wrong face costs a child points.
       const key = `preset-${preset}-${member}`;
@@ -453,7 +492,76 @@ class HoplaFamilyCard extends HTMLElement {
     return `<div class="period">${svg('bolt', 18)}<span><b>${escape(this.t('period', {multiplier: period.multiplier}))}</b> · ${escape(period.name)}</span>
       <span class="period-end">${escape(this.t('period_left', {time: this.duration(end)}))}</span></div>`;
   }
+  // 7h30 in French, 7:30 otherwise.
+  slotTime(time) {
+    const [hour, minute] = String(time || '').split(':');
+    if (!minute) return time || '';
+    return this.t('slot_time', {h: Number(hour), hh: hour, m: minute});
+  }
+  slotLabel(slot) {
+    return [slot.name, this.slotTime(slot.time)].filter(Boolean).join(' ');
+  }
+  // The ring round a child's face: one arc per slot, coloured by its state.
+  ring(slots) {
+    const colors = {done: '#0EA5E9', pending: '#F59E0B', missed: '#E07A2E', open: '#BAE6FD', upcoming: '#D9D9D9'};
+    const circle = 2 * Math.PI * 29;
+    const part = circle / slots.length;
+    const gap = slots.length > 1 ? 8.7 : 0;
+    const arcs = slots.map((slot, i) => `<circle cx="32" cy="32" r="29" stroke="${colors[slot.state] || colors.upcoming}"
+      stroke-dasharray="${(part - gap).toFixed(1)} ${(circle - part + gap).toFixed(1)}" stroke-dashoffset="${(-(i * part + gap / 2)).toFixed(1)}"/>`).join('');
+    return `<svg class="ring" width="64" height="64" viewBox="0 0 64 64" aria-hidden="true"><g transform="rotate(-90 32 32)" fill="none" stroke-width="5" stroke-linecap="${gap ? 'round' : 'butt'}">${arcs}</g></svg>`;
+  }
+  // A task done several times a day: a ring per child to tick the slot open
+  // now, or, for a parent with slots to approve or catch up, a grid of
+  // children by slots.
+  renderSlotted(row) {
+    const now = new Date();
+    const busy = row.tasks.find(task => this._busy.has(task.id));
+    const all = row.slots.flatMap(entry => entry.slots);
+    const pendingCount = all.filter(slot => slot.state === 'pending').length;
+    const missedCount = all.filter(slot => slot.state === 'missed').length;
+    const surprise = row.tasks.find(task => task.surprise);
+    const sparkle = surprise ? `<span class="surprise" title="${escape(this.t('surprise', {n: surprise.surprise}))}">${svg('sparkle', 14)}+${surprise.surprise}</span>` : '';
+    const parent = this._config.show_approval && this._access.parent;
+    if (parent && (pendingCount || missedCount)) {
+      const head = row.columns.map(c => `<span class="gh${slotNow(c, now) ? ' now' : ''}">${escape(c.name || this.slotTime(c.time))}${c.name ? `<small>${escape(this.slotTime(c.time))}</small>` : ''}</span>`).join('');
+      const lines = row.slots.map(({member: m, task, slots}) => {
+        const cells = row.columns.map(column => {
+          const slot = slots.find(s => s.index === column.index);
+          if (!slot) return '<span></span>';
+          const label = `${m.name} · ${this.slotLabel(slot)}`;
+          const data = `data-task="${task.id}" data-slot="${slot.index}" data-member="${m.id}" ${busy ? 'disabled' : ''}`;
+          if (slot.state === 'pending') return `<span class="capsule">
+            <button class="cap ok" data-action="slot-approve" ${data} aria-label="${escape(this.t('common.on_task', {action: this.t('approve'), task: label}))}">${svg('check', 20)}</button>
+            <button class="cap no" data-action="slot-reject" ${data} aria-label="${escape(this.t('common.on_task', {action: this.t('reject'), task: label}))}">${svg('cross', 18)}</button></span>`;
+          if (slot.state === 'missed') return `<button class="catchup" data-action="slot-catchup" ${data} aria-label="${escape(this.t('common.on_task', {action: this.t('catch_up'), task: label}))}">${svg('replay', 15)}${escape(this.t('catch_up'))}</button>`;
+          if (slot.state === 'done') return `<span class="gdot done" role="img" aria-label="${escape(this.t('common.on_task', {action: label, task: this.t('slot_state.done')}))}">${svg('check', 16)}</span>`;
+          if (slot.state === 'open') return `<button class="gdot open" data-action="slot-catchup" ${data} aria-label="${escape(this.t('common.on_task', {action: this.t('slot_tick'), task: label}))}">${svg('check', 16)}</button>`;
+          return `<span class="gdot later" role="img" aria-label="${escape(this.t('common.on_task', {action: label, task: this.t('slot_state.upcoming')}))}"></span>`;
+        }).join('');
+        return `<span class="gname">${this.face(m, 30)}<span>${escape(m.name)}</span></span>${cells}`;
+      }).join('');
+      const summary = [pendingCount ? this.t('to_approve', {count: pendingCount}) : '', missedCount ? this.t('missed_slots', {count: missedCount}) : ''].filter(Boolean).join(' · ');
+      const waiting = row.slots.filter(entry => entry.slots.some(slot => slot.state === 'pending')).map(entry => entry.task.id);
+      const approveAll = pendingCount > 1 ? `<button class="approve-all" data-action="approve-all" data-tasks="${waiting.join(',')}" ${busy ? 'disabled' : ''}>${svg('check', 16)}${escape(this.t('approve_all', {count: pendingCount}))}</button>` : '';
+      return `<div class="row slotted open-grid"><div class="grid-top"><span class="name">${escape(row.name)}</span>${this.points(row.points)}${sparkle}</div>
+        <div class="grid" style="grid-template-columns: minmax(80px, 110px) repeat(${row.columns.length}, minmax(0, 1fr))"><span></span>${head}${lines}</div>
+        <div class="gfoot"><span>${escape(summary)}</span>${approveAll}</div></div>`;
+    }
+    const flash = row.tasks.map(task => this._flash.get(task.id)).find(Boolean);
+    const pills = row.columns.map(c => `<span class="slot-pill${slotNow(c, now) ? ' now' : ''}">${escape(this.slotLabel(c))}</span>`).join('');
+    const right = flash ? `<span class="flash">${escape(flash)}</span>` : row.slots.map(({member: m, task, slots}) => {
+      const open = slots.find(slot => slot.state === 'open');
+      const waiting = slots.some(slot => slot.state === 'pending');
+      const states = slots.map(slot => `${this.slotLabel(slot)} ${this.t(`slot_state.${slot.state}`)}`).join(', ');
+      const label = open ? `${this.t('common.on_task', {action: m.name, task: this.t('slot_tick_named', {slot: open.name || this.slotTime(open.time)})})} · ${states}` : `${m.name} · ${states}`;
+      return `<button class="ringbtn${busy && this._busy.get(busy.id) === m.id ? ' busy' : ''}" data-action="complete" data-task="${task.id}" data-member="${m.id}"
+        ${open && !busy ? '' : 'disabled'} aria-label="${escape(label)}" title="${escape(label)}">${this.ring(slots)}<span class="ring-face">${this.face(m, 48)}</span>${waiting ? this.badge('amber', 'hourglass') : ''}</button>`;
+    }).join('');
+    return `<div class="row slotted${surprise ? ' is-surprise' : ''}"><span class="name"><span>${escape(row.name)}</span><span class="slot-pills">${pills}</span></span>${this.points(row.points)}${sparkle}<span class="faces">${right}</span></div>`;
+  }
   renderTask(row) {
+    if (row.slotted) return this.renderSlotted(row);
     const busy = row.tasks.find(task => this._busy.has(task.id));
     const flash = row.tasks.map(task => this._flash.get(task.id)).find(Boolean);
     let right;
@@ -681,6 +789,37 @@ class HoplaFamilyCard extends HTMLElement {
         color: #fff; font-size: 10px; font-weight: 700; line-height: 1; white-space: nowrap; }
       .badge.wide { right: -10px; padding: 0 5px 0 3px; }
       .badge.gift, .badge.done { background: var(--dt-green); } .badge.wait { background: #8a6f57; } .badge.gray { background: #80868b; }
+      .slot-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+      .slot-pill { padding: 2px 8px; border-radius: 999px; background: rgba(127,127,127,.12); color: var(--secondary-text-color); font-size: 13px; font-weight: 500; line-height: 18px; white-space: nowrap; }
+      .slot-pill.now { background: rgba(59,111,216,.14); color: #1d4ed8; font-weight: 600; }
+      .ringbtn { position: relative; width: 64px; height: 64px; flex: none; border-radius: 50%; touch-action: manipulation; }
+      .ringbtn:disabled { opacity: 1; }
+      .ringbtn:not(:disabled):active { transform: scale(.92); }
+      .ringbtn.busy .ring { opacity: .5; }
+      .ring { position: absolute; inset: 0; }
+      .ring-face { position: absolute; inset: 8px; line-height: 0; }
+      .ringbtn .badge { right: 0; bottom: 0; width: 22px; height: 22px; }
+      .badge.amber { background: #F59E0B; }
+      .row.open-grid { display: block; padding: 12px 12px 10px 16px; border-color: #a5b4fc; box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+      .grid-top { display: flex; align-items: center; gap: 10px; }
+      .grid { display: grid; gap: 8px 10px; align-items: center; margin-top: 12px; }
+      .gh { text-align: center; font-size: 13px; font-weight: 600; line-height: 16px; color: var(--secondary-text-color); display: flex; flex-direction: column; }
+      .gh small { font-size: 12px; font-weight: 500; }
+      .gh.now { color: #1d4ed8; }
+      .gname { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; min-width: 0; }
+      .gname > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .capsule { justify-self: center; display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; background: #f5f5f4; border: 1px solid #e7e5e4; }
+      .cap { width: 48px; height: 44px; border-radius: 999px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.08); display: grid; place-items: center; }
+      .cap.ok { color: #15803d; } .cap.no { color: #b91c1c; }
+      .catchup { justify-self: center; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border-radius: 999px; background: #ffedd5; color: #9a3412; font-size: 13px; font-weight: 600; }
+      .gdot { justify-self: center; width: 34px; height: 34px; border-radius: 50%; box-sizing: border-box; display: grid; place-items: center; }
+      .gdot.done { background: #0EA5E9; color: #fff; }
+      .gdot.open { border: 3px solid #0EA5E9; color: transparent; min-width: 44px; min-height: 44px; }
+      .gdot.open:hover { color: #0EA5E9; }
+      .gdot.later { border: 2px dashed #d9d9d9; }
+      .gfoot { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--dt-line); font-size: 13px; color: var(--secondary-text-color); }
+      .gfoot > span { flex: 1; }
+      .approve-all { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; background: #15803d; color: #fff; font-size: 14px; font-weight: 600; }
       .icon-btn { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; }
       .icon-btn.ok { background: rgba(30,142,62,.14); color: var(--dt-green); } .icon-btn.no { background: rgba(217,48,37,.12); color: var(--error-color, #d93025); }
       .flash { font-weight: 700; color: var(--success-color, var(--dt-green)); }
