@@ -200,3 +200,15 @@ assert.deepEqual(data.tasks.find(t => t.id === 18).slots, [], "another day's slo
 assert.equal(data.tasks.find(t => t.id === 12).completedBy, null, 'slots carry their own completer');
 console.log('family card slot tests passed');
 
+// A task started from outside waits, hidden, until it is given a date; a
+// task without a date otherwise stays on today's board.
+const waitingStates = {states: {...hass.states,
+  'sensor.arroser': task(30, 'Arroser', {frequency_type: 'trigger'}),
+  'sensor.arroser_date': task(31, 'Arroser daté', {frequency_type: 'trigger', next_due_date: '2026-10-20T09:00:00Z'})}};
+const ids = boardData(waitingStates, {due: 'today', members: [2, 3]}, now).tasks.map(t => t.id);
+assert.equal(ids.includes(30), false);
+assert.equal(ids.includes(31), true);
+assert.equal(ids.includes(12), true, 'undated task stays');
+assert.equal(boardData(waitingStates, {due: 'all', members: [2, 3]}, now).tasks.some(t => t.id === 30), false);
+console.log('family card waiting tasks passed');
+

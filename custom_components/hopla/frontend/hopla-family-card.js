@@ -169,7 +169,8 @@ export function boardData(hass, config, now = new Date()) {
       // The state is the bare task name; friendly_name may carry the device name.
       tasks.push({id: a.task_id, entity: id, name: state.state || a.friendly_name, points: a.points,
         due: a.next_due_date ? new Date(a.next_due_date) : null, labels: labelNames(a.labels),
-        assignees: a.assignee_ids || [], pending: a.pending_approval === true, slots: a.slots_today || []});
+        assignees: a.assignee_ids || [], pending: a.pending_approval === true, slots: a.slots_today || [],
+        frequencyType: a.frequency_type});
     } else if (a.hopla_games) {
       surprise = a.surprise || null;
       period = a.bonus_period || null;
@@ -190,7 +191,10 @@ export function boardData(hass, config, now = new Date()) {
   const wanted = (config.labels || []).map(label => label.trim().toLowerCase()).filter(Boolean);
   const labelled = labels => !wanted.length || labelNames(labels).some(label => wanted.includes(label));
   const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  // A task started from outside (Home Assistant) waits, hidden, until it is
+  // given a date; other tasks without a date can be done any day.
   const visible = tasks.filter(task => labelled(task.labels)
+    && !(task.frequencyType === 'trigger' && !task.due)
     && (config.due !== 'today' || !task.due || task.due <= endOfDay))
     .map(task => {
       const candidates = task.assignees.length ? shown.filter(m => task.assignees.includes(m.id)) : shown;
