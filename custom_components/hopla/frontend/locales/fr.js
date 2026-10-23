@@ -102,7 +102,7 @@ export default {
     choose_penalty: 'Choisis une pénalité ou un montant',
     floor_note: 'Le solde ne descend jamais sous 0.',
     to_spend_big: 'points à dépenser',
-    rewards_now: 'Tout de suite',
+    rewards_now: 'Disponible maintenant',
     rewards_later: 'Encore un peu',
     rewards_none: 'Aucune récompense pour le moment',
     missing_short_one: 'Plus que {count} point',
