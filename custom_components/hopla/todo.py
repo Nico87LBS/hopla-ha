@@ -205,12 +205,13 @@ class HoplaTodoListBase(CoordinatorEntity, TodoListEntity):
         if hasattr(self, "_member"):
             task_groups["anyone_tasks"] = self._apply_due_window([
                 task for task in self.coordinator.data or []
-                if task.is_active and task.assigned_to is None
+                if task.is_active and task.assigned_to is None and not task.together
             ])
         for attribute, tasks in task_groups.items():
             attributes[attribute] = [
                 {"task_id": task.id, "name": task.name, "assigned_to": task.assigned_to,
                  "assignee_ids": task.assignee_ids or [],
+                 "assign_strategy": task.assign_strategy,
                  "description": task.description,
                  "priority": task.priority,
                  "labels": task.labels or [],
@@ -417,7 +418,18 @@ class HoplaAssigneeTasksList(HoplaTodoListBase):
 
     def _filter_tasks(self, tasks):
         """Return tasks assigned to this member."""
-        return [task for task in tasks if task.is_active and task.assigned_to == self._member.user_id]
+        return [task for task in tasks if task.is_active and self._member.user_id in task.members_now]
+
+    async def _get_completion_user_id(self, client, item, context=None) -> int | None:
+        """A task for everyone together is completed by this member."""
+        user_id = await super()._get_completion_user_id(client, item, context)
+        if user_id is None:
+            task_id = int(item.uid.split("--")[0])
+            tasks = await client.async_get_tasks()
+            task = next((task for task in tasks if task.id == task_id), None)
+            if task is not None and task.together and self._member.user_id in task.members_now:
+                return self._member.user_id
+        return user_id
 
 # Keep the old class for backward compatibility
 class HoplaTodoListEntity(HoplaAllTasksList):

@@ -251,6 +251,11 @@ tout seul une fois pour prendre les nouvelles cartes. Elles suivent la langue de
 sont dans [`frontend/locales`](custom_components/hopla/frontend/locales), un
 fichier par langue.
 
+Une tâche montre la tête de la personne à qui elle est attribuée maintenant. Une
+tâche avec la règle « Tous ensemble » montre la tête de chacune de ses personnes
+et apparaît dans la liste de chacune : la première qui la fait la termine pour
+tout le monde et gagne les points.
+
 ### Carte famille
 
 `custom:hopla-family-card` est faite pour une tablette murale. Un podium classe

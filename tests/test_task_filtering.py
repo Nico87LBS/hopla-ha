@@ -87,7 +87,8 @@ class TaskFilteringTests(unittest.TestCase):
         def task(task_id, assigned_to, due, active=True):
             return SimpleNamespace(id=task_id, assigned_to=assigned_to, next_due_date=due,
                                    is_active=active, name='Task', assignee_ids=[], description='',
-                                   priority=1, frequency_type='weekly', labels=[], points=10, frequency=6, interval_type=None)
+                                   priority=1, frequency_type='weekly', labels=[], points=10, frequency=6, interval_type=None,
+                                   assign_strategy=None, together=False)
         tasks = [task(1, 2, self.near.next_due_date), task(2, None, self.near.next_due_date),
                  task(3, None, self.far.next_due_date), task(4, None, self.near.next_due_date, False),
                  task(5, 3, self.near.next_due_date)]
@@ -117,7 +118,7 @@ class TaskFilteringTests(unittest.TestCase):
         task = SimpleNamespace(id=1, name="HVAC", assigned_to=2, assignee_ids=[2],
                                description=None, priority=1, labels=labels,
                                next_due_date=None, frequency_type="yearly", is_active=True,
-                               points=0, frequency=1, interval_type=None)
+                               points=0, frequency=1, interval_type=None, assign_strategy=None, together=False)
         entity = SimpleNamespace(_config_entry=SimpleNamespace(entry_id="entry", data={"url": "http://hopla"}),
                                  coordinator=SimpleNamespace(data=[task]),
                                  _filter_tasks=lambda tasks: tasks, _apply_due_window=lambda tasks: tasks)

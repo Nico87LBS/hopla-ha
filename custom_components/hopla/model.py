@@ -179,6 +179,20 @@ class HoplaTask:
     reminder_templates: Optional[List[dict]] = None
     # For a task done several times a day: today's slots and their state.
     slots_today: Optional[List[dict]] = None
+    # "together": the task is for each of its assignees at once.
+    assign_strategy: Optional[str] = None
+
+    @property
+    def together(self) -> bool:
+        """Return True when the task is for all its assignees at once."""
+        return self.assign_strategy == "together"
+
+    @property
+    def members_now(self) -> List[int]:
+        """Return who the task is for now: its assignee, or all of them together."""
+        if self.together:
+            return list(self.assignee_ids or [])
+        return [self.assigned_to] if self.assigned_to is not None else []
 
     @property
     def has_slots(self) -> bool:
@@ -236,6 +250,7 @@ class HoplaTask:
             notification=bool(data.get("notification")),
             reminder_templates=cls.reminder_templates_from(data.get("notificationMetadata")),
             slots_today=[slot for slot in data.get("slotsToday") or [] if isinstance(slot, dict)],
+            assign_strategy=data.get("assignStrategy"),
         )
     
     @classmethod

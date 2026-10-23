@@ -50,6 +50,17 @@ class TaskSensorAttributeTests(unittest.TestCase):
                 self.assertEqual(self.attributes(points=value)["points"], value)
         self.assertIsNone(self.attributes()["points"])
 
+    def test_together_tasks_are_for_all_their_assignees(self):
+        assignees = [{"userId": 2}, {"userId": 3}]
+        task = self.task_class.from_json({"id": 1, "name": "Ranger", "assignStrategy": "together",
+                                          "assignedTo": None, "assignees": assignees})
+        self.assertTrue(task.together)
+        self.assertEqual(task.members_now, [2, 3])
+        self.assertEqual(self.attributes(assignStrategy="together", assignees=assignees)["assign_strategy"], "together")
+        turn = self.task_class.from_json({"id": 2, "name": "Vaisselle", "assignStrategy": "round_robin",
+                                          "assignedTo": 3, "assignees": assignees})
+        self.assertEqual(turn.members_now, [3])
+
     def test_interval_units_accompany_existing_frequency(self):
         for unit in ("hours", "days", "weeks", "months", "years"):
             with self.subTest(unit=unit):

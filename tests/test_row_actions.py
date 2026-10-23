@@ -35,7 +35,7 @@ class RowActionTests(unittest.IsolatedAsyncioTestCase):
         tree = ast.parse(source.read_text(encoding='utf-8'))
         action = next(n for n in tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == 'async_task_row_action')
 
-        self.task = SimpleNamespace(id=1, is_active=True, assigned_to=2,
+        self.task = SimpleNamespace(id=1, is_active=True, assigned_to=2, together=False, members_now=[2],
                                     frequency_type="weekly", next_due_date=datetime(2026, 10, 24, 16, tzinfo=timezone.utc))
         self.calls = []
         async def resolve(hass, entry_id):
@@ -68,6 +68,14 @@ class RowActionTests(unittest.IsolatedAsyncioTestCase):
     async def test_anyone_task_completion_uses_api_default(self):
         self.task.assigned_to = None
         await self.run_action(True)
+        self.assertEqual(self.calls, [('complete', 1, None), ('refresh',)])
+
+    async def test_together_task_is_completed_by_who_ticked_it(self):
+        self.task.assigned_to, self.task.together, self.task.members_now = None, True, [2, 3]
+        await self.action(self.hass, SimpleNamespace(data={'task_id': 1, 'completed_by': 3}), complete=True)
+        self.assertEqual(self.calls, [('complete', 1, 3), ('refresh',)])
+        self.calls.clear()
+        await self.action(self.hass, SimpleNamespace(data={'task_id': 1, 'completed_by': 9}), complete=True)
         self.assertEqual(self.calls, [('complete', 1, None), ('refresh',)])
 
     async def test_inactive_tasks_are_rejected(self):
