@@ -9,6 +9,9 @@ export default {
     points_other: '{count} points',
     pts_one: '{count} pt',
     pts_other: '{count} pts',
+    mode_each: 'Chacun la sienne',
+    mode_first: 'Premier arrivé',
+    mode_one: 'Un seul à la fois',
   },
   family: {
     card_name: 'Tableau de la famille Hopla',

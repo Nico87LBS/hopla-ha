@@ -169,3 +169,14 @@ assert.deepEqual(userTasks(togetherState, '3').map(t => t.task_id), [1, 2]);
 assert.deepEqual(completionData(togetherState, togetherState.attributes.tasks[0], '2'), {task_id: 1, config_entry_id: 'e', completed_by: 2});
 assert.deepEqual(completionData(togetherState, togetherState.attributes.tasks[1], '3'), {task_id: 2, config_entry_id: 'e'});
 console.log('Tasks for everyone together show for each of them');
+
+const { taskMode } = await import('../custom_components/hopla/frontend/hopla-user-todo-card.js');
+const modeTasks = [
+  {task_id: 1, name: 'Faire son lit', assignee_ids: [2]},
+  {task_id: 2, name: 'faire son lit ', assignee_ids: [3]},
+  {task_id: 3, name: 'Poubelle', assign_strategy: 'together', assignee_ids: [2, 3]},
+  {task_id: 4, name: 'Table', assign_strategy: 'round_robin', assignee_ids: [2, 3]},
+  {task_id: 5, name: 'Lire', assignee_ids: [3]},
+];
+assert.deepEqual(modeTasks.map(task => taskMode(task, modeTasks)), ['each', 'each', 'first', 'one', '']);
+console.log('Shared tasks show how they work');

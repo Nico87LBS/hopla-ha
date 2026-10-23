@@ -114,6 +114,15 @@ export function doneRows(done) {
   return rows;
 }
 
+// How a task shared by several people works: a copy each (same name, one per
+// child), the first one to do it does it for all, or one person at a time.
+export function taskMode(tasks, name) {
+  const same = tasks.filter(task => sameName(task.name) === sameName(name));
+  if (same.length > 1) return 'each';
+  if (same[0]?.together) return 'first';
+  return same[0]?.assignees.length > 1 ? 'one' : '';
+}
+
 // What a member sees on a reward: available, missing points, or out of quota until a date.
 export function rewardState(reward, member, now = new Date()) {
   const resetsAt = reward.quota_resets_at ? new Date(reward.quota_resets_at) : null;
@@ -211,11 +220,12 @@ export function boardData(hass, config, now = new Date()) {
     })
     .filter(task => task.members.length || task.pending)
     .sort((a, b) => (a.due ?? Infinity) - (b.due ?? Infinity) || a.name.localeCompare(b.name));
+  const withMode = rows => rows.map(row => ({...row, mode: taskMode(tasks, row.name)}));
   const done = shown.flatMap(member => member.recent
     .filter(item => item.completed_at && sameDay(new Date(item.completed_at), now) && labelled(item.labels))
     .map(item => ({...item, member})))
     .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
-  return {members: shown, tasks: visible, rows: taskRows(visible, done, shown), done, doneRows: doneRows(done), rewards: rewards || [], requests,
+  return {members: shown, tasks: visible, rows: withMode(taskRows(visible, done, shown)), done, doneRows: withMode(doneRows(done)), rewards: rewards || [], requests,
     presets, presetsEntry, surprise, period, ladder,
     // Running challenges, and finished ones until their end date, for the members shown.
     challenges: challenges.filter(c => new Date(c.ends_at) > now && c.members.some(id => shown.some(m => m.id === id)))};
@@ -233,6 +243,8 @@ const icon = {
   flame: '<path d="M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-5 3-6 0 2 1 3 2 3 0-4-1-6 1-9z" fill="currentColor"/>',
   sparkle: '<path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5l-2.2-6.3L3.5 10l6.3-1.7zM19 15l.9 2.6 2.6.9-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9z" fill="currentColor"/>',
   bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="currentColor"/>',
+  people: '<path d="M16 17v2H2v-2s0-4 7-4 7 4 7 4m-3.5-9.5A3.5 3.5 0 1 0 9 11a3.5 3.5 0 0 0 3.5-3.5m3.44 5.5A5.3 5.3 0 0 1 18 17v2h4v-2s0-3.63-6.06-4M15 4a3.4 3.4 0 0 0-1.93.59 5 5 0 0 1 0 5.82A3.4 3.4 0 0 0 15 11a3.5 3.5 0 0 0 0-7z" fill="currentColor"/>',
+  person: '<path d="M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8m0 10c4.42 0 8 1.79 8 4v2H4v-2c0-2.21 3.58-4 8-4z" fill="currentColor"/>',
   trophy: '<path d="M7 3h10v5a5 5 0 0 1-10 0zM7 5H3v2a4 4 0 0 0 4 4M17 5h4v2a4 4 0 0 1-4 4M12 13v4M8 21h8M9 17h6v4H9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
   flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>',
   hourglass: '<path d="M6 2h12M6 22h12M7 2v3.5a3 3 0 0 0 .9 2.1L12 12l4.1-4.4A3 3 0 0 0 17 5.5V2M7 22v-3.5a3 3 0 0 1 .9-2.1L12 12l4.1 4.4a3 3 0 0 1 .9 2.1V22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -553,7 +565,7 @@ class HoplaFamilyCard extends HTMLElement {
       const summary = [pendingCount ? this.t('to_approve', {count: pendingCount}) : '', missedCount ? this.t('missed_slots', {count: missedCount}) : ''].filter(Boolean).join(' · ');
       const waiting = row.slots.filter(entry => entry.slots.some(slot => slot.state === 'pending')).map(entry => entry.task.id);
       const approveAll = pendingCount > 1 ? `<button class="approve-all" data-action="approve-all" data-tasks="${waiting.join(',')}" ${busy ? 'disabled' : ''}>${svg('check', 16)}${escape(this.t('approve_all', {count: pendingCount}))}</button>` : '';
-      return `<div class="row slotted open-grid"><div class="grid-top"><span class="name">${escape(row.name)}</span>${this.points(row.points)}${sparkle}</div>
+      return `<div class="row slotted open-grid"><div class="grid-top"><span class="name"><span>${escape(row.name)}</span>${this.mode(row)}</span>${this.points(row.points)}${sparkle}</div>
         <div class="grid" style="grid-template-columns: minmax(80px, 110px) repeat(${row.columns.length}, minmax(0, 1fr))"><span></span>${head}${lines}</div>
         <div class="gfoot"><span>${escape(summary)}</span>${approveAll}</div></div>`;
     }
@@ -567,7 +579,13 @@ class HoplaFamilyCard extends HTMLElement {
       return `<button class="ringbtn${busy && this._busy.get(busy.id) === m.id ? ' busy' : ''}" data-action="complete" data-task="${task.id}" data-member="${m.id}"
         ${open && !busy ? '' : 'disabled'} aria-label="${escape(label)}" title="${escape(label)}">${this.ring(slots)}<span class="ring-face">${this.face(m, 48)}</span>${waiting ? this.badge('amber', 'hourglass') : ''}</button>`;
     }).join('');
-    return `<div class="row slotted${surprise ? ' is-surprise' : ''}"><span class="name"><span>${escape(row.name)}</span><span class="slot-pills">${pills}</span></span>${this.points(row.points)}${sparkle}<span class="faces">${right}</span></div>`;
+    return `<div class="row slotted${surprise ? ' is-surprise' : ''}"><span class="name"><span>${escape(row.name)}</span>${this.mode(row)}<span class="slot-pills">${pills}</span></span>${this.points(row.points)}${sparkle}<span class="faces">${right}</span></div>`;
+  }
+  // The mode of a task shared by several people, under its name.
+  mode(row) {
+    if (!row.mode) return '';
+    const symbol = {each: 'people', first: 'bolt', one: 'person'}[row.mode];
+    return `<span class="mode ${row.mode}">${svg(symbol, 14)}${escape(this.t(`common.mode_${row.mode}`))}</span>`;
   }
   renderTask(row) {
     if (row.slotted) return this.renderSlotted(row);
@@ -589,11 +607,11 @@ class HoplaFamilyCard extends HTMLElement {
     const waiting = row.pending ? `<span class="hourglass">${svg('hourglass', 18, this.t('pending'))}</span>` : '';
     const surprise = row.tasks.find(task => task.surprise);
     const sparkle = surprise ? `<span class="surprise" title="${escape(this.t('surprise', {n: surprise.surprise}))}">${svg('sparkle', 14)}+${surprise.surprise}</span>` : '';
-    return `<div class="row${row.pending ? ' is-pending' : ''}${surprise ? ' is-surprise' : ''}"><span class="name">${escape(row.name)}</span>${this.points(row.points)}${sparkle}${waiting}<span class="faces">${right}</span></div>`;
+    return `<div class="row${row.pending ? ' is-pending' : ''}${surprise ? ' is-surprise' : ''}"><span class="name"><span>${escape(row.name)}</span>${this.mode(row)}</span>${this.points(row.points)}${sparkle}${waiting}<span class="faces">${right}</span></div>`;
   }
   renderDone(row) {
     const faces = row.items.map(item => `<span class="slot" title="${escape(item.member.name)}">${this.face(item.member, 40)}${this.badge('done', 'check')}</span>`).join('');
-    return `<div class="row small"><span class="name muted">${escape(row.name)}</span>${this.points(row.points, true)}<span class="faces">${faces}</span></div>`;
+    return `<div class="row small"><span class="name muted"><span>${escape(row.name)}</span>${this.mode(row)}</span>${this.points(row.points, true)}<span class="faces">${faces}</span></div>`;
   }
   renderReward(reward, members, requests) {
     const period = reward.quota_count > 0 && reward.quota_period ? `<span class="sub">${escape(this.t(reward.quota_period, {n: reward.quota_count}))}</span>` : '';
@@ -718,6 +736,9 @@ class HoplaFamilyCard extends HTMLElement {
       .row.small { min-height: 56px; }
       .name { flex: 1 1 auto; min-width: 0; font-size: 17px; font-weight: 400; display: flex; flex-direction: column; }
       .name.muted { font-size: 16px; font-weight: 400; color: var(--secondary-text-color); }
+      .mode { display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 13px; font-weight: 600; line-height: 1.3; }
+      .mode svg { flex: none; }
+      .mode.each { color: var(--dt-blue); } .mode.first { color: #e8590c; } .mode.one { color: var(--secondary-text-color); }
       .sub { font-size: 12px; font-weight: 400; color: var(--secondary-text-color); margin-top: 2px; }
       .armed-text { color: var(--dt-green); font-weight: 600; }
       .pts { display: inline-flex; align-items: center; gap: 3px; padding: 4px 10px 4px 8px; border-radius: 999px; font-size: 14px; font-weight: 800;

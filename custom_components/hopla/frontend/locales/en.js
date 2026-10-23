@@ -9,6 +9,9 @@ export default {
     points_other: '{count} points',
     pts_one: '{count} pt',
     pts_other: '{count} pts',
+    mode_each: 'Each their own',
+    mode_first: 'First come',
+    mode_one: 'One at a time',
   },
   family: {
     card_name: 'Hopla family board',
