@@ -116,6 +116,11 @@ complete_assigned_task:
         number:
           min: 1
           mode: box
+    completed_by:
+      selector:
+        number:
+          min: 1
+          mode: box
     config_entry_id:
       selector:
         text:

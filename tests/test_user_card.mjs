@@ -159,3 +159,13 @@ const waiting = {attributes: {tasks: [
   {task_id: 3, name: 'Quand tu veux', frequency_type: 'once', next_due_date: null, assigned_to: 2}]}};
 assert.deepEqual(userTasks(waiting, 'all', ['undated', 'today', 'future'], new Date('2026-10-23T10:00:00Z')).map(t => t.task_id), [2, 3]);
 console.log('Started-from-outside tasks wait for a date');
+
+const { completionData } = await import('../custom_components/hopla/frontend/hopla-user-todo-card.js');
+const togetherState = {attributes: {config_entry_id: 'e', tasks: [
+  {task_id: 1, name: 'Ranger', assigned_to: null, assign_strategy: 'together', assignee_ids: [2, 3]},
+  {task_id: 2, name: 'Vaisselle', assigned_to: 3, assignee_ids: [2, 3]}]}};
+assert.deepEqual(userTasks(togetherState, '2').map(t => t.task_id), [1]);
+assert.deepEqual(userTasks(togetherState, '3').map(t => t.task_id), [1, 2]);
+assert.deepEqual(completionData(togetherState, togetherState.attributes.tasks[0], '2'), {task_id: 1, config_entry_id: 'e', completed_by: 2});
+assert.deepEqual(completionData(togetherState, togetherState.attributes.tasks[1], '3'), {task_id: 2, config_entry_id: 'e'});
+console.log('Tasks for everyone together show for each of them');

@@ -212,3 +212,15 @@ assert.equal(ids.includes(12), true, 'undated task stays');
 assert.equal(boardData(waitingStates, {due: 'all', members: [2, 3]}, now).tasks.some(t => t.id === 30), false);
 console.log('family card waiting tasks passed');
 
+
+// Only who has the task now shows; everyone, for a task for all together.
+const headsStates = {states: {
+  'sensor.hopla_points_elena': member(2, 'Elena', 5),
+  'sensor.hopla_points_anna': member(3, 'Anna', 2),
+  'sensor.turn': task(40, 'Vaisselle', {assigned_to_user_id: 3}),
+  'sensor.together': task(41, 'Ranger', {assigned_to_user_id: null, assign_strategy: 'together'}),
+}};
+const heads = Object.fromEntries(boardData(headsStates, {due: 'all'}, now).tasks.map(t => [t.id, t.members.map(m => m.id)]));
+assert.deepEqual(heads[40], [3]);
+assert.deepEqual(heads[41], [2, 3]);
+console.log('family card shows who has the task now');

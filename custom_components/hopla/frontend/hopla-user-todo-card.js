@@ -81,7 +81,7 @@ export function userTasks(state, userId, displayFilter = 'all', now = new Date()
   const upcomingEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + limit + 1);
   userId = selectedUser(state, userId);
   const tasks = [...(state?.attributes?.tasks || []), ...(includeAnyone ? state?.attributes?.anyone_tasks || [] : [])];
-  return tasks.filter(task => userId === 'all' || task.assigned_to === Number(userId) || (includeAnyone && task.assigned_to == null))
+  return tasks.filter(task => userId === 'all' || isTaskFor(task, Number(userId)) || (includeAnyone && task.assigned_to == null && !together(task)))
     // A task started from outside waits, hidden, until it is given a date.
     .filter(task => !(task.frequency_type === 'trigger' && !task.next_due_date))
     .filter(task => {
@@ -162,8 +162,20 @@ export function emptyMessage(config, userName, t = english) {
   if (config.labels?.length) message = t('todo.empty.labels', {message, labels: config.labels.join(t(config.label_match === 'all' ? 'todo.empty.and' : 'todo.empty.or'))});
   return message;
 }
+// A task for everyone together is for each of its assignees at once.
+const together = task => task.assign_strategy === 'together';
+export function isTaskFor(task, userId) {
+  return together(task) ? (task.assignee_ids || []).includes(userId) : task.assigned_to === userId;
+}
 export function actionData(state, task) {
   const data = {task_id: task.task_id, config_entry_id: state.attributes.config_entry_id};
+  return data;
+}
+// Whoever ticks a task for everyone together did it.
+export function completionData(state, task, userId) {
+  const data = actionData(state, task);
+  const user = Number(selectedUser(state, userId));
+  if (together(task) && isTaskFor(task, user)) data.completed_by = user;
   return data;
 }
 export function assignableMembers(state, task) {
@@ -275,7 +287,8 @@ class HoplaUserTodoCard extends HTMLElement {
     const state = this._hass.states[this._config.entity];
     this._pending.set(task.task_id, complete); this._error = ''; this.render();
     try {
-      const data = actionData(state, task);
+      const data = complete && !dueDate && assignedTo === undefined
+        ? completionData(state, task, this._config?.user_id) : actionData(state, task);
       if (dueDate) data.due_date = dueDate;
       if (assignedTo !== undefined) data.assigned_to = assignedTo;
       await this._hass.callService('hopla', dueDate || assignedTo !== undefined ? 'update_task' : complete ? 'complete_assigned_task' : 'postpone_task', data);

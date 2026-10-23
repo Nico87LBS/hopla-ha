@@ -224,6 +224,10 @@
           "name": "ID de la tâche",
           "description": "L'ID de la tâche à terminer"
         },
+        "completed_by": {
+          "name": "Fait par",
+          "description": "Pour une tâche « Tous ensemble » : le membre qui l'a faite (facultatif)"
+        },
         "config_entry_id": {
           "name": "Intégration Hopla",
           "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"

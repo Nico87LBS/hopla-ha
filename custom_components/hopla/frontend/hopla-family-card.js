@@ -169,7 +169,8 @@ export function boardData(hass, config, now = new Date()) {
       // The state is the bare task name; friendly_name may carry the device name.
       tasks.push({id: a.task_id, entity: id, name: state.state || a.friendly_name, points: a.points,
         due: a.next_due_date ? new Date(a.next_due_date) : null, labels: labelNames(a.labels),
-        assignees: a.assignee_ids || [], pending: a.pending_approval === true, slots: a.slots_today || [],
+        assignees: a.assignee_ids || [], assignedTo: a.assigned_to_user_id ?? null,
+        together: a.assign_strategy === 'together', pending: a.pending_approval === true, slots: a.slots_today || [],
         frequencyType: a.frequency_type});
     } else if (a.hopla_games) {
       surprise = a.surprise || null;
@@ -197,7 +198,10 @@ export function boardData(hass, config, now = new Date()) {
     && !(task.frequencyType === 'trigger' && !task.due)
     && (config.due !== 'today' || !task.due || task.due <= endOfDay))
     .map(task => {
-      const candidates = task.assignees.length ? shown.filter(m => task.assignees.includes(m.id)) : shown;
+      // The heads of who has the task now: its assignee, or all of them for a
+      // task for everyone together (or anyone's, with nobody chosen).
+      const holders = !task.together && task.assignedTo != null ? [task.assignedTo] : task.assignees;
+      const candidates = holders.length ? shown.filter(m => holders.includes(m.id)) : shown;
       // Every child's copy of the surprise task, same name, is worth the bonus.
       const isSurprise = surprise && (surprise.task_id === task.id || (surprise.task_ids || []).includes(task.id)
         || sameName(surprise.task_name) === sameName(task.name));

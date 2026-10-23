@@ -224,6 +224,10 @@
           "name": "Task ID",
           "description": "The ID of the task to complete"
         },
+        "completed_by": {
+          "name": "Done by",
+          "description": "For an \"everyone together\" task: the member who did it (optional)"
+        },
         "config_entry_id": {
           "name": "Hopla integration",
           "description": "The Hopla integration to use (optional, the first one by default)"

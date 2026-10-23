@@ -150,6 +150,7 @@ class HoplaChoreSensor(CoordinatorEntity, SensorEntity):
             "pending_approval": task.status == STATUS_PENDING_APPROVAL
             or any(slot.get("state") == "pending" for slot in task.slots_today or []),
             "assignee_ids": task.assignee_ids or [],
+            "assign_strategy": task.assign_strategy,
             "slots_today": slot_attributes(task.slots_today),
         }
         return attrs

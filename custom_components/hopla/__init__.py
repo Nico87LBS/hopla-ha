@@ -87,6 +87,8 @@ SKIP_TASK_SCHEMA = vol.Schema({
 ASSIGNED_TASK_SCHEMA = vol.Schema({
     vol.Required("task_id"): vol.All(vol.Coerce(int), vol.Range(min=1)),
     vol.Optional("config_entry_id"): cv.string,
+    # For a task for everyone together: which of them did it.
+    vol.Optional("completed_by"): vol.All(vol.Coerce(int), vol.Range(min=1)),
 })
 POSTPONE_TASK_SCHEMA = ASSIGNED_TASK_SCHEMA
 
@@ -726,7 +728,10 @@ async def async_task_row_action(hass: HomeAssistant, call: ServiceCall, *, compl
             raise HomeAssistantError("Task is no longer active or visible; refresh the list")
         if complete:
             # None leaves attribution to Hopla's authenticated API token owner.
-            await client.async_complete_task(task.id, completed_by=task.assigned_to)
+            completed_by = task.assigned_to
+            if task.together and call.data.get("completed_by") in task.members_now:
+                completed_by = call.data["completed_by"]
+            await client.async_complete_task(task.id, completed_by=completed_by)
         else:
             if task.frequency_type in ("once", "no_repeat", "trigger", "always"):
                 raise HomeAssistantError("This task has no next scheduled occurrence")
