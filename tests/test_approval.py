@@ -17,8 +17,8 @@ exec(compile(ast.Module(body=[picture], type_ignores=[]), "family_sensor", "exec
 member_picture = namespace["member_picture"]
 
 
-def task(id, status, name="Task", active=True, points=2):
-    return SimpleNamespace(id=id, status=status, name=name, is_active=active, points=points)
+def task(id, status, name="Task", active=True, points=2, slots=None):
+    return SimpleNamespace(id=id, status=status, name=name, is_active=active, points=points, slots_today=slots)
 
 
 MEMBERS = [SimpleNamespace(user_id=2, display_name="Elena", username="nico_elena"),
@@ -39,6 +39,19 @@ class ApprovalTests(unittest.TestCase):
         pending = approval.pending_approvals([task(10, 3)], [], MEMBERS)
         self.assertIsNone(pending[0]["completed_by"])
         self.assertIsNone(pending[0]["completed_by_name"])
+
+    def test_each_slot_waits_on_its_own(self):
+        slots = [{"index": 0, "name": "Matin", "state": "pending", "completedBy": 2},
+                 {"index": 1, "name": "", "time": "19:30", "state": "pending", "completedBy": 2},
+                 {"index": 2, "name": "Nuit", "state": "done", "completedBy": 2}]
+        pending = approval.pending_approvals([task(10, 0, "Dents", slots=slots)], [], MEMBERS)
+        self.assertEqual([(p["slot"], p["slot_name"], p["completed_by_name"]) for p in pending],
+                         [(0, "Matin", "Elena"), (1, "19:30", "Elena")])
+        fired = []
+        tracker = approval.ApprovalTracker(lambda event, data: fired.append((event, data.get("slot"))))
+        tracker.update(pending, "entry")
+        tracker.update(pending[1:], "entry")
+        self.assertEqual(fired, [(approval.EVENT_APPROVAL_RESOLVED, 0)])
 
     def test_tracker_fires_on_changes_only(self):
         fired = []

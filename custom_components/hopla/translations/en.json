@@ -252,6 +252,10 @@
           "name": "Task ID",
           "description": "The ID of the task waiting for approval"
         },
+        "slot": {
+          "name": "Slot",
+          "description": "For a task done several times a day: the slot of today, from 0 for the first (optional)"
+        },
         "config_entry_id": {
           "name": "Hopla integration",
           "description": "The Hopla integration to use (optional, the first one by default)"
@@ -265,6 +269,10 @@
         "task_id": {
           "name": "Task ID",
           "description": "The ID of the task waiting for approval"
+        },
+        "slot": {
+          "name": "Slot",
+          "description": "For a task done several times a day: the slot of today, from 0 for the first (optional)"
         },
         "note": {
           "name": "Note",
@@ -365,6 +373,28 @@
         "reason": {
           "name": "Reason",
           "description": "Why, shown in the points history (optional, the preset name by default)"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
+    },
+    "catch_up_slot": {
+      "name": "Catch up a slot",
+      "description": "Tick a slot of today of a task done several times a day for a child: the slot open now, or a missed one until midnight. Its points go to the child. Parents only.",
+      "fields": {
+        "task_id": {
+          "name": "Task ID",
+          "description": "The ID of the task done several times a day"
+        },
+        "slot": {
+          "name": "Slot",
+          "description": "The slot of today, from 0 for the first"
+        },
+        "completed_by": {
+          "name": "Done by",
+          "description": "The user ID of the child who did it (optional, the task's assignee by default)"
         },
         "config_entry_id": {
           "name": "Hopla integration",

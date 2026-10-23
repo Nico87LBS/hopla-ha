@@ -112,8 +112,8 @@ toute seule, en attendant un peu plus après chaque échec (jusqu'à 5 minutes).
 | Événement | Quand | Données |
 | --- | --- | --- |
 | `hopla_task_completed` | Une tâche est terminée, dans Hopla ou ici | `task_id`, `task_name`, `points`, `completed_by`, `completed_by_name` |
-| `hopla_task_pending_approval` | Une tâche attend la validation d'un parent | `task_id`, `task_name`, `points`, `completed_by`, `completed_by_name` |
-| `hopla_task_approval_resolved` | Elle a été validée ou refusée, ici ou dans Hopla | `task_id`, `task_name` |
+| `hopla_task_pending_approval` | Une tâche attend la validation d'un parent (une fois par créneau pour une tâche à créneaux) | `task_id`, `task_name`, `points`, `completed_by`, `completed_by_name`, et `slot`, `slot_name` pour un créneau |
+| `hopla_task_approval_resolved` | Elle a été validée ou refusée, ici ou dans Hopla | `task_id`, `task_name`, et `slot` pour un créneau |
 | `hopla_reward_requested` | Un enfant demande une récompense depuis la tablette | `redemption_id`, `reward_id`, `reward_name`, `points_cost`, `user_id`, `user_name` |
 | `hopla_reward_request_resolved` | La demande a été validée ou refusée | `redemption_id`, `reward_name`, `user_id` |
 | `hopla_points_changed` | Les points d'un membre bougent : tâche, tâche annulée, récompense, bonus, pénalité ou remise à zéro | `user_id`, `user_name`, `action` (`task`, `undo`, `redeem`, `bonus`, `penalty` ou `reset`), `points`, `delta` (signé), `reason`, `created_by_name` |
@@ -211,7 +211,8 @@ Sans parent choisi, rien ne change : tout le monde garde tous les droits.
 | `hopla.complete_task` | Terminer une tâche, éventuellement pour un membre (`completed_by`). Une tâche à valider attend un parent, et la réponse contient `pending_approval: true` | |
 | `hopla.complete_assigned_task` | Terminer une tâche pour son membre assigné | |
 | `hopla.redeem_reward` | Échanger une récompense pour un membre (`user_id`). Venant d'un parent, c'est validé tout de suite ; sinon c'est une demande (`pending: true`) | |
-| `hopla.approve_task` / `hopla.reject_task` | Valider ou refuser une tâche en attente | ✓ |
+| `hopla.approve_task` / `hopla.reject_task` | Valider ou refuser une tâche en attente. Pour une tâche à créneaux, `slot` (0 pour le premier) vise un seul créneau du jour ; sans `slot`, la validation couvre tous ceux en attente | ✓ |
+| `hopla.catch_up_slot` | Cocher pour un enfant (`completed_by`) un créneau du jour (`slot`) : celui en cours, ou un créneau oublié jusqu'à minuit | ✓ |
 | `hopla.approve_reward` / `hopla.reject_reward` | Valider ou refuser une demande de récompense (`redemption_id`) | ✓ |
 | `hopla.create_task`, `hopla.update_task`, `hopla.delete_task` | Créer, modifier, supprimer une tâche | ✓ |
 | `hopla.skip_task`, `hopla.postpone_task` | Passer une tâche à sa prochaine occurrence | ✓ |
@@ -271,6 +272,18 @@ jour porte une étincelle avec ses points en plus.
 
 Pour une tâche que chacun doit faire, comme faire son lit, crée-la dans Hopla une
 fois par membre. La carte regroupe les tâches de même nom sur une ligne.
+
+Une tâche faite plusieurs fois par jour, comme se brosser les dents, a des
+créneaux (matin, midi, soir), réglés dans l'éditeur de tâche de Hopla. Sous son
+nom, une pastille par créneau, en bleu celui en cours. L'anneau autour de la
+photo est coupé en un morceau par créneau : bleu quand il est fait, ambre quand il
+attend un parent (avec un sablier sur la photo), orange quand il est oublié, bleu
+clair pour celui à faire maintenant et gris pour ceux à venir. Toucher la photo
+coche le créneau en cours. Avec `show_approval`, quand un parent a des créneaux à
+valider ou à rattraper, la ligne s'ouvre en grille enfants × créneaux : Valider et
+Refuser dans une capsule pour chaque créneau en attente, Rattraper pour un créneau
+oublié (jusqu'à minuit) et Tout valider en bas. L'attribut `slots_today` du
+capteur de la tâche donne les créneaux du jour et leur état.
 
 Les récompenses montrent une photo par membre : un cadeau quand il peut la
 prendre, un cadenas avec les points qui manquent, une horloge avec le temps

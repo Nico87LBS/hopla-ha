@@ -252,6 +252,10 @@
           "name": "ID de la tâche",
           "description": "L'ID de la tâche en attente de validation"
         },
+        "slot": {
+          "name": "Créneau",
+          "description": "Pour une tâche faite plusieurs fois par jour : le créneau du jour, à partir de 0 pour le premier (facultatif)"
+        },
         "config_entry_id": {
           "name": "Intégration Hopla",
           "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
@@ -265,6 +269,10 @@
         "task_id": {
           "name": "ID de la tâche",
           "description": "L'ID de la tâche en attente de validation"
+        },
+        "slot": {
+          "name": "Créneau",
+          "description": "Pour une tâche faite plusieurs fois par jour : le créneau du jour, à partir de 0 pour le premier (facultatif)"
         },
         "note": {
           "name": "Note",
@@ -365,6 +373,28 @@
         "reason": {
           "name": "Raison",
           "description": "Pourquoi, affiché dans l'historique des points (facultatif, le nom du préréglage par défaut)"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
+    },
+    "catch_up_slot": {
+      "name": "Rattraper un créneau",
+      "description": "Coche pour un enfant un créneau du jour d'une tâche faite plusieurs fois par jour : le créneau en cours, ou un créneau oublié jusqu'à minuit. Ses points vont à l'enfant. Réservé aux parents.",
+      "fields": {
+        "task_id": {
+          "name": "ID de la tâche",
+          "description": "L'ID de la tâche faite plusieurs fois par jour"
+        },
+        "slot": {
+          "name": "Créneau",
+          "description": "Le créneau du jour, à partir de 0 pour le premier"
+        },
+        "completed_by": {
+          "name": "Fait par",
+          "description": "L'ID utilisateur de l'enfant qui l'a fait (facultatif, la personne assignée par défaut)"
         },
         "config_entry_id": {
           "name": "Intégration Hopla",

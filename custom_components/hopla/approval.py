@@ -15,6 +15,20 @@ def member_name(members, user_id):
     return None
 
 
+def slot_attributes(slots):
+    """Today's slots of a task done several times a day, for its attributes."""
+    return [{
+        "index": slot.get("index"),
+        "name": slot.get("name") or "",
+        "time": slot.get("time"),
+        "at": slot.get("at"),
+        "opens_at": slot.get("opensAt"),
+        "closes_at": slot.get("closesAt"),
+        "state": slot.get("state"),
+        "completed_by": slot.get("completedBy"),
+    } for slot in slots or []]
+
+
 def pending_approvals(tasks, history, members):
     """Describe each active task waiting for approval and who completed it.
 
@@ -27,7 +41,22 @@ def pending_approvals(tasks, history, members):
             completers[occurrence.chore_id] = occurrence.completed_by
     pending = []
     for task in tasks:
-        if not task.is_active or task.status != STATUS_PENDING_APPROVAL:
+        if not task.is_active:
+            continue
+        # A task done several times a day waits for approval slot by slot.
+        for slot in getattr(task, "slots_today", None) or []:
+            if slot.get("state") != "pending":
+                continue
+            pending.append({
+                "task_id": task.id,
+                "task_name": task.name,
+                "points": task.points,
+                "completed_by": slot.get("completedBy"),
+                "completed_by_name": member_name(members, slot.get("completedBy")),
+                "slot": slot.get("index"),
+                "slot_name": slot.get("name") or slot.get("time"),
+            })
+        if task.status != STATUS_PENDING_APPROVAL:
             continue
         completed_by = completers.get(task.id)
         pending.append({
@@ -52,16 +81,20 @@ class ApprovalTracker:
         self._known = None
 
     def update(self, pending, entry_id):
-        current = {item["task_id"]: item for item in pending}
+        # A slot of a task done several times a day waits on its own.
+        current = {(item["task_id"], item.get("slot")): item for item in pending}
         if self._known is not None:
-            for task_id, item in current.items():
-                if task_id not in self._known:
+            for key, item in current.items():
+                if key not in self._known:
                     self._fire(EVENT_PENDING_APPROVAL, {**item, "config_entry_id": entry_id})
-            for task_id, item in self._known.items():
-                if task_id not in current:
-                    self._fire(EVENT_APPROVAL_RESOLVED, {
-                        "task_id": task_id,
+            for key, item in self._known.items():
+                if key not in current:
+                    resolved = {
+                        "task_id": item["task_id"],
                         "task_name": item["task_name"],
                         "config_entry_id": entry_id,
-                    })
+                    }
+                    if item.get("slot") is not None:
+                        resolved["slot"] = item["slot"]
+                    self._fire(EVENT_APPROVAL_RESOLVED, resolved)
         self._known = current

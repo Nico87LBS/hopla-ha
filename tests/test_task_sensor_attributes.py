@@ -34,6 +34,7 @@ class TaskSensorAttributeTests(unittest.TestCase):
                          CoordinatorEntity=CoordinatorStub, SensorEntity=type("SensorStub", (), {}),
                          STATUS_PENDING_APPROVAL=3)
         load_definitions("model.py", {"_parse_datetime", "HoplaTask"}, namespace)
+        load_definitions("approval.py", {"slot_attributes"}, namespace)
         load_definitions("chore_sensor.py", {"HoplaChoreSensor"}, namespace)
         cls.task_class = namespace["HoplaTask"]
         cls.sensor_class = namespace["HoplaChoreSensor"]
@@ -78,6 +79,21 @@ class TaskSensorAttributeTests(unittest.TestCase):
         attrs = self.attributes()
         self.assertFalse(attrs["pending_approval"])
         self.assertEqual(attrs["assignee_ids"], [])
+
+    def test_slots_of_today(self):
+        slots = [{"index": 0, "name": "Matin", "time": "07:30", "at": "2026-10-23T07:30:00+02:00",
+                  "opensAt": "2026-10-23T06:30:00+02:00", "closesAt": "2026-10-23T11:30:00+02:00",
+                  "state": "done", "historyId": 4, "completedBy": 2},
+                 {"index": 1, "name": "Soir", "time": "19:30", "at": "2026-10-23T19:30:00+02:00",
+                  "opensAt": "2026-10-23T18:30:00+02:00", "closesAt": "2026-10-24T00:00:00+02:00",
+                  "state": "pending", "completedBy": 2}]
+        attrs = self.attributes(frequencyType="daily", slotsToday=slots,
+                                frequencyMetadata={"slots": [{"name": "Matin", "time": "07:30"}]})
+        self.assertEqual([(s["name"], s["state"], s["completed_by"]) for s in attrs["slots_today"]],
+                         [("Matin", "done", 2), ("Soir", "pending", 2)])
+        self.assertEqual(attrs["slots_today"][1]["closes_at"], "2026-10-24T00:00:00+02:00")
+        self.assertTrue(attrs["pending_approval"], "a slot waiting for a parent")
+        self.assertEqual(self.attributes()["slots_today"], [])
 
 
 if __name__ == "__main__":

@@ -43,10 +43,11 @@ SERVICE_REJECT_REWARD = "reject_reward"
 SERVICE_UNLOCK_PARENT_MODE = "unlock_parent_mode"
 SERVICE_LOCK_PARENT_MODE = "lock_parent_mode"
 SERVICE_ADJUST_POINTS = "adjust_points"
+SERVICE_CATCH_UP_SLOT = "catch_up_slot"
 SERVICES = [SERVICE_COMPLETE_TASK, SERVICE_CREATE_TASK, SERVICE_UPDATE_TASK, SERVICE_DELETE_TASK, SERVICE_SKIP_TASK,
             SERVICE_COMPLETE_ASSIGNED_TASK, SERVICE_POSTPONE_TASK, SERVICE_APPROVE_TASK, SERVICE_REJECT_TASK,
             SERVICE_REDEEM_REWARD, SERVICE_APPROVE_REWARD, SERVICE_REJECT_REWARD,
-            SERVICE_UNLOCK_PARENT_MODE, SERVICE_LOCK_PARENT_MODE, SERVICE_ADJUST_POINTS]
+            SERVICE_UNLOCK_PARENT_MODE, SERVICE_LOCK_PARENT_MODE, SERVICE_ADJUST_POINTS, SERVICE_CATCH_UP_SLOT]
 
 COMPLETE_TASK_SCHEMA = vol.Schema({
     vol.Required("task_id"): vol.Coerce(int),
@@ -91,6 +92,15 @@ POSTPONE_TASK_SCHEMA = ASSIGNED_TASK_SCHEMA
 
 APPROVE_TASK_SCHEMA = vol.Schema({
     vol.Required("task_id"): vol.All(vol.Coerce(int), vol.Range(min=1)),
+    # For a task done several times a day: the slot of today, from 0.
+    vol.Optional("slot"): vol.All(vol.Coerce(int), vol.Range(min=0)),
+    vol.Optional("config_entry_id"): cv.string,
+})
+
+CATCH_UP_SLOT_SCHEMA = vol.Schema({
+    vol.Required("task_id"): vol.All(vol.Coerce(int), vol.Range(min=1)),
+    vol.Required("slot"): vol.All(vol.Coerce(int), vol.Range(min=0)),
+    vol.Optional("completed_by"): vol.All(vol.Coerce(int), vol.Range(min=1)),
     vol.Optional("config_entry_id"): cv.string,
 })
 
@@ -351,6 +361,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                  approve_handler, schema=APPROVE_TASK_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_REJECT_TASK,
                                  reject_handler, schema=REJECT_TASK_SCHEMA)
+    async def catch_up_handler(call: ServiceCall) -> None:
+        await async_catch_up_slot_service(hass, call)
+
+    hass.services.async_register(DOMAIN, SERVICE_CATCH_UP_SLOT,
+                                 catch_up_handler, schema=CATCH_UP_SLOT_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_REDEEM_REWARD, redeem_handler,
                                  schema=REDEEM_REWARD_SCHEMA,
                                  supports_response=SupportsResponse.OPTIONAL)
@@ -415,7 +430,10 @@ async def async_complete_task_service(hass: HomeAssistant, call: ServiceCall) ->
         _LOGGER.error("Failed to complete task %d: %s", task_id, e)
         raise HomeAssistantError(f"Failed to complete Hopla task {task_id}: {e}") from e
 
-    pending = result.status == STATUS_PENDING_APPROVAL
+    # A task done several times a day ticks the slot open now; that slot may
+    # wait for a parent while the task itself never does.
+    pending = result.status == STATUS_PENDING_APPROVAL or any(
+        slot.get("state") == "pending" and _slot_open(slot) for slot in result.slots_today or [])
     _LOGGER.info("Task %d %s by user %s", task_id,
                  "submitted for approval" if pending else "completed", completed_by or "default")
     # Refresh now rather than debounced, so a dashboard tap shows its result at once.
@@ -423,19 +441,51 @@ async def async_complete_task_service(hass: HomeAssistant, call: ServiceCall) ->
     return {"task_id": task_id, "pending_approval": pending}
 
 
+def _slot_open(slot: dict) -> bool:
+    """Return True while a slot of today is the one to do now."""
+    opens = dt_util.parse_datetime(slot.get("opensAt") or "")
+    closes = dt_util.parse_datetime(slot.get("closesAt") or "")
+    return opens is not None and closes is not None and opens <= dt_util.now() < closes
+
+
 async def async_resolve_approval_service(hass: HomeAssistant, call: ServiceCall, *, approve: bool) -> None:
-    """Approve or reject a task completion waiting for approval."""
+    """Approve or reject a task completion waiting for approval.
+
+    With a slot, only that slot of today of a task done several times a day.
+    """
     task_id = call.data["task_id"]
+    slot = call.data.get("slot")
     entry = await _get_config_entry(hass, call.data.get("config_entry_id"))
     if not entry:
         raise HomeAssistantError("No matching Hopla integration found")
     config = hass.data[DOMAIN][entry.entry_id]
     require_parent(config, call)
     try:
-        if approve:
+        if slot is not None:
+            note = call.data.get("note")
+            await config["client"].async_slot_action(task_id, slot, "approve" if approve else "reject",
+                                                     {"note": note} if note and not approve else None)
+        elif approve:
             await config["client"].async_approve_task(task_id)
         else:
             await config["client"].async_reject_task(task_id, call.data.get("note"))
+    except Exception as err:
+        raise HomeAssistantError(str(err)) from err
+    finally:
+        await config["coordinator"].async_refresh()
+
+
+async def async_catch_up_slot_service(hass: HomeAssistant, call: ServiceCall) -> None:
+    """Tick, as a parent, a slot of today that a child did: open now, or missed."""
+    entry = await _get_config_entry(hass, call.data.get("config_entry_id"))
+    if not entry:
+        raise HomeAssistantError("No matching Hopla integration found")
+    config = hass.data[DOMAIN][entry.entry_id]
+    require_parent(config, call)
+    completed_by = call.data.get("completed_by")
+    try:
+        await config["client"].async_slot_action(call.data["task_id"], call.data["slot"], "catchup",
+                                                 {"completedBy": completed_by} if completed_by else None)
     except Exception as err:
         raise HomeAssistantError(str(err)) from err
     finally:

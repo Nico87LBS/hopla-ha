@@ -199,6 +199,12 @@ class HoplaApiClient:
         await self._post_action(f"/eapi/v1/chore/{task_id}/reject", "reject the task",
                                 {"note": note} if note else None)
 
+    async def async_slot_action(self, task_id: int, slot: int, action: str, payload: dict | None = None) -> HoplaTask:
+        """Approve, reject or catch up one slot of today of a task done several times a day."""
+        operations = {"approve": "approve the slot", "reject": "reject the slot", "catchup": "catch up the slot"}
+        data = await self._post_action(f"/eapi/v1/chore/{task_id}/slots/{slot}/{action}", operations[action], payload)
+        return HoplaTask.from_json(data["res"])
+
     async def async_get_rewards(self) -> Optional[List[HoplaReward]]:
         """Get the reward catalog, or None when the server has no rewards API."""
         async with self._session.get(
