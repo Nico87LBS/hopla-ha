@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 globalThis.HTMLElement = class {};
 globalThis.customElements = {define() {}, get() {}, whenDefined() { return Promise.resolve(); }};
 globalThis.window = {};
-const {boardData, labelNames, liveSlot, parentAccess, podium, rewardState, taskRows} = await import('../custom_components/hopla/frontend/hopla-family-card.js');
+const {adjustEffect, boardData, earnedChange, historyDays, historyKind, labelNames, liveSlot, parentAccess, podium, podiumPlace, rewardState, taskRows} = await import('../custom_components/hopla/frontend/hopla-family-card.js');
 
 assert.deepEqual(labelNames([{name: 'Enfants '}, 'Maison', {name: ''}, null]), ['enfants', 'maison']);
 assert.deepEqual(labelNames('a, b'), ['a', 'b']);
@@ -279,3 +279,31 @@ assert.equal(data.tasks.some(t => t.name === 'Lit'), false, 'her own task waits 
 assert.deepEqual(data.tasks.find(t => t.name === 'Dents').members.map(m => m.name), ['Anna'], 'a shared task stays for her sister');
 assert.equal(data.tasks.some(t => t.name === 'Chambre'), true, 'what waits for a parent stays');
 console.log('family card hides the tasks of a child who is away');
+
+// The points history: what each row did to the points earned, by day.
+{
+  const entry = (id, action, points, at) => ({id, action, points, created_at: at, user_id: 2});
+  const rows = [entry(5, 'bonus', 15, '2026-10-20T09:10:00'), entry(4, 'redeem', 30, '2026-10-20T08:00:00'),
+    entry(3, 'penalty', 3, '2026-10-19T17:45:00'), entry(2, 'undo', 5, '2026-10-19T12:50:00'), entry(1, 'task', 5, '2026-10-19T12:30:00')];
+  assert.deepEqual(rows.map(earnedChange), [15, 0, -3, -5, 5], 'a reward spends the balance, not the points earned');
+  assert.deepEqual(rows.map(historyKind), ['bonus', 'reward', 'bonus', 'task', 'task']);
+  assert.deepEqual(historyDays(rows).map(d => [d.day.getDate(), d.entries.length, d.earned]), [[20, 2, 15], [19, 3, -3]]);
+  assert.equal(historyKind({action: 'reset'}), 'reset');
+
+  const anna = {id: 3, points: 2, earned: 40};
+  assert.deepEqual(adjustEffect(anna, 1, 15), {earnedFrom: 40, earnedTo: 55, pointsFrom: 2, pointsTo: 17});
+  assert.deepEqual(adjustEffect(anna, -1, 5), {earnedFrom: 40, earnedTo: 38, pointsFrom: 2, pointsTo: 0}, 'a penalty stops at a zero balance');
+
+  const tied = [{id: 2, earned: 210, points: 1}, {id: 3, earned: 210, points: 1}, {id: 4, earned: 50, points: 1}];
+  assert.deepEqual(podiumPlace(tied, tied[1]).place, 1);
+  assert.deepEqual(podiumPlace(tied, tied[1]).tied.map(m => m.id), [2]);
+  assert.deepEqual(podiumPlace(tied, tied[2]), {place: 2, tied: []});
+
+  const withLedger = {...hass, states: {...hass.states, 'sensor.hopla_bonus': {state: '0', attributes: {points_presets: [],
+    recent: [{id: 9, user_id: 3, action: 'bonus', points: 5}, {id: 8, user_id: 1, action: 'task', points: 2}]}}}};
+  const ledgerData = boardData(withLedger, {members: [2, 3]}, now);
+  assert.equal(ledgerData.adjustable, true, 'bonuses work even without presets');
+  assert.deepEqual(ledgerData.ledger.map(e => e.id), [9], 'only the members shown');
+  assert.equal(boardData(hass, {}, now).adjustable, false);
+  console.log('family card points history');
+}

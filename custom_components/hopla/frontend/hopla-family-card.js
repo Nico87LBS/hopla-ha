@@ -131,6 +131,44 @@ export function taskMode(tasks, name) {
   return same[0]?.assignees.length > 1 ? 'one' : '';
 }
 
+// A points history row: which filter it falls under, and how it moved the
+// points earned (the podium and the rank). Spending on a reward only moves
+// the balance left to spend.
+const HISTORY_KIND = {task: 'task', undo: 'task', bonus: 'bonus', penalty: 'bonus', redeem: 'reward', reset: 'reset'};
+export const historyKind = entry => HISTORY_KIND[entry.action] || 'reset';
+export function earnedChange(entry) {
+  const points = Math.abs(Number(entry.points) || 0);
+  return {task: points, bonus: points, undo: -points, penalty: -points}[entry.action] || 0;
+}
+
+// History rows grouped by day, newest first, with what each day earned.
+export function historyDays(entries) {
+  const days = [];
+  for (const entry of entries) {
+    const at = new Date(entry.created_at);
+    let day = days.find(d => sameDay(d.day, at));
+    if (!day) days.push(day = {day: new Date(at.getFullYear(), at.getMonth(), at.getDate()), entries: [], earned: 0});
+    day.entries.push(entry);
+    day.earned += earnedChange(entry);
+  }
+  return days;
+}
+
+// What a bonus or a penalty would do: a penalty never takes the balance below
+// zero, so it takes at most the balance from the points earned too.
+export function adjustEffect(member, sign, amount) {
+  const applied = sign < 0 ? Math.min(amount, member.points) : amount;
+  return {earnedFrom: podiumScore(member), earnedTo: podiumScore(member) + sign * applied,
+    pointsFrom: member.points, pointsTo: member.points + sign * applied};
+}
+
+// A member's place on the podium (1 to 3, or null) and who shares it.
+export function podiumPlace(members, member) {
+  const steps = podium(members);
+  const index = steps.findIndex(group => group.some(m => m.id === member.id));
+  return index < 0 ? {place: null, tied: []} : {place: index + 1, tied: steps[index].filter(m => m.id !== member.id)};
+}
+
 // What a member sees on a reward: available, missing points, or out of quota until a date.
 export function rewardState(reward, member, now = new Date()) {
   const resetsAt = reward.quota_resets_at ? new Date(reward.quota_resets_at) : null;
@@ -166,6 +204,8 @@ export function boardData(hass, config, now = new Date()) {
   let requests = [];
   let presets = [];
   let presetsEntry = null;
+  let ledger = [];
+  let adjustable = false;
   let surprise = null;
   let period = null;
   let challenges = [];
@@ -197,6 +237,8 @@ export function boardData(hass, config, now = new Date()) {
     } else if (Array.isArray(a.points_presets)) {
       presets = a.points_presets;
       presetsEntry = a.config_entry_id || null;
+      ledger = Array.isArray(a.recent) ? a.recent : [];
+      adjustable = true;
     } else if (Array.isArray(a.rewards) && rewards === null) {
       rewards = a.rewards;
       requests = Array.isArray(a.requests) ? a.requests : [];
@@ -242,7 +284,9 @@ export function boardData(hass, config, now = new Date()) {
     .map(item => ({...item, member})))
     .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
   return {members: shown, tasks: visible, rows: withMode(taskRows(visible, done, shown)), done, doneRows: withMode(doneRows(done)), rewards: rewards || [], requests,
-    presets, presetsEntry, surprise, period, ladder,
+    presets, presetsEntry, surprise, period, ladder, adjustable,
+    // The newest points changes of the members shown, newest first.
+    ledger: ledger.filter(entry => shown.some(m => m.id === entry.user_id)),
     // Running challenges, and finished ones until their end date, for the members shown.
     challenges: challenges.filter(c => new Date(c.ends_at) > now && c.members.some(id => shown.some(m => m.id === id)))};
 }
@@ -255,7 +299,12 @@ const icon = {
   gift: '<path d="M4 11h16v10H4zM3 7h18v4H3zM12 7v14M12 7c-1-3-5-4-5-1.5S10 7 12 7zm0 0c1-3 5-4 5-1.5S14 7 12 7z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2" fill="currentColor"/><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2.6"/>',
   clock: '<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
-  plusminus: '<path d="M8 3v8M4 7h8M13 17h8M17 2L7 22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>',
+  plusminus: '<path d="M7 3.5v7M3.5 7h7M13.5 17h7M16.5 5.5l-9 13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
+  plus: '<path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>',
+  minus: '<path d="M5 12h14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>',
+  history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
+  chevron: '<path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  left: '<path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>',
   flame: '<path d="M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-5 3-6 0 2 1 3 2 3 0-4-1-6 1-9z" fill="currentColor"/>',
   sparkle: '<path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5l-2.2-6.3L3.5 10l6.3-1.7zM19 15l.9 2.6 2.6.9-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9z" fill="currentColor"/>',
   bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="currentColor"/>',
@@ -270,7 +319,9 @@ const icon = {
   unlock: '<rect x="5" y="11" width="14" height="10" rx="2" fill="currentColor"/><path d="M8 11V8a4 4 0 0 1 7.5-2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
   back: '<path d="M21 6H8l-6 6 6 6h13zM12 9l6 6M18 9l-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
 };
-const RESPONDING = ['complete_task', 'redeem_reward', 'unlock_parent_mode', 'adjust_points'];
+const RESPONDING = ['complete_task', 'redeem_reward', 'unlock_parent_mode', 'adjust_points', 'get_points_history'];
+// The sections a viewer can fold, and whether each starts open.
+const FOLDS = {todo: true, done: false, history: false, rewards: true};
 const svg = (name, size, label) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" ${label ? `role="img" aria-label="${escape(label)}"` : 'aria-hidden="true"'}>${icon[name]}</svg>`;
 
 class HoplaFamilyCard extends HTMLElement {
@@ -287,7 +338,14 @@ class HoplaFamilyCard extends HTMLElement {
     this._flash = new Map();  // task id -> message shown briefly after a tap
     this._armed = null;       // reward key waiting for a confirming second tap
     this._pin = null;         // digits typed on the parent code pad while it is open
+    this._sheet = null;       // the member window open over the card: history, rewards or a bonus/penalty
+    this._afterPin = null;    // the window to open once the parent code is typed
+    this._history = new Map(); // member id -> the points history loaded for the window
+    this._open = {};          // section -> folded open or not, once touched
     this.shadowRoot.addEventListener('click', event => this.onClick(event));
+    this.shadowRoot.addEventListener('input', event => {
+      if (event.target.dataset?.field === 'reason' && this._sheet) this._sheet.reason = event.target.value;
+    });
   }
   connectedCallback() {
     // Quota countdowns move on even when no sensor changes.
@@ -298,7 +356,9 @@ class HoplaFamilyCard extends HTMLElement {
     if (config.due && !['today', 'all'].includes(config.due)) throw new Error(this.t('errors.due'));
     if (config.members !== undefined && !Array.isArray(config.members)) throw new Error(this.t('errors.members'));
     if (config.labels !== undefined && !Array.isArray(config.labels)) throw new Error(this.t('errors.labels'));
-    this._config = {due: 'today', show_points: true, show_todo: true, show_done: true, show_rewards: true, show_approval: false, allow_redeem: false, show_bonus: true, show_goals: true, ...config};
+    this._config = {due: 'today', show_points: true, show_todo: true, show_done: true, show_history: false, show_rewards: true, show_approval: false, allow_redeem: false, show_bonus: true, show_goals: true,
+      ...Object.fromEntries(Object.entries(FOLDS).map(([section, open]) => [`${section}_open`, open])), ...config};
+    this._open = {};
     this.render();
   }
   set hass(hass) {
@@ -311,6 +371,7 @@ class HoplaFamilyCard extends HTMLElement {
       && previous.locale?.language === hass.locale?.language) return;
     this.render();
   }
+  isOpen(section) { return this._open[section] ?? this._config[`${section}_open`] !== false; }
   getCardSize() { return 4 + (this._data?.rows.length || 0) + (this._data?.doneRows.length || 0) + (this._data?.rewards.length || 0); }
   getGridOptions() { return {columns: 12, min_columns: 6}; }
   t(key, values = {}) {
@@ -338,9 +399,14 @@ class HoplaFamilyCard extends HTMLElement {
   }
   async onClick(event) {
     if (event.target.classList?.contains('rank-scrim')) { this._rankFor = null; this.render(); return; }
+    if (event.target.classList?.contains('sheet-scrim')) { this._sheet = null; this.render(); return; }
     const button = event.target.closest('button[data-action]');
     if (!button || button.disabled) return;
     const {action, task, member, reward, request, digit, preset, slot, tasks} = button.dataset;
+    if (action === 'fold') { const {section} = button.dataset; this._open[section] = !this.isOpen(section); this.render(); return; }
+    if (action === 'adjust-open') { await this.openAdjust(Number(member), button.dataset.tab || 'bonus'); return; }
+    if (['sheet-history', 'sheet-rewards', 'sheet-member', 'sheet-close', 'sheet-filter', 'history-more'].includes(action)
+      || action.startsWith('adjust-')) { await this.onSheet(action, button.dataset); return; }
     if (action === 'parent') {
       const access = parentAccess(this._hass);
       if (access.unlocked) await this.call('lock_parent_mode', {config_entry_id: access.entryId}, 'parent', null);
@@ -350,7 +416,7 @@ class HoplaFamilyCard extends HTMLElement {
     // The rank details only show things: no parent code needed.
     if (action === 'rank') { this._rankFor = Number(member); this.render(); return; }
     if (action === 'rank-close') { this._rankFor = null; this.render(); return; }
-    if (action === 'pin-cancel') { this._pin = null; this.render(); return; }
+    if (action === 'pin-cancel') { this._pin = null; this._afterPin = null; this.render(); return; }
     if (action === 'pin-back') { this._pin = this._pin.slice(0, -1); this.render(); return; }
     if (action === 'pin-digit') {
       if (this._pin === null || this._pin.length >= 4) return;
@@ -359,8 +425,11 @@ class HoplaFamilyCard extends HTMLElement {
       const pin = this._pin;
       this._error = '';
       const response = await this.call('unlock_parent_mode', {pin, config_entry_id: parentAccess(this._hass).entryId}, 'parent', null);
-      if (response) this._pin = null;
-      else { this._pin = ''; this._pinError = this._error; this._error = ''; }
+      if (response) {
+        this._pin = null;
+        // Back to the window that asked for the code.
+        if (this._afterPin) { this._sheet = this._afterPin; this._afterPin = null; }
+      } else { this._pin = ''; this._pinError = this._error; this._error = ''; }
       this.render();
       return;
     }
@@ -385,17 +454,6 @@ class HoplaFamilyCard extends HTMLElement {
       for (const id of tasks.split(',').map(Number)) {
         if (await this.call('approve_task', {task_id: id}, id, null) === null) break;
       }
-    } else if (action === 'bonus') {
-      // Two touches, like redeeming: a parent's tap on the wrong face costs a child points.
-      const key = `preset-${preset}-${member}`;
-      if (this._armed !== key) { this._armed = key; this.render(); setTimeout(() => { if (this._armed === key) { this._armed = null; this.render(); } }, 4000); return; }
-      this._armed = null;
-      const response = await this.call('adjust_points', {user_id: Number(member), preset_id: Number(preset),
-        ...(this._data.presetsEntry ? {config_entry_id: this._data.presetsEntry} : {})}, key, Number(member));
-      if (response) {
-        const name = this._data.members.find(m => m.id === Number(member))?.name || '';
-        this.flash(key, this.t(response.action === 'penalty' ? 'penalty_done' : 'bonus_done', {count: response.points, name}));
-      }
     } else if (action === 'redeem') {
       const key = `reward-${reward}-${member}`;
       if (this._armed !== key) { this._armed = key; this.render(); setTimeout(() => { if (this._armed === key) { this._armed = null; this.render(); } }, 4000); return; }
@@ -403,6 +461,73 @@ class HoplaFamilyCard extends HTMLElement {
       const response = await this.call('redeem_reward', {reward_id: Number(reward), user_id: Number(member)}, key, Number(member));
       if (response) this.flash(key, response.pending ? this.t('requested') : this.t('bravo'));
     }
+  }
+  // The member window: who it is for and what it shows.
+  async onSheet(action, data) {
+    const sheet = this._sheet;
+    const member = Number(data.member);
+    if (action === 'sheet-close') { this._sheet = null; this.render(); return; }
+    if (action === 'sheet-history' || action === 'sheet-rewards') {
+      this._sheet = {kind: action === 'sheet-history' ? 'history' : 'rewards', member, filter: 'all'};
+      this._armed = null;
+      this.render();
+      if (this._sheet.kind === 'history') await this.loadHistory(member);
+      return;
+    }
+    if (!sheet) return;
+    if (action === 'sheet-member') {
+      this._sheet = {...sheet, member, preset: null, amount: 0, reason: ''};
+      this._armed = null;
+      this.render();
+      if (sheet.kind === 'history') await this.loadHistory(member);
+      return;
+    }
+    if (action === 'sheet-filter') { sheet.filter = data.filter; this.render(); return; }
+    if (action === 'history-more') { await this.loadHistory(sheet.member, true); return; }
+    if (sheet.kind !== 'adjust') return;
+    if (action === 'adjust-back') { this._sheet = {kind: 'history', member: sheet.member, filter: 'all'}; this.render(); await this.loadHistory(sheet.member); return; }
+    if (action === 'adjust-tab') { this._sheet = {...sheet, tab: data.tab, preset: null, amount: 0}; this.render(); return; }
+    if (action === 'adjust-preset') { sheet.preset = Number(data.preset); sheet.amount = 0; this.render(); return; }
+    if (action === 'adjust-step') { sheet.amount = Math.max(0, Math.min(1000, sheet.amount + Number(data.step))); sheet.preset = null; this.render(); return; }
+    if (action === 'adjust-go') {
+      const sign = sheet.tab === 'penalty' ? -1 : 1;
+      const reason = (sheet.reason || '').trim();
+      const payload = {user_id: sheet.member, ...(sheet.preset ? {preset_id: sheet.preset} : {points: sign * sheet.amount}),
+        ...(reason ? {reason} : {}), ...(this._data.presetsEntry ? {config_entry_id: this._data.presetsEntry} : {})};
+      const response = await this.call('adjust_points', payload, `adjust-${sheet.member}`, sheet.member);
+      if (!response) return;
+      const name = this._data.members.find(m => m.id === sheet.member)?.name || '';
+      this._sheet = {kind: 'history', member: sheet.member, filter: 'all',
+        notice: this.t(response.action === 'penalty' ? 'penalty_done' : 'bonus_done', {count: response.points, name})};
+      this.render();
+      await this.loadHistory(sheet.member);
+    }
+  }
+  async openAdjust(member, tab, from) {
+    const sheet = {kind: 'adjust', member, tab, preset: null, amount: 0, reason: '', from};
+    // Bonuses and penalties are for parents: the code first on the tablet.
+    if (!parentAccess(this._hass).parent) { this._sheet = null; this._afterPin = sheet; this._pin = ''; this._pinError = ''; this.render(); return; }
+    this._sheet = sheet;
+    this.render();
+  }
+  async loadHistory(memberId, older = false) {
+    const loaded = this._history.get(memberId) || {entries: [], more: false};
+    if (loaded.loading) return;
+    const member = this._data?.members.find(m => m.id === memberId);
+    const before = older ? loaded.entries.at(-1)?.id : undefined;
+    this._history.set(memberId, {...loaded, loading: true, error: '', seen: member ? `${member.earned}/${member.points}` : loaded.seen});
+    this.render();
+    let next;
+    try {
+      const result = await this._hass.callService('hopla', 'get_points_history', {user_id: memberId, limit: 20,
+        ...(before ? {before} : {}), ...(this._data?.presetsEntry ? {config_entry_id: this._data.presetsEntry} : {})}, undefined, false, true);
+      const page = result?.response ?? {};
+      next = {entries: [...(older ? loaded.entries : []), ...(page.entries || [])], more: page.more === true, loaded: true};
+    } catch (err) {
+      next = {...loaded, error: err?.message || String(err)};
+    }
+    this._history.set(memberId, {...next, loading: false, seen: this._history.get(memberId).seen});
+    this.render();
   }
   flash(key, message) {
     this._flash.set(key, message); this.render();
@@ -420,18 +545,29 @@ class HoplaFamilyCard extends HTMLElement {
   points(value, muted = false, cost = false) {
     return value ? `<span class="pts${muted ? ' muted' : ''}${cost ? ' cost' : ''}">${svg('star', 14)}${cost ? '' : '+'}${value}</span>` : '';
   }
-  header(iconName, kind, title, count) {
-    return `<div class="head ${kind}"><span class="head-icon ${kind}">${svg(iconName, 18)}</span><h2>${escape(title)}</h2><span class="count ${kind}">${count}</span></div>`;
+  // A section title; a section that folds gets a chevron and opens on a touch.
+  header(iconName, kind, title, count, section) {
+    const inner = `<span class="head-icon ${kind}">${svg(iconName, 18)}</span><h2>${escape(title)}</h2><span class="count ${kind}">${count}</span>`;
+    if (!section) return `<div class="head ${kind}">${inner}</div>`;
+    const open = this.isOpen(section);
+    return `<button class="head ${kind} fold${open ? ' open' : ''}" data-action="fold" data-section="${section}" aria-expanded="${open}">${inner}<span class="chev">${svg('chevron', 18)}</span></button>`;
+  }
+  section(section, header, body) {
+    return `<section>${header}${this.isOpen(section) ? body : ''}</section>`;
   }
   renderPodium(members) {
     const steps = podium(members);
     const step = (group, rank) => {
       const size = rank === 0 ? 76 : 60;
       const faces = group.length
-        ? group.map(m => `<div class="podium-member">${rank === 0 && podiumScore(m) > 0 ? `<span class="crown">${svg('crown', 30)}</span>` : ''}<span class="podium-face">${this.face(m, size, `${rank === 0 && podiumScore(m) > 0 ? ' leader' : ''}${m.away ? ' away' : ''}`)}${this.coin(m)}${this.away(m)}</span><div class="podium-name">${escape(m.name)}${this.streak(m)}</div>${this.rank(m)}</div>`).join('')
+        ? group.map(m => `<div class="podium-member">${rank === 0 && podiumScore(m) > 0 ? `<span class="crown">${svg('crown', 30)}</span>` : ''}<button class="podium-face" data-action="sheet-rewards" data-member="${m.id}" aria-label="${escape(this.t('common.on_task', {action: this.t('rewards'), task: m.name}))}">${this.face(m, size, `${rank === 0 && podiumScore(m) > 0 ? ' leader' : ''}${m.away ? ' away' : ''}`)}${this.coin(m)}${this.away(m)}</button><div class="podium-name">${escape(m.name)}${this.streak(m)}</div>${this.rank(m)}</div>`).join('')
         : `<div class="podium-member"><span class="face empty" style="width:${size}px;height:${size}px"></span><div class="podium-name">&nbsp;</div></div>`;
       const score = group.length ? `<span class="score">${podiumScore(group[0])}</span><span class="unit">${escape(this.t('earned', {count: podiumScore(group[0])}))}</span>` : '';
-      return `<div class="podium-col rank${rank + 1}"><div class="podium-faces">${faces}</div><div class="step">${score}</div></div>`;
+      // The step opens its first member's history; with a tie, the window's menu switches to the others.
+      const stepEl = group.length
+        ? `<button class="step" data-action="sheet-history" data-member="${group[0].id}" aria-label="${escape(this.t('common.on_task', {action: this.t('history_title'), task: group.map(m => m.name).join(', ')}))}">${score}<span class="step-icon">${svg('history', 16)}</span></button>`
+        : '<div class="step"></div>';
+      return `<div class="podium-col rank${rank + 1}"><div class="podium-faces">${faces}</div>${stepEl}</div>`;
     };
     const order = [[0], [1, 0], [1, 0, 2]][steps.length - 1];
     return `<div class="podium steps${steps.length}">${order.map(rank => step(steps[rank], rank)).join('')}</div>`;
@@ -668,19 +804,155 @@ class HoplaFamilyCard extends HTMLElement {
       : members.some(m => this._armed === `reward-${reward.id}-${m.id}`) ? `<span class="sub armed-text">${escape(this.t('confirm'))}</span>` : period;
     return `<div class="row"><span class="name"><span>${escape(reward.name)}</span>${armed}</span>${this.points(reward.points_cost, false, true)}<span class="faces">${slots}</span></div>`;
   }
-  renderPreset(preset, members) {
-    const bonus = preset.points > 0;
-    const slots = members.map(m => {
-      const key = `preset-${preset.id}-${m.id}`;
-      const armed = this._armed === key;
-      return `<button class="slot tap${armed ? ' armed' : ''}" data-action="bonus" data-preset="${preset.id}" data-member="${m.id}" ${this._busy.has(key) ? 'disabled' : ''}
-        aria-label="${escape(this.t('common.on_task', {action: m.name, task: armed ? this.t('bonus_confirm') : preset.name}))}">${this.face(m, 44)}</button>`;
-    }).join('');
-    const flash = members.map(m => this._flash.get(`preset-${preset.id}-${m.id}`)).find(Boolean);
-    const sub = flash ? `<span class="sub armed-text">${escape(flash)}</span>`
-      : members.some(m => this._armed === `preset-${preset.id}-${m.id}`) ? `<span class="sub armed-text">${escape(this.t('bonus_confirm'))}</span>` : '';
-    const amount = `<span class="pts ${bonus ? 'bonus' : 'penalty'}">${bonus ? '+' : '−'}${Math.abs(preset.points)}</span>`;
-    return `<div class="row"><span class="name"><span>${escape(preset.name)}</span>${sub}</span>${amount}<span class="faces">${slots}</span></div>`;
+  // Today's bonuses and penalties of a member, from the newest points changes.
+  todayAdjustments(ledger, member, now = new Date()) {
+    const today = ledger.filter(entry => entry.user_id === member.id && sameDay(new Date(entry.created_at), now));
+    const sum = action => today.filter(entry => entry.action === action).reduce((total, entry) => total + Math.abs(Number(entry.points) || 0), 0);
+    return {bonus: sum('bonus'), penalty: sum('penalty')};
+  }
+  renderBonusTiles(members, ledger) {
+    return `<div class="kids">${members.map(m => {
+      const {bonus, penalty} = this.todayAdjustments(ledger, m);
+      const today = [bonus ? `<span class="mini plus">${escape(this.t('today_bonus', {n: bonus}))}</span>` : '',
+        penalty ? `<span class="mini minus">${escape(this.t('today_penalty', {n: penalty}))}</span>` : ''].join('');
+      return `<div class="kid"><div class="kid-top">${this.face(m, 52)}<div><b>${escape(m.name)}</b>${today ? `<div class="kid-today">${today}</div>` : ''}</div></div>
+        <div class="kid-acts">
+          <button class="act plus" data-action="adjust-open" data-member="${m.id}" data-tab="bonus" aria-label="${escape(this.t('common.on_task', {action: this.t('bonus'), task: m.name}))}">${svg('plus', 16)}${escape(this.t('bonus'))}</button>
+          <button class="act minus" data-action="adjust-open" data-member="${m.id}" data-tab="penalty" aria-label="${escape(this.t('common.on_task', {action: this.t('penalty'), task: m.name}))}">${svg('minus', 16)}${escape(this.t('penalty'))}</button>
+        </div></div>`;
+    }).join('')}</div>`;
+  }
+  // The icon, colour and amount of a points history row.
+  historyLook(entry) {
+    const points = Math.abs(Number(entry.points) || 0);
+    return {
+      task: {icon: 'check', cls: 'task', text: `+${points}`},
+      undo: {icon: 'replay', cls: 'undo', text: `−${points}`},
+      bonus: {icon: 'plus', cls: 'plus', text: `+${points}`},
+      penalty: {icon: 'minus', cls: 'minus', text: `−${points}`},
+      redeem: {icon: 'gift', cls: 'gift', text: `−${points}`},
+    }[entry.action] || {icon: 'replay', cls: 'undo', text: `−${points}`};
+  }
+  historyName(entry) {
+    return entry.name || entry.reason || this.t(`family.history_kind.${entry.action}`);
+  }
+  historySub(entry, withName) {
+    const by = entry.created_by_name && entry.created_by !== entry.user_id && entry.action !== 'task' ? this.t('history_by', {name: entry.created_by_name}) : '';
+    return [withName ? entry.user_name : '', this.t(`family.history_kind.${entry.action}`), by].filter(Boolean).join(' · ');
+  }
+  clock(date) {
+    return date.toLocaleTimeString(this._language || browserLanguage(), {hour: 'numeric', minute: '2-digit'});
+  }
+  // The card's own short history: the newest changes, each opening its member's window.
+  renderLedger(ledger, members) {
+    if (!ledger.length) return `<div class="empty-text">${escape(this.t('history_empty'))}</div>`;
+    return `<div class="ledger">${ledger.slice(0, 5).map(entry => {
+      const member = members.find(m => m.id === entry.user_id);
+      const look = this.historyLook(entry);
+      return `<button class="lrow" data-action="sheet-history" data-member="${entry.user_id}">
+        <span class="slot">${member ? this.face(member, 38) : ''}<span class="badge kind ${look.cls}">${svg(look.icon, 10)}</span></span>
+        <span class="lname"><span>${escape(this.historyName(entry))}</span><small>${escape(this.historySub(entry, true))}</small></span>
+        <span class="amount ${look.cls}">${escape(look.text)}</span><span class="when">${escape(this.clock(new Date(entry.created_at)))}</span></button>`;
+    }).join('')}</div>`;
+  }
+  // The member window, over the card like the rank details.
+  renderSheet(data) {
+    const sheet = this._sheet;
+    const member = sheet && data.members.find(m => m.id === sheet.member);
+    if (!member) return '';
+    const adjust = sheet.kind === 'adjust';
+    const menu = adjust
+      ? `<button class="round" data-action="adjust-back" aria-label="${escape(this.t('back'))}">${svg('left', 18)}</button>${this.face(member, 34)}<span class="sheet-for">${escape(this.t('adjust_for', {name: member.name}))}</span>`
+      : `<div class="menu" role="group">${data.members.map(m => `<button class="who${m.id === member.id ? ' on' : ''}" data-action="sheet-member" data-member="${m.id}" aria-pressed="${m.id === member.id}">${this.face(m, 34)}<span>${escape(m.name)}</span></button>`).join('')}</div><span class="grow"></span>`;
+    const tools = sheet.kind === 'history' && data.adjustable && this._config.show_bonus
+      ? `<button class="round adj" data-action="adjust-open" data-member="${member.id}" data-tab="bonus" aria-label="${escape(this.t('adjust_open', {name: member.name}))}">${svg('plusminus', 22)}</button>` : '';
+    const body = sheet.kind === 'history' ? this.renderHistorySheet(data, member)
+      : sheet.kind === 'rewards' ? this.renderRewardsSheet(data, member) : this.renderAdjustSheet(data, member);
+    return `<div class="sheet-scrim"><div class="sheet" role="dialog" aria-label="${escape(member.name)}">
+      <div class="sheet-head">${menu}${tools}<button class="round" data-action="sheet-close" aria-label="${escape(this.t('close'))}">${svg('cross', 16)}</button></div>
+      ${body}${this._error ? `<div class="error">${escape(this._error)}</div>` : ''}</div></div>`;
+  }
+  renderHistorySheet(data, member) {
+    const sheet = this._sheet;
+    const loaded = this._history.get(member.id);
+    // A points change while the window is open (a task ticked elsewhere): load again.
+    if (loaded && !loaded.loading && loaded.seen !== `${member.earned}/${member.points}`) queueMicrotask(() => this.loadHistory(member.id));
+    const {place, tied} = this._config.show_points ? podiumPlace(data.members, member) : {place: null, tied: []};
+    const tie = place && tied.length ? `<span class="tie">${svg('crown', 16)}${escape(this.t(`tie_${place}`, {names: tied.map(m => m.name).join(', ')}))}</span>` : '';
+    const filters = ['all', 'task', 'bonus', 'reward'].map(f => `<button class="filter${sheet.filter === f ? ' on' : ''}" data-action="sheet-filter" data-filter="${f}" aria-pressed="${sheet.filter === f}">${escape(this.t(`filter_${f}`))}</button>`).join('');
+    const entries = (loaded?.entries || []).filter(entry => sheet.filter === 'all' || historyKind(entry) === sheet.filter);
+    const now = new Date();
+    const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    const dayName = day => sameDay(day, now) ? this.t('day_today') : sameDay(day, yesterday) ? this.t('day_yesterday')
+      : day.toLocaleDateString(this._language || browserLanguage(), {weekday: 'long', day: 'numeric', month: 'long'});
+    const days = historyDays(entries).map(day => `<div class="day"><span>${escape(dayName(day.day))}</span>${day.earned ? `<span class="${day.earned < 0 ? 'down' : ''}">${escape(this.t('day_earned', {count: Math.abs(day.earned), sign: day.earned < 0 ? '−' : '+'}))}</span>` : ''}</div>
+      ${day.entries.map(entry => {
+        const look = this.historyLook(entry);
+        return `<div class="hrow"><span class="hic ${look.cls}">${svg(look.icon, 18)}</span><span class="lname"><span>${escape(this.historyName(entry))}</span><small>${escape([this.historySub(entry, false), this.clock(new Date(entry.created_at))].join(' · '))}</small></span>
+          <span class="amount ${look.cls}">${escape(look.text)}${entry.action === 'redeem' ? `<small>${escape(this.t('on_balance'))}</small>` : ''}</span></div>`;
+      }).join('')}`).join('');
+    const status = !loaded || (loaded.loading && !loaded.entries.length) ? this.t('history_loading')
+      : loaded.error && !loaded.entries.length ? loaded.error : !entries.length ? this.t('history_empty') : '';
+    return `${sheet.notice ? `<div class="notice">${svg('check', 16)}${escape(sheet.notice)}</div>` : ''}${tie}
+      <h3>${escape(this.t('history_title'))}</h3>
+      <div class="tiles"><div class="tile earned"><b>${podiumScore(member)}</b><small>${escape(this.t('history_earned'))}</small></div>
+        <div class="tile spend"><b>${svg('star', 18)}${member.points}</b><small>${escape(this.t('history_spend'))}</small></div></div>
+      <div class="filters">${filters}</div>
+      ${days}${status ? `<div class="empty-text">${escape(status)}</div>` : ''}
+      ${loaded?.more ? `<button class="more" data-action="history-more" ${loaded.loading ? 'disabled' : ''}>${escape(this.t('history_more'))}</button>` : ''}`;
+  }
+  renderRewardsSheet(data, member) {
+    const rows = data.rewards.map(reward => {
+      const request = data.requests.find(item => item.reward_id === reward.id && item.user_id === member.id);
+      const state = rewardState(reward, member);
+      const key = `reward-${reward.id}-${member.id}`;
+      const cost = this.points(reward.points_cost, false, true);
+      const flash = this._flash.get(key);
+      if (request) {
+        const busy = this._busy.has(`request-${request.redemption_id}`) ? 'disabled' : '';
+        const buttons = this._access.parent ? `
+          <button class="icon-btn ok" data-action="approve-request" data-request="${request.redemption_id}" ${busy} aria-label="${escape(this.t('approve'))}">${svg('check', 18)}</button>
+          <button class="icon-btn no" data-action="reject-request" data-request="${request.redemption_id}" ${busy} aria-label="${escape(this.t('reject'))}">${svg('cross', 16)}</button>` : `<span class="wait">${svg('hourglass', 13)}${escape(this.t('request_pending'))}</span>`;
+        return {now: true, html: `<div class="rw"><span class="ric">${svg('gift', 20)}</span><span class="lname"><span>${escape(reward.name)}</span>${this._access.parent ? `<small>${escape(this.t('request_pending'))}</small>` : ''}</span>${cost}${buttons}</div>`};
+      }
+      if (state.kind === 'available') {
+        const armed = this._armed === key;
+        const action = this._config.allow_redeem
+          ? `<button class="go-btn${armed ? ' armed' : ''}" data-action="redeem" data-reward="${reward.id}" data-member="${member.id}" ${this._busy.has(key) ? 'disabled' : ''}>${escape(armed ? this.t('sure') : this.t('available'))}</button>`
+          : `<span class="ready">${escape(this.t('reward_ready'))}</span>`;
+        const sub = flash || (armed ? this.t('confirm') : '');
+        return {now: true, html: `<div class="rw${armed ? ' armed' : ''}"><span class="ric">${svg('gift', 20)}</span><span class="lname"><span>${escape(reward.name)}</span>${sub ? `<small class="armed-text">${escape(sub)}</small>` : ''}</span>${cost}${action}</div>`};
+      }
+      if (state.kind === 'points') {
+        const pct = Math.max(0, Math.min(100, Math.round(100 * member.points / Math.max(1, reward.points_cost))));
+        return {now: false, html: `<div class="rw"><span class="ric off">${svg('lock', 18)}</span><span class="lname"><span>${escape(reward.name)}</span><small>${escape(this.t('missing_short', {count: state.missing}))}</small><span class="mini-gauge"><i style="width:${pct}%"></i></span></span>${cost}</div>`};
+      }
+      return {now: false, html: `<div class="rw"><span class="ric off">${svg('clock', 18)}</span><span class="lname"><span>${escape(reward.name)}</span><small>${escape(this.t('quota_back', {time: state.resetsAt ? this.duration(state.resetsAt) : ''}))}</small></span>${cost}</div>`};
+    });
+    const group = (title, items) => items.length ? `<div class="day"><span>${escape(title)}</span></div>${items.map(item => item.html).join('')}` : '';
+    return `<div class="hero">${svg('star', 28)}<b>${member.points}</b><span>${escape(this.t('to_spend_big'))}</span></div>
+      ${rows.length ? group(this.t('rewards_now'), rows.filter(r => r.now)) + group(this.t('rewards_later'), rows.filter(r => !r.now)) : `<div class="empty-text">${escape(this.t('rewards_none'))}</div>`}`;
+  }
+  renderAdjustSheet(data, member) {
+    const sheet = this._sheet;
+    const sign = sheet.tab === 'penalty' ? -1 : 1;
+    const presets = data.presets.filter(p => Math.sign(p.points) === sign);
+    const chosen = presets.find(p => p.id === sheet.preset);
+    const amount = chosen ? Math.abs(chosen.points) : sheet.amount;
+    const tabs = ['bonus', 'penalty'].map(tab => `<button class="${sheet.tab === tab ? 'on ' : ''}${tab}" data-action="adjust-tab" data-tab="${tab}" aria-pressed="${sheet.tab === tab}">${svg(tab === 'bonus' ? 'plus' : 'minus', 16)}${escape(this.t(tab))}</button>`).join('');
+    const tiles = presets.map(p => `<button class="ptile${p.id === sheet.preset ? ' on' : ''}" data-action="adjust-preset" data-preset="${p.id}" aria-pressed="${p.id === sheet.preset}">
+      ${p.id === sheet.preset ? `<span class="tick">${svg('check', 12)}</span>` : ''}<b>${p.points > 0 ? '+' : '−'}${Math.abs(p.points)}</b><span>${escape(p.name)}</span></button>`).join('');
+    const effect = amount ? adjustEffect(member, sign, amount) : null;
+    const busy = this._busy.has(`adjust-${member.id}`);
+    const go = amount ? this.t(sign > 0 ? 'give' : 'take', {count: amount, name: member.name}) : this.t(sign > 0 ? 'choose_bonus' : 'choose_penalty');
+    return `<div class="seg ${sheet.tab}">${tabs}</div>
+      ${tiles ? `<div class="ptiles">${tiles}</div>` : ''}
+      <div class="other"><div class="other-top"><span>${escape(this.t('other_amount'))}</span>
+        <span class="stepper"><button data-action="adjust-step" data-step="-1" ${sheet.amount ? '' : 'disabled'} aria-label="${escape(this.t('less'))}">${svg('minus', 16)}</button><span class="${!chosen && sheet.amount ? 'set' : ''}">${chosen ? 0 : sheet.amount}</span><button data-action="adjust-step" data-step="1" aria-label="${escape(this.t('more'))}">${svg('plus', 16)}</button></span></div>
+        <label class="field">${escape(this.t('reason'))}<input type="text" data-field="reason" maxlength="200" value="${escape(sheet.reason || '')}"></label></div>
+      ${effect ? `<div class="effect"><div>${escape(this.t('effect_earned', {from: effect.earnedFrom, to: effect.earnedTo}))}</div><div>${escape(this.t('effect_spend', {from: effect.pointsFrom, to: effect.pointsTo}))}</div></div>` : ''}
+      <button class="go ${sheet.tab}" data-action="adjust-go" ${amount && !busy ? '' : 'disabled'}>${svg(sign > 0 ? 'plus' : 'minus', 18)}${escape(go)}</button>
+      ${sign < 0 ? `<p class="foot">${escape(this.t('floor_note'))}</p>` : ''}`;
   }
   renderParentButton() {
     const access = this._access;
@@ -717,7 +989,11 @@ class HoplaFamilyCard extends HTMLElement {
     const rewards = this._config.show_rewards && data.members.length ? data.rewards : [];
     const done = this._config.show_done ? data.doneRows : [];
     // Bonuses and penalties are for parents: on the tablet, only in parent mode.
-    const presets = this._config.show_bonus && this._access.parent && data.members.length ? data.presets : [];
+    const bonus = this._config.show_bonus && this._access.parent && data.adjustable && data.members.length;
+    const now = new Date();
+    // Keep what is being typed (the reason of a bonus) across a redraw.
+    const active = this.shadowRoot.activeElement;
+    const typing = active?.dataset?.field ? {field: active.dataset.field, start: active.selectionStart, end: active.selectionEnd} : null;
     this.shadowRoot.innerHTML = `<style>
       :host { --dt-ring: #6366f1; --dt-gold: #f5b400; --dt-blue: #3b6fd8; --dt-green: #1e8e3e; --dt-line: var(--divider-color, rgba(127,127,127,.2)); }
       ha-card { padding: 20px 20px 12px; }
@@ -883,6 +1159,104 @@ class HoplaFamilyCard extends HTMLElement {
       .flash { font-weight: 700; color: var(--success-color, var(--dt-green)); }
       .empty-text { font-size: 17px; padding: 14px 2px 4px; }
       .error { color: var(--error-color); margin: 8px 0; }
+      .podium-face { display: block; border-radius: 50%; touch-action: manipulation; }
+      .podium-face:active { transform: scale(.95); }
+      button.step { position: relative; touch-action: manipulation; }
+      button.step:active { filter: brightness(.95); }
+      .step-icon { position: absolute; right: 10px; bottom: 8px; line-height: 0; opacity: .55; }
+      button.head { width: 100%; text-align: left; touch-action: manipulation; }
+      .chev { width: 32px; height: 32px; flex: none; border-radius: 50%; display: grid; place-items: center; background: rgba(127,127,127,.1); color: var(--secondary-text-color); transition: transform .15s; }
+      .head.fold .count { margin-left: auto; }
+      .head.open .chev { transform: rotate(180deg); }
+      .head.hist { border-color: var(--dt-ring); } .head-icon.hist { background: rgba(99,102,241,.12); color: var(--dt-ring); } .count.hist { color: var(--dt-ring); }
+      .ledger { display: flex; flex-direction: column; margin-top: 4px; }
+      .lrow { display: flex; align-items: center; gap: 12px; padding: 8px 6px; border-bottom: 1px solid var(--dt-line); text-align: left; }
+      .lrow:last-child { border-bottom: 0; }
+      .lname { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 15px; }
+      .lname small { font-size: 12px; color: var(--secondary-text-color); margin-top: 1px; }
+      .when { font-size: 12px; color: var(--secondary-text-color); min-width: 40px; text-align: right; }
+      .badge.kind { width: 18px; min-width: 18px; height: 18px; padding: 0; }
+      .badge.kind.task { background: var(--dt-blue); } .badge.kind.plus { background: var(--dt-green); } .badge.kind.minus { background: #d93025; }
+      .badge.kind.gift { background: #d99a00; } .badge.kind.undo { background: #80868b; }
+      .amount { font-size: 15px; font-weight: 800; white-space: nowrap; text-align: right; min-width: 44px; }
+      .amount small { display: block; font-size: 11px; font-weight: 500; color: var(--secondary-text-color); }
+      .amount.task { color: #4f46e5; } .amount.plus { color: #1e7a37; } .amount.minus { color: #c5221f; } .amount.gift { color: #8a5a00; } .amount.undo { color: var(--secondary-text-color); }
+      .kids { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 12px; }
+      .kid { display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: 18px; background: rgba(124,77,255,.04); border: 1px solid rgba(124,77,255,.16); }
+      .kid-top { display: flex; align-items: center; gap: 12px; } .kid-top b { font-size: 17px; }
+      .kid-today { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+      .mini { display: inline-flex; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 800; }
+      .mini.plus { background: rgba(30,142,62,.12); color: #1e7a37; } .mini.minus { background: rgba(217,48,37,.1); color: #c5221f; }
+      .kid-acts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .act { display: flex; align-items: center; justify-content: center; gap: 6px; height: 46px; border-radius: 13px; font-size: 15px; font-weight: 800; touch-action: manipulation; }
+      .act.plus { background: #1e8e3e; color: #fff; box-shadow: 0 1px 3px rgba(30,142,62,.35); }
+      .act.minus { background: var(--card-background-color, #fff); color: #c5221f; border: 2px solid rgba(217,48,37,.35); }
+      .act:active, .go:active, .ptile:active { transform: scale(.97); }
+      .sheet-scrim { position: fixed; inset: 0; z-index: 10; background: rgba(20,18,30,.45); display: flex; align-items: center; justify-content: center; padding: 12px; box-sizing: border-box; }
+      .sheet { width: 100%; max-width: 480px; max-height: 100%; overflow-y: auto; box-sizing: border-box; background: var(--card-background-color, #fff); border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,.25); padding: 16px; }
+      .sheet-head { display: flex; align-items: center; gap: 10px; }
+      .sheet-for { flex: 1; font-size: 17px; font-weight: 700; }
+      .grow { flex: 1; }
+      .round { width: 40px; height: 40px; flex: none; border-radius: 50%; display: grid; place-items: center; background: rgba(127,127,127,.12); color: var(--secondary-text-color); }
+      .round.adj { background: var(--dt-ring); color: #fff; box-shadow: 0 2px 6px rgba(99,102,241,.35); }
+      .menu { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 24px; background: rgba(127,127,127,.1); min-width: 0; }
+      .who { display: flex; align-items: center; gap: 8px; padding: 4px 14px 4px 4px; border-radius: 999px; font-size: 15px; font-weight: 700; color: var(--secondary-text-color); }
+      .who:not(.on) .face { opacity: .6; }
+      .who.on { background: var(--card-background-color, #fff); color: var(--primary-text-color); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+      .sheet h3 { margin: 12px 0 10px; font-size: 20px; font-weight: 800; }
+      .tie { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; padding: 5px 10px; border-radius: 999px; background: rgba(245,180,0,.16); color: #8a5a00; font-size: 13px; font-weight: 700; }
+      .notice { display: flex; align-items: center; gap: 6px; margin-top: 12px; padding: 8px 12px; border-radius: 12px; background: rgba(30,142,62,.12); color: #1e7a37; font-size: 14px; font-weight: 700; }
+      .tiles { display: flex; gap: 10px; }
+      .tile { flex: 1; padding: 10px 12px; border-radius: 14px; }
+      .tile b { display: flex; align-items: center; gap: 4px; font-size: 22px; font-weight: 800; line-height: 1.1; }
+      .tile small { display: block; font-size: 12px; margin-top: 2px; }
+      .tile.earned { background: rgba(99,102,241,.1); color: #4f46e5; } .tile.spend { background: #fff4cc; color: #8a5a00; } .tile.spend svg { color: var(--dt-gold); }
+      .filters { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+      .filter { padding: 7px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; background: rgba(127,127,127,.1); color: var(--secondary-text-color); }
+      .filter.on { background: var(--primary-text-color); color: var(--card-background-color, #fff); }
+      .day { display: flex; justify-content: space-between; align-items: baseline; margin: 14px 2px 4px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--secondary-text-color); }
+      .day span + span { letter-spacing: 0; text-transform: none; font-size: 13px; color: #1e7a37; } .day span.down { color: #c5221f; }
+      .hrow { display: flex; align-items: center; gap: 12px; padding: 9px 2px; border-bottom: 1px solid var(--dt-line); }
+      .hic { width: 36px; height: 36px; flex: none; border-radius: 11px; display: grid; place-items: center; }
+      .hic.task { background: rgba(59,111,216,.12); color: var(--dt-blue); } .hic.plus { background: rgba(30,142,62,.12); color: var(--dt-green); }
+      .hic.minus { background: rgba(217,48,37,.1); color: #c5221f; } .hic.gift { background: rgba(245,180,0,.18); color: #a87300; } .hic.undo { background: rgba(127,127,127,.12); color: var(--secondary-text-color); }
+      .more { width: 100%; margin-top: 12px; padding: 11px; border-radius: 12px; background: rgba(99,102,241,.08); color: #4f46e5; font-size: 14px; font-weight: 700; }
+      .hero { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 14px 16px; border-radius: 16px; background: #fff4cc; color: #8a5a00; }
+      .hero svg { color: var(--dt-gold); } .hero b { font-size: 30px; font-weight: 800; line-height: 1; } .hero span { font-size: 15px; font-weight: 700; }
+      .rw { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 10px 12px; margin-top: 8px; border-radius: 16px; border: 1px solid var(--dt-line); box-sizing: border-box; }
+      .rw.armed { border-color: #e8590c; }
+      .ric { width: 40px; height: 40px; flex: none; border-radius: 12px; display: grid; place-items: center; background: rgba(245,180,0,.18); color: #a87300; }
+      .ric.off { background: rgba(127,127,127,.1); color: var(--secondary-text-color); }
+      .go-btn { height: 42px; padding: 0 14px; border-radius: 12px; background: #d99a00; color: #fff; font-size: 14px; font-weight: 800; white-space: nowrap; }
+      .go-btn.armed { background: #e8590c; }
+      .ready { font-size: 13px; font-weight: 700; color: #a87300; white-space: nowrap; }
+      .wait { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 999px; background: rgba(138,111,87,.14); color: #6f5640; font-size: 12px; font-weight: 700; white-space: nowrap; }
+      .mini-gauge { display: block; height: 6px; margin-top: 6px; border-radius: 3px; background: var(--dt-line); overflow: hidden; }
+      .mini-gauge i { display: block; height: 100%; border-radius: inherit; background: var(--dt-gold); }
+      .seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin-top: 14px; padding: 4px; border-radius: 14px; background: rgba(127,127,127,.1); }
+      .seg button { display: flex; align-items: center; justify-content: center; gap: 6px; height: 44px; border-radius: 11px; font-size: 15px; font-weight: 700; color: var(--secondary-text-color); }
+      .seg button.on { background: var(--card-background-color, #fff); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+      .seg button.on.bonus { color: #1e7a37; } .seg button.on.penalty { color: #c5221f; }
+      .ptiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+      .ptile { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-height: 84px; padding: 12px 14px; border-radius: 16px; border: 2px solid var(--dt-line); text-align: left; font-size: 15px; touch-action: manipulation; }
+      .ptile b { font-size: 22px; font-weight: 800; }
+      .seg.bonus ~ .ptiles b { color: #1e7a37; } .seg.penalty ~ .ptiles b { color: #c5221f; }
+      .seg.bonus ~ .ptiles .on { border-color: var(--dt-green); background: rgba(30,142,62,.07); }
+      .seg.penalty ~ .ptiles .on { border-color: #d93025; background: rgba(217,48,37,.06); }
+      .tick { position: absolute; top: 10px; right: 10px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: var(--dt-green); }
+      .seg.penalty ~ .ptiles .tick { background: #d93025; }
+      .other { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; padding: 12px 14px; border-radius: 16px; border: 2px dashed var(--dt-line); }
+      .other-top { display: flex; align-items: center; justify-content: space-between; font-size: 15px; font-weight: 700; }
+      .stepper { display: flex; align-items: center; gap: 10px; }
+      .stepper button { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: rgba(127,127,127,.12); }
+      .stepper span { min-width: 44px; text-align: center; font-size: 22px; font-weight: 800; color: var(--secondary-text-color); }
+      .stepper span.set { color: var(--primary-text-color); }
+      .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--secondary-text-color); }
+      .field input { height: 42px; padding: 0 12px; border: 0; border-radius: 10px; background: rgba(127,127,127,.08); font: inherit; font-size: 15px; font-weight: 400; color: var(--primary-text-color); box-sizing: border-box; }
+      .effect { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; padding: 12px 14px; border-radius: 14px; background: rgba(127,127,127,.06); font-size: 14px; }
+      .go { width: 100%; height: 56px; margin-top: 14px; border-radius: 16px; color: #fff; font-size: 17px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 8px; touch-action: manipulation; }
+      .go.bonus { background: #1e8e3e; } .go.penalty { background: #d93025; }
+      .foot { margin: 10px 4px 0; font-size: 12px; line-height: 1.4; color: var(--secondary-text-color); }
       ha-card { position: relative; display: block; }
       .parent-btn { position: absolute; top: 10px; right: 10px; z-index: 1; display: flex; align-items: center; gap: 4px; height: 36px; min-width: 36px;
         padding: 0 9px; border-radius: 18px; white-space: nowrap; color: var(--secondary-text-color); background: rgba(127,127,127,.1); font-size: 13px; font-weight: 700; justify-content: center; }
@@ -901,18 +1275,24 @@ class HoplaFamilyCard extends HTMLElement {
       .key.small { font-size: 14px; background: none; }
       .key:not(:disabled):active { transform: scale(.94); }
     </style><ha-card>
-      ${this.renderParentButton()}${this.renderPinPad()}${this._config.show_points ? this.renderRankDetails(data.members, data.ladder) : ''}
+      ${this.renderParentButton()}${this.renderPinPad()}${this._config.show_points ? this.renderRankDetails(data.members, data.ladder) : ''}${this.renderSheet(data)}
       ${this._config.show_points && data.members.length ? this.renderPodium(data.members) : ''}
       ${this.renderPeriod(data.period)}
       ${this._config.show_goals ? this.renderChallenges(data.challenges, data.members) : ''}
-      ${this._config.show_todo ? `<section>${this.header('todo', 'todo', title, data.rows.length)}
-        ${data.rows.length ? data.rows.map(row => this.renderTask(row)).join('') : `<div class="empty-text">${escape(empty)}</div>`}</section>` : ''}
+      ${this._config.show_todo ? this.section('todo', this.header('todo', 'todo', title, data.rows.length, 'todo'),
+        data.rows.length ? data.rows.map(row => this.renderTask(row)).join('') : `<div class="empty-text">${escape(empty)}</div>`) : ''}
       ${this._config.show_goals ? this.renderQuests(data.members) : ''}
-      ${done.length ? `<section>${this.header('check', 'done', this.t('done'), done.length)}${done.map(item => this.renderDone(item)).join('')}</section>` : ''}
-      ${rewards.length ? `<section>${this.header('gift', 'gift', this.t('rewards'), rewards.length)}${rewards.map(r => this.renderReward(r, data.members, data.requests)).join('')}</section>` : ''}
-      ${presets.length ? `<section>${this.header('plusminus', 'bonus', this.t('bonus_title'), presets.length)}${presets.map(p => this.renderPreset(p, data.members)).join('')}</section>` : ''}
-      ${this._error ? `<div class="error">${escape(this._error)}</div>` : ''}
+      ${done.length ? this.section('done', this.header('check', 'done', this.t('done'), done.length, 'done'), done.map(item => this.renderDone(item)).join('')) : ''}
+      ${this._config.show_history && data.adjustable && data.members.length ? this.section('history', this.header('history', 'hist', this.t('history_title'),
+        this.t('history_today', {count: data.ledger.filter(entry => sameDay(new Date(entry.created_at), now)).length}), 'history'), this.renderLedger(data.ledger, data.members)) : ''}
+      ${rewards.length ? this.section('rewards', this.header('gift', 'gift', this.t('rewards'), rewards.length, 'rewards'), rewards.map(r => this.renderReward(r, data.members, data.requests)).join('')) : ''}
+      ${bonus ? `<section>${this.header('plusminus', 'bonus', this.t('bonus_title'), '')}${this.renderBonusTiles(data.members, data.ledger)}</section>` : ''}
+      ${this._error && !this._sheet ? `<div class="error">${escape(this._error)}</div>` : ''}
     </ha-card>`;
+    if (typing) {
+      const field = this.shadowRoot.querySelector(`[data-field="${typing.field}"]`);
+      if (field) { field.focus(); try { field.setSelectionRange(typing.start, typing.end); } catch (err) { /* not a text field */ } }
+    }
   }
 }
 
@@ -951,15 +1331,16 @@ class HoplaFamilyCardEditor extends HTMLElement {
       {name: 'labels', selector: {select: {multiple: true, custom_value: true, options: [...labels]}}},
       {name: 'due', selector: {select: {mode: 'dropdown', options: [{value: 'today', label: this.t('family.editor.due_today')}, {value: 'all', label: this.t('family.editor.due_all')}]}}},
       {name: 'show_points', selector: {boolean: {}}},
-      {name: 'show_todo', selector: {boolean: {}}},
-      {name: 'show_done', selector: {boolean: {}}},
-      {name: 'show_rewards', selector: {boolean: {}}},
+      // Each section that folds: shown or not, and open or folded at first.
+      ...['todo', 'done', 'history', 'rewards'].map(section => ({type: 'grid', name: '', flatten: true, schema: [
+        {name: `show_${section}`, selector: {boolean: {}}}, {name: `${section}_open`, selector: {boolean: {}}}]})),
       {name: 'show_approval', selector: {boolean: {}}},
       {name: 'allow_redeem', selector: {boolean: {}}},
       {name: 'show_bonus', selector: {boolean: {}}},
       {name: 'show_goals', selector: {boolean: {}}},
     ];
-    this._form.data = {due: 'today', show_points: true, show_todo: true, show_done: true, show_rewards: true, show_approval: false, allow_redeem: false, show_bonus: true, show_goals: true,
+    this._form.data = {due: 'today', show_points: true, show_todo: true, show_done: true, show_history: false, show_rewards: true, show_approval: false, allow_redeem: false, show_bonus: true, show_goals: true,
+      todo_open: true, done_open: false, history_open: false, rewards_open: true,
       ...this._config, members: (this._config.members || []).map(String)};
   }
 }

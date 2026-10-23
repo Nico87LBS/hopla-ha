@@ -410,6 +410,28 @@
           "description": "The Hopla integration to use (optional, the first one by default)"
         }
       }
+    },
+    "get_points_history": {
+      "name": "Points history",
+      "description": "A page of a member's points history, newest first: tasks, bonuses, penalties and rewards. Anyone may read it.",
+      "fields": {
+        "user_id": {
+          "name": "Member",
+          "description": "The Hopla ID of the member"
+        },
+        "limit": {
+          "name": "Rows",
+          "description": "How many rows to return (20 by default)"
+        },
+        "before": {
+          "name": "Before",
+          "description": "The ID of a row: only older rows are returned, to page back"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
     }
   }
 }

@@ -245,6 +245,7 @@ Sans parent choisi, rien ne change : tout le monde garde tous les droits.
 | `hopla.create_task`, `hopla.update_task`, `hopla.delete_task` | Créer, modifier, supprimer une tâche | ✓ |
 | `hopla.skip_task`, `hopla.postpone_task` | Passer une tâche à sa prochaine occurrence | ✓ |
 | `hopla.adjust_points` | Donner un bonus ou une pénalité à un membre (`user_id`), avec `points` (négatif pour une pénalité) ou un préréglage (`preset_id`), et une raison (`reason`) si tu veux. Une pénalité baisse les points gagnés, donc le rang et le podium, sans jamais faire passer le solde sous zéro | ✓ |
+| `hopla.get_points_history` | Lire l'historique des points d'un membre (`user_id`), du plus récent au plus ancien : `limit` lignes (20 par défaut), plus anciennes que la ligne `before` pour remonter. Répond `entries` et `more` | |
 | `hopla.unlock_parent_mode` | Ouvrir le mode parent pour deux minutes avec le code (`pin`) | |
 | `hopla.lock_parent_mode` | Refermer le mode parent | |
 
@@ -333,9 +334,19 @@ Quand des parents sont choisis, un cadenas en haut à droite ouvre le pavé du c
 parent. En mode parent, il affiche le temps restant et referme le mode d'une
 touche. Les boutons Valider et Refuser n'apparaissent que pour un parent.
 
-En mode parent, ou pour un parent, la carte montre aussi les bonus et pénalités
-préréglés dans Hopla (onglet Jeux de la page Points) : touche deux fois la photo
-d'un enfant pour lui donner « Chambre rangée (+5) » ou « Dispute (−3) ».
+Sur le podium, la photo d'un enfant ouvre ses récompenses et la marche ouvre son
+historique des points (tâches, bonus, pénalités, récompenses, jour par jour). En
+cas d'égalité, la marche ouvre le premier enfant ; les têtes en haut de la
+fenêtre passent d'un enfant à l'autre. Le rang ouvre toujours son détail.
+
+Le bouton ± de l'historique donne un bonus ou une pénalité : un préréglage de
+Hopla (onglet Jeux de la page Points) ou un autre montant, avec une raison si tu
+veux. Sur la tablette, il demande le code parent. En mode parent, ou pour un
+parent, la carte montre aussi une tuile par enfant avec ses boutons Bonus et
+Pénalité.
+
+Les titres À faire, Déjà fait, Historique et Récompenses se replient d'une
+touche ; les options choisissent s'ils sont dépliés au départ.
 
 ```yaml
 type: custom:hopla-family-card
@@ -344,8 +355,13 @@ labels: [enfants]      # seulement les tâches avec une de ces étiquettes
 due: today             # today (du jour, en retard ou sans date) ou all
 show_points: true      # le podium
 show_todo: true        # les tâches à faire
+todo_open: true        # À faire déplié au départ
 show_done: true        # les tâches faites aujourd'hui
+done_open: false       # Déjà fait replié au départ
+show_history: false    # les derniers changements de points
+history_open: false
 show_rewards: true     # les récompenses
+rewards_open: true
 show_approval: false   # boutons Valider et Refuser, pour les parents
 allow_redeem: false    # échanger des récompenses depuis la carte (deux touches)
 show_bonus: true       # les bonus et pénalités, pour les parents

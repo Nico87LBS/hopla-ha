@@ -410,6 +410,28 @@
           "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
         }
       }
+    },
+    "get_points_history": {
+      "name": "Historique des points",
+      "description": "Une page de l'historique des points d'un membre, du plus récent au plus ancien : tâches, bonus, pénalités et récompenses. Lisible par tout le monde.",
+      "fields": {
+        "user_id": {
+          "name": "Membre",
+          "description": "L'ID Hopla du membre"
+        },
+        "limit": {
+          "name": "Lignes",
+          "description": "Combien de lignes renvoyer (20 par défaut)"
+        },
+        "before": {
+          "name": "Avant",
+          "description": "L'ID d'une ligne : seules les lignes plus anciennes sont renvoyées, pour remonter le temps"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
     }
   }
 }
