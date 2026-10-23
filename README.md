@@ -245,8 +245,9 @@ actions:
 ## Cartes
 
 Les deux cartes sont fournies avec l'intégration et chargées automatiquement :
-rien à installer à part. Recharge le navigateur après une mise à jour. Elles
-suivent la langue de Home Assistant, en français ou en anglais ; leurs textes
+rien à installer à part. Après une mise à jour et le redémarrage de Home
+Assistant, un tableau de bord ouvert (navigateur, appli ou tablette) se recharge
+tout seul une fois pour prendre les nouvelles cartes. Elles suivent la langue de Home Assistant, en français ou en anglais ; leurs textes
 sont dans [`frontend/locales`](custom_components/hopla/frontend/locales), un
 fichier par langue.
 

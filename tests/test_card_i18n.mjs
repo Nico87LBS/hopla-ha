@@ -37,3 +37,20 @@ assert.equal(emptyMessage({display_filter: 'today'}, 'Elena', t), "Aucune tâche
 assert.equal(emptyMessage({display_filter: 'upcoming', upcoming_days: 2, labels: ['a', 'b'], label_match: 'all'}, 'Anna', t),
   'Aucune tâche pour Anna · Filtre : Prochainement (2 jours à l’avance) · Étiquettes : a ET b');
 console.log('Card translations passed');
+
+// An open dashboard reloads once when Home Assistant serves newer cards.
+{
+  const reloads = [];
+  const store = new Map();
+  globalThis.location = {reload: () => reloads.push(1)};
+  globalThis.sessionStorage = {getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v)};
+  const mod = await import('../custom_components/hopla/frontend/hopla-i18n.js?v=old');
+  const hass = version => ({states: {'sensor.p': {attributes: {frontend_version: version}}, 'sensor.x': {attributes: {}}}});
+  assert.equal(mod.reloadIfOutdated(hass('old')), false, 'same cards');
+  assert.equal(mod.reloadIfOutdated({states: {}}), false, 'no version known');
+  assert.equal(mod.reloadIfOutdated(hass('new')), true);
+  assert.equal(mod.reloadIfOutdated(hass('new')), false, 'once per version, so a cached page never loops');
+  assert.equal(reloads.length, 1);
+  delete globalThis.location;
+  console.log('Outdated cards reload once');
+}

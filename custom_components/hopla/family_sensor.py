@@ -160,6 +160,8 @@ class HoplaPointsSensor(_FamilySensor):
                 getattr(self.coordinator, "completed_tasks", []), member.user_id),
             **self._streak(member.user_id),
             **self._progress(member.user_id),
+            # The cards installed now: an open dashboard with older ones reloads.
+            "frontend_version": (self.hass.data.get("hopla_frontend") or {}).get("version"),
         }
 
     def _streak(self, user_id: int) -> dict[str, Any]:

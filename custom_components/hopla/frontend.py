@@ -46,3 +46,5 @@ async def async_setup_frontend(hass: HomeAssistant) -> None:
         for url, _ in CARDS:
             add_extra_js_url(hass, f"{url}?v={version}")
         state["registered"] = True
+        # The cards compare it with their own to reload an open dashboard.
+        state["version"] = version
