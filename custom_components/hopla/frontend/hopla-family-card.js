@@ -201,11 +201,17 @@ export function boardData(hass, config, now = new Date()) {
   const wanted = (config.labels || []).map(label => label.trim().toLowerCase()).filter(Boolean);
   const labelled = labels => !wanted.length || labelNames(labels).some(label => wanted.includes(label));
   const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  // Once its last slot of the day is ticked, a task is due tomorrow, but it
+  // stays on today's board while one of its slots, or one of another child's
+  // copy, is still to do or waits for a parent.
+  const busy = new Set(tasks.filter(task => todaySlots(task.slots, now).some(slot => slot.state !== 'done'))
+    .map(task => sameName(task.name)));
+  const slottedToday = task => todaySlots(task.slots, now).length > 0 && busy.has(sameName(task.name));
   // A task started from outside (Home Assistant) waits, hidden, until it is
   // given a date; other tasks without a date can be done any day.
   const visible = tasks.filter(task => labelled(task.labels)
     && !(task.frequencyType === 'trigger' && !task.due)
-    && (config.due !== 'today' || !task.due || task.due <= endOfDay))
+    && (config.due !== 'today' || !task.due || task.due <= endOfDay || slottedToday(task)))
     .map(task => {
       // The heads of who has the task now: its assignee, or all of them for a
       // task for everyone together (or anyone's, with nobody chosen).

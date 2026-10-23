@@ -1,7 +1,7 @@
 {
   "domain": "hopla",
   "name": "Hopla",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "documentation": "https://github.com/Nico87LBS/hopla-ha",
   "issue_tracker": "https://github.com/Nico87LBS/hopla-ha/issues",
   "dependencies": ["frontend"],
