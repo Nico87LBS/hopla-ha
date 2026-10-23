@@ -82,6 +82,8 @@ export function userTasks(state, userId, displayFilter = 'all', now = new Date()
   userId = selectedUser(state, userId);
   const tasks = [...(state?.attributes?.tasks || []), ...(includeAnyone ? state?.attributes?.anyone_tasks || [] : [])];
   return tasks.filter(task => userId === 'all' || task.assigned_to === Number(userId) || (includeAnyone && task.assigned_to == null))
+    // A task started from outside waits, hidden, until it is given a date.
+    .filter(task => !(task.frequency_type === 'trigger' && !task.next_due_date))
     .filter(task => {
       if (!labels.length) return true;
       const names = taskLabels(task.labels);

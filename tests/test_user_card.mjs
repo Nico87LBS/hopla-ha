@@ -152,3 +152,10 @@ assert.deepEqual(matchIds([],'all'),[1,3,4]);
 assert.deepEqual(userTasks(labelState,2,['future'],now,0,'due_date','en',false,['maintenance','technical'],'all'),[]);
 assert.match(emptyMessage({user_id:'all',labels:['maintenance','technical'],label_match:'all'}),/maintenance AND technical/);
 console.log('AND and OR label matching compose with user and date groups');
+// A task started from outside waits, hidden, until it is given a date.
+const waiting = {attributes: {tasks: [
+  {task_id: 1, name: 'Arroser', frequency_type: 'trigger', next_due_date: null, assigned_to: 2},
+  {task_id: 2, name: 'Arroser daté', frequency_type: 'trigger', next_due_date: '2026-10-23T18:00:00Z', assigned_to: 2},
+  {task_id: 3, name: 'Quand tu veux', frequency_type: 'once', next_due_date: null, assigned_to: 2}]}};
+assert.deepEqual(userTasks(waiting, 'all', ['undated', 'today', 'future'], new Date('2026-10-23T10:00:00Z')).map(t => t.task_id), [2, 3]);
+console.log('Started-from-outside tasks wait for a date');

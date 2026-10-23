@@ -265,6 +265,11 @@ tâche à valider reste affichée avec un sablier et la photo de qui l'a faite,
 jusqu'à la réponse d'un parent. Les tâches déjà faites aujourd'hui suivent, avec
 la photo de qui les a faites. Toute photo qu'on peut toucher a un anneau.
 
+Une tâche sans date se fait n'importe quel jour : elle reste dans « À faire
+aujourd'hui ». Une tâche « déclenchée de l'extérieur » sans date attend au
+contraire que Home Assistant lui en donne une : elle n'apparaît ni sur la carte
+famille ni sur la carte des tâches tant qu'elle n'a pas de date.
+
 Le podium montre la série de chacun avec une flamme à côté du prénom, grisée tant que personne
 n'a encore fait de tâche aujourd'hui pour la continuer. Pendant une période bonus,
 un bandeau rappelle le multiplicateur et le temps restant, et la tâche surprise du
