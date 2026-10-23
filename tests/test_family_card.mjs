@@ -198,6 +198,25 @@ assert.deepEqual(dentsRow.slots.map(e => `${e.member.name}:${e.slots.map(s => s.
 assert.equal(dentsRow.pending, true);
 assert.deepEqual(data.tasks.find(t => t.id === 18).slots, [], "another day's slots wait for the next refresh");
 assert.equal(data.tasks.find(t => t.id === 12).completedBy, null, 'slots carry their own completer');
+
+// The last slot ticked moves the task to tomorrow: the child stays on today's
+// board while it waits for a parent, or while the other child's copy is to do.
+const tomorrow = '2026-10-21T07:00:00+02:00';
+const dueOn = (state, date) => ({...state, attributes: {...state.attributes, next_due_date: date}});
+const lastSlot = {states: {...hass.states,
+  'sensor.dents': dueOn(slotted(12, 2, [slot(0, 'Matin', 6, 10, 'done', {completed_by: 2}), slot(1, 'Soir', 11, 23, 'pending', {completed_by: 2})]), tomorrow),
+  'sensor.dents_anna': dueOn(slotted(17, 3, [slot(0, 'Matin', 6, 10, 'done', {completed_by: 3}), slot(1, 'Soir', 11, 23, 'open')]), '2026-10-20T12:00:00+02:00')}};
+data = boardData(lastSlot, {due: 'today', members: [2, 3]}, now);
+assert.deepEqual(data.rows.find(r => r.key === 'dents').slots.map(e => `${e.member.name}:${e.slots.map(s => s.state).join(',')}`),
+  ['Elena:done,pending', 'Anna:done,open'], 'a child waiting on the last slot stays');
+const lastDone = {states: {...lastSlot.states,
+  'sensor.dents': dueOn(slotted(12, 2, [slot(0, 'Matin', 6, 10, 'done', {completed_by: 2}), slot(1, 'Soir', 11, 23, 'done', {completed_by: 2})]), tomorrow)}};
+assert.equal(boardData(lastDone, {due: 'today', members: [2, 3]}, now).rows.find(r => r.key === 'dents').slots.length, 2,
+  'a child done for today stays while the other is not');
+const allDone = {states: {...hass.states,
+  'sensor.dents': dueOn(slotted(12, 2, [slot(0, 'Matin', 6, 10, 'done', {completed_by: 2})]), tomorrow),
+  'sensor.dents_anna': dueOn(slotted(17, 3, [slot(0, 'Matin', 6, 10, 'done', {completed_by: 3})]), tomorrow)}};
+assert.equal(boardData(allDone, {due: 'today', members: [2, 3]}, now).rows.some(r => r.key === 'dents'), false, 'done by all for today: gone');
 console.log('family card slot tests passed');
 
 // A task started from outside waits, hidden, until it is given a date; a
