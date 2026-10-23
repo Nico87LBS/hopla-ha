@@ -174,7 +174,7 @@ export function boardData(hass, config, now = new Date()) {
     if (!id.startsWith('sensor.') || !isHopla(hass, id)) continue;
     const a = state.attributes;
     if (a.hopla_member_id !== undefined) {
-      members.push({id: a.hopla_member_id, name: a.display_name || a.friendly_name, role: a.role,
+      members.push({id: a.hopla_member_id, name: a.display_name || a.friendly_name, role: a.role, away: a.away === true,
         picture: a.entity_picture || null, points: Number(state.state) || 0, recent: a.recent_completions || [],
         streak: Number(a.streak) || 0, streakToday: a.streak_done_today === true,
         rank: a.rank ? {name: a.rank, icon: a.rank_icon || '', image: rankImage(a.rank_image), level: Number(a.rank_level) || 1, from: Number(a.rank_points) || 0,
@@ -225,7 +225,8 @@ export function boardData(hass, config, now = new Date()) {
       // The heads of who has the task now: its assignee, or all of them for a
       // task for everyone together (or anyone's, with nobody chosen).
       const holders = !task.together && task.assignedTo != null ? [task.assignedTo] : task.assignees;
-      const candidates = holders.length ? shown.filter(m => holders.includes(m.id)) : shown;
+      // A child who is away does not have it: her tasks wait for her return.
+      const candidates = (holders.length ? shown.filter(m => holders.includes(m.id)) : shown).filter(m => !m.away);
       // Every child's copy of the surprise task, same name, is worth the bonus.
       const isSurprise = surprise && (surprise.task_id === task.id || (surprise.task_ids || []).includes(task.id)
         || sameName(surprise.task_name) === sameName(task.name));
@@ -264,6 +265,7 @@ const icon = {
   flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>',
   hourglass: '<path d="M6 2h12M6 22h12M7 2v3.5a3 3 0 0 0 .9 2.1L12 12l4.1-4.4A3 3 0 0 0 17 5.5V2M7 22v-3.5a3 3 0 0 1 .9-2.1L12 12l4.1 4.4a3 3 0 0 1 .9 2.1V22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>',
   replay: '<path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  suitcase: '<path d="M9 6V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V6M5 6h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM8 6v14M16 6v14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>',
   cross: '<path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>',
   unlock: '<rect x="5" y="11" width="14" height="10" rx="2" fill="currentColor"/><path d="M8 11V8a4 4 0 0 1 7.5-2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
   back: '<path d="M21 6H8l-6 6 6 6h13zM12 9l6 6M18 9l-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
@@ -426,7 +428,7 @@ class HoplaFamilyCard extends HTMLElement {
     const step = (group, rank) => {
       const size = rank === 0 ? 76 : 60;
       const faces = group.length
-        ? group.map(m => `<div class="podium-member">${rank === 0 && podiumScore(m) > 0 ? `<span class="crown">${svg('crown', 30)}</span>` : ''}<span class="podium-face">${this.face(m, size, rank === 0 && podiumScore(m) > 0 ? ' leader' : '')}${this.coin(m)}</span><div class="podium-name">${escape(m.name)}${this.streak(m)}</div>${this.rank(m)}</div>`).join('')
+        ? group.map(m => `<div class="podium-member">${rank === 0 && podiumScore(m) > 0 ? `<span class="crown">${svg('crown', 30)}</span>` : ''}<span class="podium-face">${this.face(m, size, `${rank === 0 && podiumScore(m) > 0 ? ' leader' : ''}${m.away ? ' away' : ''}`)}${this.coin(m)}${this.away(m)}</span><div class="podium-name">${escape(m.name)}${this.streak(m)}</div>${this.rank(m)}</div>`).join('')
         : `<div class="podium-member"><span class="face empty" style="width:${size}px;height:${size}px"></span><div class="podium-name">&nbsp;</div></div>`;
       const score = group.length ? `<span class="score">${podiumScore(group[0])}</span><span class="unit">${escape(this.t('earned', {count: podiumScore(group[0])}))}</span>` : '';
       return `<div class="podium-col rank${rank + 1}"><div class="podium-faces">${faces}</div><div class="step">${score}</div></div>`;
@@ -438,6 +440,12 @@ class HoplaFamilyCard extends HTMLElement {
   coin(member) {
     const label = this.t('to_spend', {count: member.points});
     return `<span class="coin" title="${escape(label)}" aria-label="${escape(label)}">${svg('star', 12)}${member.points}</span>`;
+  }
+  // Away, such as at the other parent's home: a grey suitcase on the face.
+  away(member) {
+    if (!member.away) return '';
+    const label = this.t('away', {name: member.name});
+    return `<span class="away-pin" title="${escape(label)}" aria-label="${escape(label)}">${svg('suitcase', 14)}</span>`;
   }
   streak(member) {
     if (!member.streak) return '';
@@ -716,6 +724,9 @@ class HoplaFamilyCard extends HTMLElement {
       .face { border-radius: 50%; object-fit: cover; display: block; flex: none; }
       .initial { display: grid; place-items: center; background: var(--primary-color); color: var(--text-primary-color, #fff); font-weight: 700; }
       .face.grey { filter: grayscale(1); opacity: .35; }
+      .face.away { filter: grayscale(1); opacity: .45; }
+      .away-pin { position: absolute; left: -6px; top: -4px; width: 24px; height: 24px; box-sizing: border-box; border-radius: 50%;
+        background: #8e8a99; color: #fff; border: 2px solid var(--card-background-color, #fff); display: flex; align-items: center; justify-content: center; }
       .face.empty { border: 2px dashed var(--dt-line); box-sizing: border-box; }
       .face.leader { box-shadow: 0 0 0 3px var(--card-background-color, #fff), 0 0 0 5px var(--dt-gold); }
       .podium { display: flex; justify-content: center; align-items: flex-end; gap: 10px; margin: 4px 0 24px; }

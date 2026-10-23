@@ -89,6 +89,11 @@
       "activity": {
         "name": "Historique"
       }
+    },
+    "switch": {
+      "member_home": {
+        "name": "{name} à la maison"
+      }
     }
   },
   "exceptions": {

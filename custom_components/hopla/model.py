@@ -62,6 +62,8 @@ class HoplaMember:
     image: Optional[str] = None
     points: int = 0
     points_redeemed: int = 0
+    # Away, such as at the other parent's home: the member's tasks wait.
+    away: bool = False
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -79,6 +81,7 @@ class HoplaMember:
             image=data.get("image"),
             points=data.get("points", 0),
             points_redeemed=data.get("pointsRedeemed", 0),
+            away=bool(data.get("away", False)),
             created_at=data.get("createdAt"),
             updated_at=data.get("updatedAt")
         )

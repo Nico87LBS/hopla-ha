@@ -29,8 +29,8 @@ async def async_setup_chore_sensors(
     coordinator = config["coordinator"]
 
     entities = []
-    if coordinator.data:
-        for task in coordinator.data:
+    if _all_tasks(coordinator):
+        for task in _all_tasks(coordinator):
             if task.is_active:
                 entities.append(HoplaChoreSensor(coordinator, config_entry, task.id))
 
@@ -42,6 +42,11 @@ async def async_setup_chore_sensors(
     _track_new_chores(hass, coordinator, config_entry, async_add_entities)
 
 
+def _all_tasks(coordinator) -> list:
+    """Every task, with those of a child who is away (the cards hide them)."""
+    return getattr(coordinator, "all_tasks", None) or coordinator.data or []
+
+
 def _track_new_chores(
     hass: HomeAssistant,
     coordinator: DataUpdateCoordinator,
@@ -50,16 +55,16 @@ def _track_new_chores(
 ) -> None:
     """Track coordinator updates and add sensors for new chores."""
     known_ids: set[int] = set()
-    if coordinator.data:
-        known_ids = {task.id for task in coordinator.data if task.is_active}
+    if _all_tasks(coordinator):
+        known_ids = {task.id for task in _all_tasks(coordinator) if task.is_active}
 
     @callback
     def _on_coordinator_update() -> None:
         nonlocal known_ids
-        if not coordinator.data:
+        if not _all_tasks(coordinator):
             return
 
-        current_ids = {task.id for task in coordinator.data if task.is_active}
+        current_ids = {task.id for task in _all_tasks(coordinator) if task.is_active}
         new_ids = current_ids - known_ids
         removed_ids = known_ids - current_ids
 
@@ -102,9 +107,8 @@ class HoplaChoreSensor(CoordinatorEntity, SensorEntity):
     @property
     def _task(self) -> HoplaTask | None:
         """Find this sensor's task in the coordinator data."""
-        if not self.coordinator.data:
-            return None
-        for task in self.coordinator.data:
+        # Every task, with those of a child who is away (the cards hide them).
+        for task in getattr(self.coordinator, "all_tasks", None) or self.coordinator.data or []:
             if task.id == self._task_id:
                 return task
         return None

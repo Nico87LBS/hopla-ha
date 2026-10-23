@@ -47,6 +47,7 @@ renommer ensuite ; les cartes Hopla retrouvent leurs capteurs sans dépendre du 
 | `sensor.hopla_bonus_et_penalites` | Nombre de préréglages | Les bonus et pénalités tout prêts, et les derniers mouvements de points |
 | `sensor.hopla_jeux_du_jour` | Nom de la tâche surprise du jour | La période bonus en cours et les défis |
 | `binary_sensor.hopla_mode_parent` | Allumé si le mode parent est ouvert | La sécurité de la tablette (voir plus bas) |
+| `switch.hopla_elena_a_la_maison` | Allumé si l'enfant est à la maison | Un interrupteur par enfant. Éteint, ses tâches sont en pause (voir « Enfant pas là » plus bas) |
 
 ### Capteur de points d'un membre
 
@@ -65,6 +66,7 @@ dépenser.
 | `rank_round_points`, `next_star_points` | Points gagnés dans le tour en cours, et points du tour qui donnent l'étoile suivante |
 | `streak`, `best_streak`, `streak_done_today` | Série : jours d'affilée avec au moins une tâche faite, record, et si aujourd'hui compte déjà |
 | `quests` | Quêtes en cours : `name`, `progress`, `target`, `reward`, `done`, `period` (`week` ou `month`), `ends_at` |
+| `away` | `true` si l'enfant n'est pas là : ses tâches sont en pause |
 | `recent_completions` | Tâches faites ces deux derniers jours : `task_id`, `name`, `points`, `completed_at` |
 | `entity_picture` | Photo de profil Hopla |
 
@@ -96,6 +98,29 @@ L'état est le nom de la tâche.
 | | `challenges` | Défis en cours : `name`, `shared` (défi en famille), `members`, `progress` par membre, `total`, `target`, `reward`, `reward_text`, `done`, `winners`, `ends_at` |
 
 Les jeux se règlent dans Hopla, onglet Jeux de la page Points.
+
+## Enfant pas là (garde partagée)
+
+Quand l'interrupteur `switch.hopla_<enfant>_a_la_maison` est éteint, les tâches
+de l'enfant sont en pause :
+
+- elles disparaissent des listes, des cartes, du calendrier et des rappels ; une
+  tâche « Premier arrivé » reste tant qu'un autre enfant est là ;
+- elles ne passent pas en retard : à son retour, celles qui tombaient pendant
+  l'absence sont à faire le jour même ;
+- un jour d'absence ne casse pas sa série (et ne la fait pas avancer) ;
+- ses quêtes de la semaine et du mois baissent au prorata des jours d'absence,
+  et ne sont tirées qu'à son retour ;
+- la tâche surprise est tirée parmi les tâches des enfants présents ;
+- ce qu'elle a fait avant de partir peut toujours être validé.
+
+La carte famille montre sa tête en gris avec une petite valise. Dans Hopla, le
+même bouton existe sur la page Famille (« À la maison » / « Pas là »).
+
+Pour le piloter avec un agenda, importe le blueprint
+[`custody_calendar.yaml`](blueprints/automation/hopla/custody_calendar.yaml) :
+les enfants sont à la maison pendant les événements dont le titre contient un
+mot (« filles » par défaut).
 
 ## Synchro en temps réel
 
@@ -148,6 +173,9 @@ Pour importer un blueprint : **Paramètres** → **Automatisations et scènes** 
   sur le téléphone d'un parent, une notification avec les boutons Valider et
   Refuser pour chaque tâche à valider et chaque demande de récompense. Elle
   disparaît dès que la demande est traitée, où que ce soit.
+- [`custody_calendar.yaml`](blueprints/automation/hopla/custody_calendar.yaml) :
+  met les tâches des enfants en pause hors des événements d'un agenda (par
+  exemple « filles » les jours de garde), voir « Enfant pas là ».
 
 ## Mises à jour
 

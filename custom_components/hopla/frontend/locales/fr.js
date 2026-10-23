@@ -66,6 +66,7 @@ export default {
     penalty_done_other: '−{count} points pour {name}',
     streak_one: '{count} jour d’affilée',
     streak_other: '{count} jours d’affilée',
+    away: '{name} n’est pas là : ses tâches attendent son retour',
     streak_at_risk: 'à continuer aujourd’hui',
     period: 'Points ×{multiplier}',
     period_left: 'encore {time}',

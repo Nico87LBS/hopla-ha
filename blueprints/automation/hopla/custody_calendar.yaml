@@ -1,0 +1,75 @@
+blueprint:
+  name: Hopla, enfants à la maison selon l'agenda
+  description: >
+    Met les tâches des enfants en pause quand ils ne sont pas à la maison (garde
+    partagée par exemple). Un enfant est « à la maison » pendant un événement de
+    l'agenda dont le titre contient le mot choisi (« filles » par défaut).
+    Sinon, son interrupteur Hopla « à la maison » est coupé : ses tâches
+    disparaissent des listes, des cartes, du calendrier et des rappels, sa série
+    et ses quêtes attendent. À son retour, les tâches qui tombaient pendant
+    l'absence sont à faire le jour même.
+  domain: automation
+  source_url: https://github.com/Nico87LBS/hopla-ha/blob/main/blueprints/automation/hopla/custody_calendar.yaml
+  input:
+    calendar:
+      name: Agenda
+      description: L'agenda qui contient les jours où les enfants sont à la maison.
+      selector:
+        entity:
+          domain: calendar
+    keyword:
+      name: Mot dans le titre de l'événement
+      description: Sans tenir compte des majuscules, par exemple « filles ».
+      default: filles
+      selector:
+        text:
+    children:
+      name: Enfants
+      description: Les interrupteurs Hopla « à la maison » des enfants concernés.
+      selector:
+        entity:
+          integration: hopla
+          domain: switch
+          multiple: true
+
+mode: queued
+max: 5
+
+triggers:
+  - trigger: calendar
+    event: start
+    entity_id: !input calendar
+  - trigger: calendar
+    event: end
+    entity_id: !input calendar
+  - trigger: homeassistant
+    event: start
+  # A safety net, in case an event was moved or Home Assistant was off.
+  - trigger: time_pattern
+    hours: "/1"
+    minutes: 1
+
+variables:
+  keyword: !input keyword
+  children: !input children
+
+actions:
+  - action: calendar.get_events
+    target:
+      entity_id: !input calendar
+    data:
+      start_date_time: "{{ (now() + timedelta(seconds=5)).isoformat() }}"
+      duration:
+        seconds: 1
+    response_variable: agenda
+  - variables:
+      home: >-
+        {{ agenda.values() | map(attribute='events') | sum(start=[])
+           | map(attribute='summary', default='') | map('lower')
+           | select('contains', keyword | lower) | list | count > 0 }}
+      to_change: "{{ children | select('is_state', 'off' if home else 'on') | list }}"
+  - condition: template
+    value_template: "{{ to_change | count > 0 }}"
+  - action: "switch.turn_{{ 'on' if home else 'off' }}"
+    target:
+      entity_id: "{{ to_change }}"

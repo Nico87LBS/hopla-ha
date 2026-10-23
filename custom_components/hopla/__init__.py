@@ -20,11 +20,12 @@ from .approval import ApprovalTracker, STATUS_PENDING_APPROVAL, pending_approval
 from .games import GamesTracker, PointsLedgerTracker, games_today, ledger_entries, presets as points_presets
 from .realtime import RealtimeListener
 from .reminders import ReminderScheduler
+from .presence import present_tasks
 from .parental import (ParentGuard, ParentModeError, RewardRequestTracker, pending_rewards,
                        PARENT_MODE_DURATION)
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS = [Platform.TODO, Platform.SENSOR, Platform.CALENDAR, Platform.BINARY_SENSOR]
+PLATFORMS = [Platform.TODO, Platform.SENSOR, Platform.CALENDAR, Platform.BINARY_SENSOR, Platform.SWITCH]
 
 EVENT_TASK_COMPLETED = "hopla_task_completed"
 
@@ -203,13 +204,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(parental.lock)
 
     async def async_update_tasks():
-        tasks = await client.async_get_tasks()
+        all_tasks = await client.async_get_tasks()
         history = await client.async_get_task_history(days=7)
-        coordinator.completed_tasks = await async_completed_occurrences(client, tasks, history)
+        coordinator.completed_tasks = await async_completed_occurrences(client, all_tasks, history)
         try:
             circle_members[:] = await client.async_get_circle_members()
         except Exception as err:
             _LOGGER.warning("Failed to refresh circle members: %s", err)
+        # The tasks of a child who is away wait for her: no list, card,
+        # calendar or reminder shows them until she is back.
+        tasks = present_tasks(all_tasks, circle_members)
+        # The task sensors stay, so the cards can show her tasks again on her return.
+        coordinator.all_tasks = all_tasks
         try:
             coordinator.rewards = await client.async_get_rewards()
         except Exception as err:
@@ -236,7 +242,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             games.update(coordinator.games_today, entry.entry_id, circle_members)
         except Exception as err:
             _LOGGER.debug("Failed to refresh today's games: %s", err)
-        coordinator.pending_approvals = pending_approvals(tasks, history, circle_members)
+        # What she did before leaving can still be approved.
+        coordinator.pending_approvals = pending_approvals(all_tasks, history, circle_members)
         approvals.update(coordinator.pending_approvals, entry.entry_id)
         reminders.update(tasks, circle_members, entry.entry_id)
         return tasks
@@ -254,6 +261,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator.points_presets = None
     coordinator.points_history = []
     coordinator.games_today = None
+    coordinator.all_tasks = []
     await coordinator.async_config_entry_first_refresh()
 
     @callback
