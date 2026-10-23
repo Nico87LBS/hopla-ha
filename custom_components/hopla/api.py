@@ -8,7 +8,7 @@ import aiohttp
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import API_TIMEOUT
-from .model import HoplaProject, HoplaTask, HoplaThing, HoplaMember, HoplaChoreHistory, HoplaReward, HoplaRedemption
+from .model import HoplaProject, HoplaTask, HoplaMember, HoplaChoreHistory, HoplaReward, HoplaRedemption
 _LOGGER = logging.getLogger(__name__)
 
 class HoplaApiClient:
@@ -104,76 +104,6 @@ class HoplaApiClient:
         except (KeyError, ValueError, json.JSONDecodeError) as err:
             _LOGGER.error("Error parsing Hopla circle members response: %s", err)
             return []
-
-    async def async_get_things(self) -> List[HoplaThing]:
-        """Get things from Hopla."""
-        headers = self._headers()
-        
-        try:
-            async with self._session.get(
-                f"{self._base_url}/eapi/v1/things",
-                headers=headers,
-                timeout=API_TIMEOUT
-            ) as response:
-                response.raise_for_status()
-                data = await response.json()
-                
-                if not isinstance(data, list):
-                    _LOGGER.error("Unexpected response format from Hopla things API")
-                    return []
-                
-                return [HoplaThing.from_json(thing) for thing in data]
-                
-        except aiohttp.ClientError as err:
-            _LOGGER.error("Error fetching things from Hopla: %s", err)
-            raise
-        except (KeyError, ValueError, json.JSONDecodeError) as err:
-            _LOGGER.error("Error parsing Hopla things response: %s", err)
-            return []
-
-    async def async_get_thing_state(self, thing_id: int) -> Optional[str]:
-        """Get the current state of a thing."""
-        headers = self._headers()
-        
-        try:
-            async with self._session.get(
-                f"{self._base_url}/eapi/v1/things/{thing_id}",
-                headers=headers,
-                timeout=API_TIMEOUT
-            ) as response:
-                response.raise_for_status()
-                data = await response.json()
-                return data.get("thing", {}).get("state")
-                
-        except aiohttp.ClientError as err:
-            _LOGGER.error("Error fetching thing state from Hopla: %s", err)
-            raise
-        except (KeyError, ValueError, json.JSONDecodeError) as err:
-            _LOGGER.error("Error parsing Hopla thing state response: %s", err)
-            return None
-
-    async def async_set_thing_state(self, thing_id: int, state: str) -> bool:
-        """Set the state of a thing directly."""
-        headers = self._headers()
-        
-        params = {"state": state}
-        
-        try:
-            async with self._session.get(
-                f"{self._base_url}/eapi/v1/things/{thing_id}/state",
-                headers=headers,
-                params=params,
-                timeout=API_TIMEOUT
-            ) as response:
-                response.raise_for_status()
-                return True
-                
-        except aiohttp.ClientError as err:
-            _LOGGER.error("Error setting thing state in Hopla: %s", err)
-            raise
-        except Exception as err:
-            _LOGGER.error("Error setting thing state: %s", err)
-            return False
 
     async def async_change_thing_state(self, thing_id: int, new_state: str = None, increment: int = None) -> Optional[str]:
         """Change the state of a thing using the change endpoint."""
@@ -485,12 +415,6 @@ class HoplaApiClient:
             # Use the fetched updatedAt to retain Hopla's concurrent-edit check.
             if not payload.get("updatedAt"):
                 raise ValueError("Task has no update timestamp; refresh before reassigning")
-            thing = task.get("thingChore")
-            if thing:
-                payload["thingTrigger"] = {
-                    "thingID": thing["thingId"], "triggerState": thing["triggerState"],
-                    "condition": thing.get("condition", ""),
-                }
             async with self._session.put(
                 f"{self._base_url}/api/v1/chores/",
                 headers=self._headers(), json=payload, timeout=API_TIMEOUT,

@@ -278,37 +278,3 @@ class HoplaChoreHistory:
     def from_json_list(cls, data: List[dict]) -> List["HoplaChoreHistory"]:
         """Create a list of HoplaChoreHistory objects from JSON data."""
         return [cls.from_json(history) for history in data]
-
-@dataclass 
-class HoplaThing:
-    """Hopla thing model."""
-    id: int
-    name: str
-    type: str  # text, number, boolean, action
-    state: str
-    user_id: int
-    circle_id: int
-    updated_at: Optional[str] = None
-    created_at: Optional[str] = None
-    thing_chores: Optional[List] = None
-    
-    @classmethod
-    def from_json(cls, data: dict) -> "HoplaThing":
-        """Create a HoplaThing from JSON data."""
-        return cls(
-            id=data["id"],
-            name=data["name"],
-            type=data["type"],
-            state=str(data["state"]),
-            user_id=data["userID"],
-            circle_id=data["circleId"],
-            updated_at=data.get("updatedAt"),
-            created_at=data.get("createdAt"),
-            thing_chores=data.get("thingChores")
-        )
-    
-    @classmethod
-    def from_json_list(cls, data: List[dict]) -> List["HoplaThing"]:
-        """Create a list of HoplaThings from JSON data."""
-        return [cls.from_json(thing) for thing in data]
-    
