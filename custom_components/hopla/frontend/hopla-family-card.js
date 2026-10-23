@@ -864,7 +864,8 @@ class HoplaFamilyCard extends HTMLElement {
     const menu = adjust
       ? `<button class="round" data-action="adjust-back" aria-label="${escape(this.t('back'))}">${svg('left', 18)}</button>${this.face(member, 34)}<span class="sheet-for">${escape(this.t('adjust_for', {name: member.name}))}</span>`
       : `<div class="menu" role="group">${data.members.map(m => `<button class="who${m.id === member.id ? ' on' : ''}" data-action="sheet-member" data-member="${m.id}" aria-pressed="${m.id === member.id}">${this.face(m, 34)}<span>${escape(m.name)}</span></button>`).join('')}</div><span class="grow"></span>`;
-    const tools = sheet.kind === 'history' && data.adjustable && this._config.show_bonus
+    // Always offered in the history: the same server gives the history and the bonuses.
+    const tools = sheet.kind === 'history'
       ? `<button class="round adj" data-action="adjust-open" data-member="${member.id}" data-tab="bonus" aria-label="${escape(this.t('adjust_open', {name: member.name}))}">${svg('plusminus', 22)}</button>` : '';
     const body = sheet.kind === 'history' ? this.renderHistorySheet(data, member)
       : sheet.kind === 'rewards' ? this.renderRewardsSheet(data, member) : this.renderAdjustSheet(data, member);
