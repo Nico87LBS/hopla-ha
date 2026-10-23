@@ -26,6 +26,18 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(entry["reason"], "Chambre rangée")
         self.assertEqual(games.ledger_entries(None, MEMBERS), [])
 
+    def test_a_history_page_names_each_row_and_tells_if_older_rows_remain(self):
+        rows = [row(9, reason="Aide spontanée"), row(8, action="task", choreId=3),
+                row(7, action="redeem", delta=-30, rewardId=5), row(6, action="undo", choreId=99)]
+        tasks = [SimpleNamespace(id=3, name="Ranger sa chambre")]
+        rewards = [SimpleNamespace(id=5, name="30 min de tablette")]
+        page = games.history_page(rows, MEMBERS, 3, tasks, rewards)
+        self.assertEqual([e["name"] for e in page["entries"]], ["Aide spontanée", "Ranger sa chambre", "30 min de tablette"])
+        self.assertTrue(page["more"])
+        last = games.history_page(rows[3:], MEMBERS, 3)
+        self.assertEqual(last["entries"][0]["name"], "")
+        self.assertFalse(last["more"])
+
     def test_presets_keep_their_sign(self):
         self.assertEqual(games.presets([{"id": 1, "name": "Dispute", "points": -3, "circleId": 1}]),
                          [{"id": 1, "name": "Dispute", "points": -3}])

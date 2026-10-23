@@ -17,7 +17,7 @@ from .api import HoplaApiClient
 from .frontend import async_setup_frontend
 from .completion_history import async_completed_occurrences
 from .approval import ApprovalTracker, STATUS_PENDING_APPROVAL, pending_approvals, member_name
-from .games import GamesTracker, PointsLedgerTracker, games_today, ledger_entries, presets as points_presets
+from .games import GamesTracker, PointsLedgerTracker, games_today, history_page, presets as points_presets
 from .realtime import RealtimeListener
 from .reminders import ReminderScheduler
 from .presence import present_tasks
@@ -45,10 +45,12 @@ SERVICE_UNLOCK_PARENT_MODE = "unlock_parent_mode"
 SERVICE_LOCK_PARENT_MODE = "lock_parent_mode"
 SERVICE_ADJUST_POINTS = "adjust_points"
 SERVICE_CATCH_UP_SLOT = "catch_up_slot"
+SERVICE_GET_POINTS_HISTORY = "get_points_history"
 SERVICES = [SERVICE_COMPLETE_TASK, SERVICE_CREATE_TASK, SERVICE_UPDATE_TASK, SERVICE_DELETE_TASK, SERVICE_SKIP_TASK,
             SERVICE_COMPLETE_ASSIGNED_TASK, SERVICE_POSTPONE_TASK, SERVICE_APPROVE_TASK, SERVICE_REJECT_TASK,
             SERVICE_REDEEM_REWARD, SERVICE_APPROVE_REWARD, SERVICE_REJECT_REWARD,
-            SERVICE_UNLOCK_PARENT_MODE, SERVICE_LOCK_PARENT_MODE, SERVICE_ADJUST_POINTS, SERVICE_CATCH_UP_SLOT]
+            SERVICE_UNLOCK_PARENT_MODE, SERVICE_LOCK_PARENT_MODE, SERVICE_ADJUST_POINTS, SERVICE_CATCH_UP_SLOT,
+            SERVICE_GET_POINTS_HISTORY]
 
 COMPLETE_TASK_SCHEMA = vol.Schema({
     vol.Required("task_id"): vol.Coerce(int),
@@ -143,6 +145,13 @@ ADJUST_POINTS_SCHEMA = vol.All(vol.Schema({
     vol.Optional("config_entry_id"): cv.string,
 }), cv.has_at_least_one_key("points", "preset_id"))
 
+GET_POINTS_HISTORY_SCHEMA = vol.Schema({
+    vol.Required("user_id"): vol.All(vol.Coerce(int), vol.Range(min=1)),
+    vol.Optional("limit", default=20): vol.All(vol.Coerce(int), vol.Range(min=1, max=100)),
+    vol.Optional("before"): vol.All(vol.Coerce(int), vol.Range(min=1)),
+    vol.Optional("config_entry_id"): cv.string,
+})
+
 
 def _parent_error(err: ParentModeError) -> ServiceValidationError:
     """Explain in the user's language why a parent action was refused."""
@@ -233,7 +242,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.debug("Failed to refresh points presets: %s", err)
         if coordinator.points_presets is not None:
             try:
-                coordinator.points_history = ledger_entries(await client.async_get_points_history(), circle_members)
+                # Named like the cards' history window: the reason, else the task or reward.
+                rows = await client.async_get_points_history()
+                coordinator.points_history = history_page(rows, circle_members, len(rows or []), all_tasks,
+                                                          coordinator.rewards)["entries"]
                 ledger.update(coordinator.points_history, entry.entry_id)
             except Exception as err:
                 _LOGGER.debug("Failed to refresh the points history: %s", err)
@@ -409,6 +421,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.services.async_register(DOMAIN, SERVICE_ADJUST_POINTS, adjust_points_handler,
                                  schema=ADJUST_POINTS_SCHEMA,
                                  supports_response=SupportsResponse.OPTIONAL)
+
+    async def get_points_history_handler(call: ServiceCall) -> ServiceResponse:
+        return await async_get_points_history_service(hass, call)
+
+    hass.services.async_register(DOMAIN, SERVICE_GET_POINTS_HISTORY, get_points_history_handler,
+                                 schema=GET_POINTS_HISTORY_SCHEMA,
+                                 supports_response=SupportsResponse.ONLY)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     entry.add_update_listener(async_reload_entry)
@@ -545,6 +564,20 @@ async def async_adjust_points_service(hass: HomeAssistant, call: ServiceCall) ->
     finally:
         await config["coordinator"].async_refresh()
     return {key: result.get(key) for key in ("action", "points", "delta", "reason")}
+
+
+async def async_get_points_history_service(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
+    """A page of a member's points history, newest first; anyone may read it."""
+    config = await _get_config(hass, call)
+    coordinator = config["coordinator"]
+    limit = call.data.get("limit", 20)
+    try:
+        rows = await config["client"].async_get_points_history(
+            limit + 1, call.data["user_id"], call.data.get("before"))
+    except Exception as err:
+        raise HomeAssistantError(str(err)) from err
+    return history_page(rows, config["circle_members"], limit,
+                        getattr(coordinator, "all_tasks", None), getattr(coordinator, "rewards", None))
 
 
 async def async_unlock_parent_mode_service(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:

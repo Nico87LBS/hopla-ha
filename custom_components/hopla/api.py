@@ -267,11 +267,15 @@ class HoplaApiClient:
             response.raise_for_status()
             return (await response.json()).get("res") or []
 
-    async def async_get_points_history(self, limit: int = 20, user_id: int | None = None) -> list:
-        """Get the newest points ledger rows of the circle."""
+    async def async_get_points_history(self, limit: int = 20, user_id: int | None = None,
+                                       before: int | None = None) -> list:
+        """Get the newest points ledger rows of the circle, or of one member,
+        older than the row `before` when paging back."""
         params = {"limit": limit}
         if user_id:
             params["userId"] = user_id
+        if before:
+            params["before"] = before
         async with self._session.get(
             f"{self._base_url}/eapi/v1/points/history",
             headers=self._headers(),

@@ -31,6 +31,22 @@ def ledger_entries(rows, members):
     } for row in rows or []]
 
 
+def history_page(rows, members, limit, tasks=(), rewards=()):
+    """One page of a member's ledger for the cards, newest first.
+
+    `rows` holds up to one row more than `limit`, which only tells whether
+    older rows remain. Each entry gets a name to show: the reason Hopla wrote,
+    else the task or reward it is about.
+    """
+    task_names = {task.id: task.name for task in tasks or []}
+    reward_names = {reward.id: reward.name for reward in rewards or []}
+    entries = ledger_entries((rows or [])[:limit], members)
+    for entry in entries:
+        entry["name"] = (entry["reason"] or task_names.get(entry["task_id"])
+                         or reward_names.get(entry["reward_id"]) or "")
+    return {"entries": entries, "more": len(rows or []) > limit}
+
+
 def presets(rows):
     """Ready-made bonuses (points > 0) and penalties (points < 0)."""
     return [{"id": row["id"], "name": row["name"], "points": row["points"]} for row in rows or []]
