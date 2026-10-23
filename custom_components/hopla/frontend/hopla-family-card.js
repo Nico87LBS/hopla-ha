@@ -59,6 +59,14 @@ export function todaySlots(slots, now = new Date()) {
 
 const slotNow = (slot, now = new Date()) => new Date(slot.opens_at) <= now && now < new Date(slot.closes_at);
 
+// A task where the first one to do it does it for all has one set of slots for
+// every child: a slot another child ticked is theirs, not this child's.
+export function memberSlots(task, member) {
+  if (!task.together) return task.slots;
+  return task.slots.map(slot => ['done', 'pending'].includes(slot.state) && slot.completed_by != null && slot.completed_by !== member.id
+    ? {...slot, state: 'taken'} : slot);
+}
+
 // One row per task name, so a task created once per child reads as one task:
 // each child's photo completes their own copy, and a child who already did it
 // today gets a check instead.
@@ -74,7 +82,7 @@ export function taskRows(tasks, done, members) {
       row.slotted = true;
       row.columns ??= task.slots;
       for (const member of task.members) {
-        if (!row.slots.some(slot => slot.member.id === member.id)) row.slots.push({member, task, state: 'slots', slots: task.slots});
+        if (!row.slots.some(slot => slot.member.id === member.id)) row.slots.push({member, task, state: 'slots', slots: memberSlots(task, member)});
       }
       continue;
     }
@@ -203,8 +211,9 @@ export function boardData(hass, config, now = new Date()) {
   const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
   // Once its last slot of the day is ticked, a task is due tomorrow, but it
   // stays on today's board while one of its slots, or one of another child's
-  // copy, is still to do or waits for a parent.
-  const busy = new Set(tasks.filter(task => todaySlots(task.slots, now).some(slot => slot.state !== 'done'))
+  // copy, is still to come or waits for a parent. A slot missed earlier no
+  // longer keeps it: the day is over for that task.
+  const busy = new Set(tasks.filter(task => todaySlots(task.slots, now).some(slot => ['upcoming', 'open', 'pending'].includes(slot.state)))
     .map(task => sameName(task.name)));
   const slottedToday = task => todaySlots(task.slots, now).length > 0 && busy.has(sameName(task.name));
   // A task started from outside (Home Assistant) waits, hidden, until it is
@@ -530,7 +539,7 @@ class HoplaFamilyCard extends HTMLElement {
   }
   // The ring round a child's face: one arc per slot, coloured by its state.
   ring(slots) {
-    const colors = {done: '#0EA5E9', pending: '#F59E0B', missed: '#E07A2E', open: '#BAE6FD', upcoming: '#D9D9D9'};
+    const colors = {done: '#0EA5E9', pending: '#F59E0B', missed: '#E07A2E', open: '#BAE6FD', upcoming: '#D9D9D9', taken: '#EEEEEE'};
     const circle = 2 * Math.PI * 29;
     const part = circle / slots.length;
     const gap = slots.length > 1 ? 8.7 : 0;
@@ -562,6 +571,7 @@ class HoplaFamilyCard extends HTMLElement {
             <button class="cap ok" data-action="slot-approve" ${data} aria-label="${escape(this.t('common.on_task', {action: this.t('approve'), task: label}))}">${svg('check', 20)}</button>
             <button class="cap no" data-action="slot-reject" ${data} aria-label="${escape(this.t('common.on_task', {action: this.t('reject'), task: label}))}">${svg('cross', 18)}</button></span>`;
           if (slot.state === 'missed') return `<button class="catchup" data-action="slot-catchup" ${data} aria-label="${escape(this.t('common.on_task', {action: this.t('catch_up'), task: label}))}">${svg('replay', 15)}${escape(this.t('catch_up'))}</button>`;
+          if (slot.state === 'taken') return `<span class="gdot taken" role="img" aria-label="${escape(this.t('common.on_task', {action: label, task: this.t('slot_state.taken')}))}"></span>`;
           if (slot.state === 'done') return `<span class="gdot done" role="img" aria-label="${escape(this.t('common.on_task', {action: label, task: this.t('slot_state.done')}))}">${svg('check', 16)}</span>`;
           if (slot.state === 'open') return `<button class="gdot open" data-action="slot-catchup" ${data} aria-label="${escape(this.t('common.on_task', {action: this.t('slot_tick'), task: label}))}">${svg('check', 16)}</button>`;
           return `<span class="gdot later" role="img" aria-label="${escape(this.t('common.on_task', {action: label, task: this.t('slot_state.upcoming')}))}"></span>`;
@@ -569,7 +579,7 @@ class HoplaFamilyCard extends HTMLElement {
         return `<span class="gname">${this.face(m, 30)}<span>${escape(m.name)}</span></span>${cells}`;
       }).join('');
       const summary = [pendingCount ? this.t('to_approve', {count: pendingCount}) : '', missedCount ? this.t('missed_slots', {count: missedCount}) : ''].filter(Boolean).join(' · ');
-      const waiting = row.slots.filter(entry => entry.slots.some(slot => slot.state === 'pending')).map(entry => entry.task.id);
+      const waiting = [...new Set(row.slots.filter(entry => entry.slots.some(slot => slot.state === 'pending')).map(entry => entry.task.id))];
       const approveAll = pendingCount > 1 ? `<button class="approve-all" data-action="approve-all" data-tasks="${waiting.join(',')}" ${busy ? 'disabled' : ''}>${svg('check', 16)}${escape(this.t('approve_all', {count: pendingCount}))}</button>` : '';
       return `<div class="row slotted open-grid"><div class="grid-top"><span class="name"><span>${escape(row.name)}</span>${this.mode(row)}</span>${this.points(row.points)}${sparkle}</div>
         <div class="grid" style="grid-template-columns: minmax(80px, 110px) repeat(${row.columns.length}, minmax(0, 1fr))"><span></span>${head}${lines}</div>
@@ -853,6 +863,7 @@ class HoplaFamilyCard extends HTMLElement {
       .gdot.open { border: 3px solid #0EA5E9; color: transparent; min-width: 44px; min-height: 44px; }
       .gdot.open:hover { color: #0EA5E9; }
       .gdot.later { border: 2px dashed #d9d9d9; }
+      .gdot.taken { background: rgba(127,127,127,.12); width: 14px; height: 14px; }
       .gfoot { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--dt-line); font-size: 13px; color: var(--secondary-text-color); }
       .gfoot > span { flex: 1; }
       .approve-all { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; background: #15803d; color: #fff; font-size: 14px; font-weight: 600; }

@@ -41,7 +41,7 @@ export default {
     requested: 'Request sent to a parent',
     request_pending: 'Waiting for a parent',
     slot_time: '{h}:{m}',
-    slot_state: {done: 'done', pending: 'waiting for a parent', missed: 'missed', open: 'to do now', upcoming: 'upcoming'},
+    slot_state: {done: 'done', pending: 'waiting for a parent', missed: 'missed', open: 'to do now', upcoming: 'upcoming', taken: 'done by someone else'},
     slot_tick: 'Tick',
     slot_tick_named: 'tick {slot}',
     catch_up: 'Catch up',

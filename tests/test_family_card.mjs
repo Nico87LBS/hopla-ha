@@ -217,6 +217,20 @@ const allDone = {states: {...hass.states,
   'sensor.dents': dueOn(slotted(12, 2, [slot(0, 'Matin', 6, 10, 'done', {completed_by: 2})]), tomorrow),
   'sensor.dents_anna': dueOn(slotted(17, 3, [slot(0, 'Matin', 6, 10, 'done', {completed_by: 3})]), tomorrow)}};
 assert.equal(boardData(allDone, {due: 'today', members: [2, 3]}, now).rows.some(r => r.key === 'dents'), false, 'done by all for today: gone');
+
+// The first one to do it does it for all: one set of slots for both children,
+// and a slot ticked by one is not the other's.
+const firstSlots = [slot(0, 'Matin', 6, 10, 'missed'), slot(1, 'Soir', 11, 23, 'pending', {completed_by: 3})];
+const first = {states: {...hass.states,
+  'sensor.dents': dueOn({...slotted(12, 2, firstSlots), attributes: {...slotted(12, 2, firstSlots).attributes, assignee_ids: [2, 3], assign_strategy: 'together'}}, tomorrow)}};
+data = boardData(first, {due: 'today', members: [2, 3]}, now);
+assert.deepEqual(data.rows.find(r => r.key === 'dents').slots.map(e => `${e.member.name}:${e.slots.map(s => s.state).join(',')}`),
+  ['Elena:missed,taken', 'Anna:missed,pending'], 'only the child who ticked the slot waits');
+const firstDone = {states: {...hass.states,
+  'sensor.dents': dueOn({...first.states['sensor.dents'], attributes: {...first.states['sensor.dents'].attributes,
+    slots_today: [slot(0, 'Matin', 6, 10, 'missed'), slot(1, 'Soir', 11, 23, 'done', {completed_by: 3})]}}, tomorrow)}};
+assert.equal(boardData(firstDone, {due: 'today', members: [2, 3]}, now).rows.some(r => r.key === 'dents'), false,
+  'last slot done, the one before missed: gone for today');
 console.log('family card slot tests passed');
 
 // A task started from outside waits, hidden, until it is given a date; a
