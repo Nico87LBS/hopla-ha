@@ -170,9 +170,10 @@ class HoplaApiClient:
             _LOGGER.error("Error parsing Hopla complete task response: %s", err)
             raise
 
-    async def _post_action(self, path: str, operation: str, payload: dict | None = None) -> dict:
+    async def _post_action(self, path: str, operation: str, payload: dict | None = None, method: str = "POST") -> dict:
         """POST to an action route, raising Hopla's own error message on 4xx."""
-        async with self._session.post(
+        async with self._session.request(
+            method,
             f"{self._base_url}{path}",
             headers=self._headers(),
             json=payload or {},
@@ -188,6 +189,11 @@ class HoplaApiClient:
                 raise ValueError(f"Hopla refused to {operation}: {reason or response.status}")
             response.raise_for_status()
             return await response.json()
+
+    async def async_set_member_away(self, user_id: int, away: bool) -> None:
+        """Mark a child away (her tasks wait) or back home."""
+        await self._post_action(f"/eapi/v1/circle/members/{user_id}/away", "change who is home",
+                                {"away": away}, method="PUT")
 
     async def async_approve_task(self, task_id: int) -> HoplaTask:
         """Approve a completion waiting for approval; its points go to the completer."""

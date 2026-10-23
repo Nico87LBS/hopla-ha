@@ -266,3 +266,16 @@ const modeStates = {states: {...headsStates.states,
 const modes = Object.fromEntries(boardData(modeStates, {due: 'all'}, now).rows.map(row => [row.key, row.mode]));
 assert.deepEqual(modes, {vaisselle: 'one', ranger: 'first', 'faire son lit': 'each', lire: ''});
 console.log('family card shows how a task shared by several people works');
+
+// A child away (at the other parent's home): her tasks wait, her face stays, greyed.
+const away = {...hass, states: {...hass.states,
+  'sensor.hopla_points_elena': {...hass.states['sensor.hopla_points_elena'],
+    attributes: {...hass.states['sensor.hopla_points_elena'].attributes, away: true}},
+  'sensor.lit_elena': task(20, 'Lit', {assigned_to_user_id: 2, assignee_ids: [2]}),
+}};
+data = boardData(away, {due: 'all', members: [2, 3]}, now);
+assert.equal(data.members.find(m => m.id === 2).away, true);
+assert.equal(data.tasks.some(t => t.name === 'Lit'), false, 'her own task waits for her');
+assert.deepEqual(data.tasks.find(t => t.name === 'Dents').members.map(m => m.name), ['Anna'], 'a shared task stays for her sister');
+assert.equal(data.tasks.some(t => t.name === 'Chambre'), true, 'what waits for a parent stays');
+console.log('family card hides the tasks of a child who is away');

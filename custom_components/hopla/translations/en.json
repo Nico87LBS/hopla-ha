@@ -89,6 +89,11 @@
       "activity": {
         "name": "Activity log"
       }
+    },
+    "switch": {
+      "member_home": {
+        "name": "{name} home"
+      }
     }
   },
   "exceptions": {

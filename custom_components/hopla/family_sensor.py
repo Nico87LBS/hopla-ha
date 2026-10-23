@@ -156,6 +156,7 @@ class HoplaPointsSensor(_FamilySensor):
             "role": member.role,
             "total_points": member.points,
             "points_redeemed": member.points_redeemed,
+            "away": member.away,
             "recent_completions": recent_completions(
                 getattr(self.coordinator, "completed_tasks", []), member.user_id),
             **self._streak(member.user_id),
