@@ -6,7 +6,7 @@
 // Wait before defining classes so they use the final registry and base class.
 await customElements.whenDefined('home-assistant');
 
-const {translator, browserLanguage} = await import(new URL(`./hopla-i18n.js${new URL(import.meta.url).search}`, import.meta.url));
+const {translator, browserLanguage, reloadIfOutdated} = await import(new URL(`./hopla-i18n.js${new URL(import.meta.url).search}`, import.meta.url));
 const KEYS = {allDone: 'all_done', noTasks: 'no_tasks', noMembers: 'no_members'};
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -269,6 +269,7 @@ class HoplaFamilyCard extends HTMLElement {
     this.render();
   }
   set hass(hass) {
+    if (reloadIfOutdated(hass)) return;
     const previous = this._hass;
     this._hass = hass;
     const relevant = id => (id.startsWith('sensor.') || id.startsWith('binary_sensor.')) && isHopla(hass, id);

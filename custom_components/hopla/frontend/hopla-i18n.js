@@ -44,6 +44,25 @@ export function translator(language, onLoad) {
   };
 }
 
+// An open dashboard keeps the cards it loaded, by the hash in their URL, until
+// the page reloads: a wall tablet could show old cards for days after an
+// update. When Home Assistant serves newer ones, reload the page, once per
+// version so a cached page can never loop.
+export function reloadIfOutdated(hass) {
+  const mine = new URLSearchParams(version).get('v');
+  if (!mine || typeof location === 'undefined') return false;
+  const latest = Object.values(hass?.states || {}).find(state => state.attributes?.frontend_version)?.attributes.frontend_version;
+  if (!latest || latest === mine) return false;
+  try {
+    if (sessionStorage.getItem('hopla-reloaded-for') === latest) return false;
+    sessionStorage.setItem('hopla-reloaded-for', latest);
+  } catch {
+    return false;
+  }
+  location.reload();
+  return true;
+}
+
 export function browserLanguage() {
   return globalThis.navigator?.language || 'en';
 }
