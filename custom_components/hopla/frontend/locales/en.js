@@ -102,7 +102,7 @@ export default {
     choose_penalty: 'Pick a penalty or an amount',
     floor_note: 'The balance never goes below 0.',
     to_spend_big: 'points to spend',
-    rewards_now: 'Right now',
+    rewards_now: 'Available now',
     rewards_later: 'A little more',
     rewards_none: 'No rewards yet',
     missing_short_one: '{count} more point',

@@ -864,7 +864,8 @@ class HoplaFamilyCard extends HTMLElement {
     const menu = adjust
       ? `<button class="round" data-action="adjust-back" aria-label="${escape(this.t('back'))}">${svg('left', 18)}</button>${this.face(member, 34)}<span class="sheet-for">${escape(this.t('adjust_for', {name: member.name}))}</span>`
       : `<div class="menu" role="group">${data.members.map(m => `<button class="who${m.id === member.id ? ' on' : ''}" data-action="sheet-member" data-member="${m.id}" aria-pressed="${m.id === member.id}">${this.face(m, 34)}<span>${escape(m.name)}</span></button>`).join('')}</div><span class="grow"></span>`;
-    const tools = sheet.kind === 'history' && data.adjustable && this._config.show_bonus
+    // Always offered in the history: the same server gives the history and the bonuses.
+    const tools = sheet.kind === 'history'
       ? `<button class="round adj" data-action="adjust-open" data-member="${member.id}" data-tab="bonus" aria-label="${escape(this.t('adjust_open', {name: member.name}))}">${svg('plusminus', 22)}</button>` : '';
     const body = sheet.kind === 'history' ? this.renderHistorySheet(data, member)
       : sheet.kind === 'rewards' ? this.renderRewardsSheet(data, member) : this.renderAdjustSheet(data, member);
@@ -913,7 +914,7 @@ class HoplaFamilyCard extends HTMLElement {
         const buttons = this._access.parent ? `
           <button class="icon-btn ok" data-action="approve-request" data-request="${request.redemption_id}" ${busy} aria-label="${escape(this.t('approve'))}">${svg('check', 18)}</button>
           <button class="icon-btn no" data-action="reject-request" data-request="${request.redemption_id}" ${busy} aria-label="${escape(this.t('reject'))}">${svg('cross', 16)}</button>` : `<span class="wait">${svg('hourglass', 13)}${escape(this.t('request_pending'))}</span>`;
-        return {now: true, html: `<div class="rw"><span class="ric">${svg('gift', 20)}</span><span class="lname"><span>${escape(reward.name)}</span>${this._access.parent ? `<small>${escape(this.t('request_pending'))}</small>` : ''}</span>${cost}${buttons}</div>`};
+        return {now: true, html: `<div class="rw"><span class="ric req">${svg('gift', 20)}</span><span class="lname"><span>${escape(reward.name)}</span>${this._access.parent ? `<small>${escape(this.t('request_pending'))}</small>` : ''}</span>${cost}${buttons}</div>`};
       }
       if (state.kind === 'available') {
         const armed = this._armed === key;
@@ -929,9 +930,9 @@ class HoplaFamilyCard extends HTMLElement {
       }
       return {now: false, html: `<div class="rw"><span class="ric off">${svg('clock', 18)}</span><span class="lname"><span>${escape(reward.name)}</span><small>${escape(this.t('quota_back', {time: state.resetsAt ? this.duration(state.resetsAt) : ''}))}</small></span>${cost}</div>`};
     });
-    const group = (title, items) => items.length ? `<div class="day"><span>${escape(title)}</span></div>${items.map(item => item.html).join('')}` : '';
-    return `<div class="hero">${svg('star', 28)}<b>${member.points}</b><span>${escape(this.t('to_spend_big'))}</span></div>
-      ${rows.length ? group(this.t('rewards_now'), rows.filter(r => r.now)) + group(this.t('rewards_later'), rows.filter(r => !r.now)) : `<div class="empty-text">${escape(this.t('rewards_none'))}</div>`}`;
+    const group = (title, icon, kind, items) => items.length ? `<div class="day ${kind}"><span>${svg(icon, 13)}${escape(title)}</span></div>${items.map(item => item.html).join('')}` : '';
+    return `<div class="hero">${svg('star', 24)}<b>${member.points}</b><span>${escape(this.t('to_spend_big'))}</span></div>
+      ${rows.length ? group(this.t('rewards_now'), 'check', 'now', rows.filter(r => r.now)) + group(this.t('rewards_later'), 'lock', 'later', rows.filter(r => !r.now)) : `<div class="empty-text">${escape(this.t('rewards_none'))}</div>`}`;
   }
   renderAdjustSheet(data, member) {
     const sheet = this._sheet;
@@ -1215,21 +1216,23 @@ class HoplaFamilyCard extends HTMLElement {
       .filter { padding: 7px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; background: rgba(127,127,127,.1); color: var(--secondary-text-color); }
       .filter.on { background: var(--primary-text-color); color: var(--card-background-color, #fff); }
       .day { display: flex; justify-content: space-between; align-items: baseline; margin: 14px 2px 4px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--secondary-text-color); }
+      .day span:first-child { display: inline-flex; align-items: center; gap: 6px; } .day.now { color: var(--dt-green); }
       .day span + span { letter-spacing: 0; text-transform: none; font-size: 13px; color: #1e7a37; } .day span.down { color: #c5221f; }
       .hrow { display: flex; align-items: center; gap: 12px; padding: 9px 2px; border-bottom: 1px solid var(--dt-line); }
       .hic { width: 36px; height: 36px; flex: none; border-radius: 11px; display: grid; place-items: center; }
       .hic.task { background: rgba(59,111,216,.12); color: var(--dt-blue); } .hic.plus { background: rgba(30,142,62,.12); color: var(--dt-green); }
       .hic.minus { background: rgba(217,48,37,.1); color: #c5221f; } .hic.gift { background: rgba(245,180,0,.18); color: #a87300; } .hic.undo { background: rgba(127,127,127,.12); color: var(--secondary-text-color); }
       .more { width: 100%; margin-top: 12px; padding: 11px; border-radius: 12px; background: rgba(99,102,241,.08); color: #4f46e5; font-size: 14px; font-weight: 700; }
-      .hero { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 14px 16px; border-radius: 16px; background: #fff4cc; color: #8a5a00; }
-      .hero svg { color: var(--dt-gold); } .hero b { font-size: 30px; font-weight: 800; line-height: 1; } .hero span { font-size: 15px; font-weight: 700; }
+      .hero { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 12px 14px; border-radius: 14px; background: var(--secondary-background-color, rgba(127,127,127,.08)); }
+      .hero svg { color: var(--dt-gold); } .hero b { font-size: 26px; font-weight: 800; line-height: 1; } .hero span { font-size: 15px; font-weight: 700; }
       .rw { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 10px 12px; margin-top: 8px; border-radius: 16px; border: 1px solid var(--dt-line); box-sizing: border-box; }
       .rw.armed { border-color: #e8590c; }
-      .ric { width: 40px; height: 40px; flex: none; border-radius: 12px; display: grid; place-items: center; background: rgba(245,180,0,.18); color: #a87300; }
+      .ric { width: 40px; height: 40px; flex: none; border-radius: 12px; display: grid; place-items: center; background: rgba(30,142,62,.14); color: var(--dt-green); }
+      .ric.req { background: rgba(138,111,87,.14); color: #6f5640; }
       .ric.off { background: rgba(127,127,127,.1); color: var(--secondary-text-color); }
-      .go-btn { height: 42px; padding: 0 14px; border-radius: 12px; background: #d99a00; color: #fff; font-size: 14px; font-weight: 800; white-space: nowrap; }
+      .go-btn { height: 42px; padding: 0 14px; border-radius: 12px; background: var(--dt-green); color: #fff; font-size: 14px; font-weight: 800; white-space: nowrap; }
       .go-btn.armed { background: #e8590c; }
-      .ready { font-size: 13px; font-weight: 700; color: #a87300; white-space: nowrap; }
+      .ready { font-size: 13px; font-weight: 700; color: var(--dt-green); white-space: nowrap; }
       .wait { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 999px; background: rgba(138,111,87,.14); color: #6f5640; font-size: 12px; font-weight: 700; white-space: nowrap; }
       .mini-gauge { display: block; height: 6px; margin-top: 6px; border-radius: 3px; background: var(--dt-line); overflow: hidden; }
       .mini-gauge i { display: block; height: 100%; border-radius: inherit; background: var(--dt-gold); }
