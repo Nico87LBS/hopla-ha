@@ -108,6 +108,9 @@
     },
     "pin_not_set": {
       "message": "Aucun code parent n'est choisi. Un parent peut en choisir un dans les options de l'intégration Hopla."
+    },
+    "no_chrono": {
+      "message": "Aucun bonus chrono n'a été lancé sur cette tâche."
     }
   },
   "services": {
@@ -440,6 +443,42 @@
         "timezone": {
           "name": "Fuseau horaire",
           "description": "Un fuseau IANA, par exemple Europe/Lisbon"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
+    },
+    "start_chrono": {
+      "name": "Lancer un bonus chrono",
+      "description": "Donne des points en plus à qui fait une tâche (ou une de ses copies) dans les prochaines minutes, une fois par enfant. Le relancer remplace celui en cours. Réservé aux parents.",
+      "fields": {
+        "task_id": {
+          "name": "Tâche",
+          "description": "L'ID Hopla de la tâche"
+        },
+        "points": {
+          "name": "Points en plus",
+          "description": "Ajoutés aux points de la tâche (5 par défaut)"
+        },
+        "minutes": {
+          "name": "Minutes",
+          "description": "La durée du bonus chrono (15 par défaut)"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
+    },
+    "stop_chrono": {
+      "name": "Arrêter un bonus chrono",
+      "description": "Termine avant l'heure le bonus chrono lancé sur une tâche. Réservé aux parents.",
+      "fields": {
+        "task_id": {
+          "name": "Tâche",
+          "description": "L'ID Hopla de la tâche"
         },
         "config_entry_id": {
           "name": "Intégration Hopla",

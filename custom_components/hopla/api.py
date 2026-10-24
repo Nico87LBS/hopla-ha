@@ -328,6 +328,16 @@ class HoplaApiClient:
         data = await self._post_action("/eapi/v1/points/adjust", "change the points", payload)
         return data["res"]
 
+    async def async_start_chrono(self, task_id: int, points: int, minutes: int) -> dict:
+        """Start a speed bonus on a task: extra points for doing it in the next minutes."""
+        payload = {"choreId": task_id, "points": points, "minutes": minutes}
+        data = await self._post_action("/eapi/v1/games/flashes", "start the speed bonus", payload)
+        return data["res"]
+
+    async def async_stop_chrono(self, flash_id: int) -> None:
+        """End a speed bonus a parent started, before its time."""
+        await self._post_action(f"/eapi/v1/games/flashes/{flash_id}", "stop the speed bonus", method="DELETE")
+
     async def async_create_task(self, name: str, description: str = None, due_date: str = None, created_by: int = None, project_id: int = None) -> HoplaTask:
         """Create a new task"""
         headers = self._headers()

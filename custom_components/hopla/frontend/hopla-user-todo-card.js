@@ -349,6 +349,8 @@ class HoplaUserTodoCard extends HTMLElement {
       .due { display:flex; align-items:center; gap:4px; }
       .task-points { display:inline-flex; align-items:center; gap:3px; flex-shrink:0; padding:0 5px; border-radius:10px; background:var(--secondary-background-color); color:var(--secondary-text-color); font-size:11px; line-height:18px; }
       .task-points ha-icon { --mdc-icon-size:12px; }
+      .task-chrono { display:inline-flex; align-items:center; gap:3px; flex-shrink:0; padding:0 6px; border-radius:10px; background:rgba(91,79,224,.13); color:#5b4fe0; font-size:11px; font-weight:700; line-height:18px; white-space:nowrap; }
+      .task-chrono ha-icon { --mdc-icon-size:12px; }
       .task-mode { display:flex; align-items:center; gap:4px; font-size:12px; font-weight:600; line-height:16px; } .task-mode ha-icon { --mdc-icon-size:14px; }
       .task-mode.each { color:#3b6fd8; } .task-mode.first { color:#e8590c; } .task-mode.one { color:var(--secondary-text-color); }
       .task-recurrence { display:flex; align-items:center; gap:4px; color:var(--secondary-text-color); font-size:12px; line-height:16px; }
@@ -430,6 +432,16 @@ class HoplaUserTodoCard extends HTMLElement {
         badge.title = t('todo.task_value', {label}); badge.setAttribute('aria-label', label);
         const star = document.createElement('ha-icon'); star.setAttribute('icon', 'mdi:star-outline');
         star.setAttribute('aria-hidden', 'true'); badge.prepend(star);
+      }
+      // A speed bonus still open: extra points until it ends.
+      const chronoEnd = task.chrono?.ends_at ? new Date(task.chrono.ends_at) : null;
+      if (chronoEnd && chronoEnd > new Date() && !completed) {
+        const left = Math.max(1, Math.ceil((chronoEnd - new Date()) / 60000));
+        const time = wallClock(chronoEnd).toLocaleTimeString(this._hass.locale?.language || undefined, {hour: 'numeric', minute: '2-digit'});
+        const badge = addText(name, 'span', t(left <= 60 ? 'todo.chrono_left' : 'todo.chrono_until', {points: task.chrono.points, n: left, time}), 'task-chrono');
+        badge.title = t('todo.chrono_title', {n: task.chrono.points, time});
+        const timer = document.createElement('ha-icon'); timer.setAttribute('icon', 'mdi:timer-outline');
+        timer.setAttribute('aria-hidden', 'true'); badge.prepend(timer);
       }
       if (hasDescription) {
         const indicator = document.createElement('ha-icon'); indicator.className = 'description-indicator';

@@ -1,10 +1,17 @@
 """Regression checks for upstream project lists and the existing due window."""
 import ast
 from datetime import datetime, timedelta, timezone
+import importlib.util
 import logging
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
+
+_spec = importlib.util.spec_from_file_location(
+    "hopla_games", Path(__file__).resolve().parents[1] / "custom_components/hopla/games.py")
+_games = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_games)
+chrono_attributes = _games.chrono_attributes
 
 
 class TaskFilteringTests(unittest.TestCase):
@@ -61,7 +68,7 @@ class TaskFilteringTests(unittest.TestCase):
         method = next(node for node in base.body if isinstance(node, ast.FunctionDef)
                       and node.name == "extra_state_attributes")
         method.decorator_list = []
-        namespace = {"CONF_URL": "url"}
+        namespace = {"CONF_URL": "url", "chrono_attributes": chrono_attributes}
         exec(compile(ast.Module(body=[method], type_ignores=[]), str(source), "exec"), namespace)
         labels = [{"id": 7, "name": "maintenance"}]
         task = SimpleNamespace(id=1, name="HVAC", assigned_to=2, assignee_ids=[2],
@@ -82,13 +89,14 @@ class TaskFilteringTests(unittest.TestCase):
         base = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == 'HoplaTodoListBase')
         method = next(node for node in base.body if isinstance(node, ast.FunctionDef) and node.name == 'extra_state_attributes')
         method.decorator_list = []
-        namespace = {'CONF_URL': 'url'}
+        namespace = {'CONF_URL': 'url', 'chrono_attributes': chrono_attributes}
         exec(compile(ast.Module(body=[method], type_ignores=[]), str(source), 'exec'), namespace)
         def task(task_id, assigned_to, due, active=True):
             return SimpleNamespace(id=task_id, assigned_to=assigned_to, next_due_date=due,
                                    is_active=active, name='Task', assignee_ids=[], description='',
                                    priority=1, frequency_type='weekly', labels=[], points=10, frequency=6, interval_type=None,
-                                   assign_strategy=None, together=False)
+                                   assign_strategy=None, together=False,
+                                   flash={'points': 5, 'endsAt': '2026-10-24T16:20:00Z'} if task_id == 1 else None)
         tasks = [task(1, 2, self.near.next_due_date), task(2, None, self.near.next_due_date),
                  task(3, None, self.far.next_due_date), task(4, None, self.near.next_due_date, False),
                  task(5, 3, self.near.next_due_date)]
@@ -104,6 +112,8 @@ class TaskFilteringTests(unittest.TestCase):
         self.assertEqual(attributes['hopla_user_id'], 2)
         self.assertEqual(attributes['tasks'][0]['points'], 10)
         self.assertEqual(attributes['anyone_tasks'][0]['points'], 10)
+        self.assertEqual(attributes['tasks'][0]['chrono'], {'points': 5, 'ends_at': '2026-10-24T16:20:00Z', 'live_id': None})
+        self.assertIsNone(attributes['anyone_tasks'][0]['chrono'])
     def test_card_task_attributes_expose_labels(self):
         source = Path(__file__).resolve().parents[1] / "custom_components/hopla/todo.py"
         tree = ast.parse(source.read_text(encoding="utf-8"))
@@ -112,13 +122,13 @@ class TaskFilteringTests(unittest.TestCase):
         method = next(node for node in base.body if isinstance(node, ast.FunctionDef)
                       and node.name == "extra_state_attributes")
         method.decorator_list = []
-        namespace = {"CONF_URL": "url"}
+        namespace = {"CONF_URL": "url", "chrono_attributes": chrono_attributes}
         exec(compile(ast.Module(body=[method], type_ignores=[]), str(source), "exec"), namespace)
         labels = [{"id": 7, "name": "maintenance"}]
         task = SimpleNamespace(id=1, name="HVAC", assigned_to=2, assignee_ids=[2],
                                description=None, priority=1, labels=labels,
                                next_due_date=None, frequency_type="yearly", is_active=True,
-                               points=0, frequency=1, interval_type=None, assign_strategy=None, together=False)
+                               points=0, frequency=1, interval_type=None, assign_strategy=None, together=False, flash=None)
         entity = SimpleNamespace(_config_entry=SimpleNamespace(entry_id="entry", data={"url": "http://hopla"}),
                                  coordinator=SimpleNamespace(data=[task]),
                                  _filter_tasks=lambda tasks: tasks, _apply_due_window=lambda tasks: tasks)

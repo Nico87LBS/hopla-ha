@@ -18,6 +18,14 @@ def row(id, action="bonus", points=5, delta=5, user=2, **extra):
             "createdBy": 1, "createdAt": "2026-10-21T08:00:00Z", **extra}
 
 
+class ChronoTests(unittest.TestCase):
+    def test_a_speed_bonus_is_shown_with_who_started_it(self):
+        self.assertEqual(games.chrono_attributes({"points": 5, "endsAt": "2026-10-24T16:20:00Z", "liveId": 3}),
+                         {"points": 5, "ends_at": "2026-10-24T16:20:00Z", "live_id": 3})
+        self.assertEqual(games.chrono_attributes({"points": 5, "endsAt": "2026-10-24T16:20:00Z"})["live_id"], None)
+        self.assertIsNone(games.chrono_attributes(None))
+
+
 class LedgerTests(unittest.TestCase):
     def test_entries_carry_member_names(self):
         entry = games.ledger_entries([row(4, reason="Chambre rangée")], MEMBERS)[0]

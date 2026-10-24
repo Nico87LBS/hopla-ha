@@ -47,11 +47,13 @@ SERVICE_ADJUST_POINTS = "adjust_points"
 SERVICE_CATCH_UP_SLOT = "catch_up_slot"
 SERVICE_GET_POINTS_HISTORY = "get_points_history"
 SERVICE_SET_FAMILY_TIMEZONE = "set_family_timezone"
+SERVICE_START_CHRONO = "start_chrono"
+SERVICE_STOP_CHRONO = "stop_chrono"
 SERVICES = [SERVICE_COMPLETE_TASK, SERVICE_CREATE_TASK, SERVICE_UPDATE_TASK, SERVICE_DELETE_TASK, SERVICE_SKIP_TASK,
             SERVICE_COMPLETE_ASSIGNED_TASK, SERVICE_POSTPONE_TASK, SERVICE_APPROVE_TASK, SERVICE_REJECT_TASK,
             SERVICE_REDEEM_REWARD, SERVICE_APPROVE_REWARD, SERVICE_REJECT_REWARD,
             SERVICE_UNLOCK_PARENT_MODE, SERVICE_LOCK_PARENT_MODE, SERVICE_ADJUST_POINTS, SERVICE_CATCH_UP_SLOT,
-            SERVICE_GET_POINTS_HISTORY, SERVICE_SET_FAMILY_TIMEZONE]
+            SERVICE_GET_POINTS_HISTORY, SERVICE_SET_FAMILY_TIMEZONE, SERVICE_START_CHRONO, SERVICE_STOP_CHRONO]
 
 COMPLETE_TASK_SCHEMA = vol.Schema({
     vol.Required("task_id"): vol.Coerce(int),
@@ -150,6 +152,20 @@ ADJUST_POINTS_SCHEMA = vol.All(vol.Schema({
     vol.Optional("reason"): vol.All(cv.string, vol.Length(max=200)),
     vol.Optional("config_entry_id"): cv.string,
 }), cv.has_at_least_one_key("points", "preset_id"))
+
+MAX_CHRONO_MINUTES = 720
+
+START_CHRONO_SCHEMA = vol.Schema({
+    vol.Required("task_id"): vol.All(vol.Coerce(int), vol.Range(min=1)),
+    vol.Optional("points", default=5): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_ADJUSTMENT)),
+    vol.Optional("minutes", default=15): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_CHRONO_MINUTES)),
+    vol.Optional("config_entry_id"): cv.string,
+})
+
+STOP_CHRONO_SCHEMA = vol.Schema({
+    vol.Required("task_id"): vol.All(vol.Coerce(int), vol.Range(min=1)),
+    vol.Optional("config_entry_id"): cv.string,
+})
 
 GET_POINTS_HISTORY_SCHEMA = vol.Schema({
     vol.Required("user_id"): vol.All(vol.Coerce(int), vol.Range(min=1)),
@@ -433,6 +449,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                  schema=ADJUST_POINTS_SCHEMA,
                                  supports_response=SupportsResponse.OPTIONAL)
 
+    async def start_chrono_handler(call: ServiceCall) -> ServiceResponse:
+        return await async_start_chrono_service(hass, call)
+
+    async def stop_chrono_handler(call: ServiceCall) -> None:
+        await async_stop_chrono_service(hass, call)
+
+    hass.services.async_register(DOMAIN, SERVICE_START_CHRONO, start_chrono_handler,
+                                 schema=START_CHRONO_SCHEMA,
+                                 supports_response=SupportsResponse.OPTIONAL)
+    hass.services.async_register(DOMAIN, SERVICE_STOP_CHRONO, stop_chrono_handler,
+                                 schema=STOP_CHRONO_SCHEMA)
+
     async def get_points_history_handler(call: ServiceCall) -> ServiceResponse:
         return await async_get_points_history_service(hass, call)
 
@@ -597,6 +625,37 @@ async def async_adjust_points_service(hass: HomeAssistant, call: ServiceCall) ->
     finally:
         await config["coordinator"].async_refresh()
     return {key: result.get(key) for key in ("action", "points", "delta", "reason")}
+
+
+async def async_start_chrono_service(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
+    """Start a speed bonus on a task, and its copies: extra points for whoever does it in time."""
+    config = await _get_config(hass, call)
+    require_parent(config, call)
+    try:
+        result = await config["client"].async_start_chrono(call.data["task_id"], call.data["points"], call.data["minutes"])
+    except Exception as err:
+        raise HomeAssistantError(str(err)) from err
+    finally:
+        await config["coordinator"].async_refresh()
+    return {"task_id": call.data["task_id"], "points": result.get("points"), "ends_at": result.get("endsAt")}
+
+
+async def async_stop_chrono_service(hass: HomeAssistant, call: ServiceCall) -> None:
+    """End the speed bonus a parent started on a task, before its time."""
+    config = await _get_config(hass, call)
+    require_parent(config, call)
+    coordinator = config["coordinator"]
+    task = next((task for task in getattr(coordinator, "all_tasks", None) or coordinator.data or []
+                 if task.id == call.data["task_id"]), None)
+    live_id = (task.flash or {}).get("liveId") if task else None
+    if not live_id:
+        raise ServiceValidationError(translation_domain=DOMAIN, translation_key="no_chrono")
+    try:
+        await config["client"].async_stop_chrono(live_id)
+    except Exception as err:
+        raise HomeAssistantError(str(err)) from err
+    finally:
+        await coordinator.async_refresh()
 
 
 async def async_get_points_history_service(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:

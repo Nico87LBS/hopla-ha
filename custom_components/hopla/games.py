@@ -100,6 +100,16 @@ def _rank(item):
     }
 
 
+def chrono_attributes(flash):
+    """The speed bonus open on a task, for its sensor: extra points until ends_at.
+
+    live_id is set when a parent started it on the spot, None for the task's own.
+    """
+    if not isinstance(flash, dict) or not flash.get("endsAt"):
+        return None
+    return {"points": flash.get("points", 0), "ends_at": flash["endsAt"], "live_id": flash.get("liveId") or None}
+
+
 def _quest(quest):
     return {
         "id": quest["id"],

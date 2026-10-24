@@ -254,6 +254,8 @@ proposition tant que la tablette et la famille restent sur ces deux fuseaux.
 | `hopla.create_task`, `hopla.update_task`, `hopla.delete_task` | Créer, modifier, supprimer une tâche | ✓ |
 | `hopla.skip_task`, `hopla.postpone_task` | Passer une tâche à sa prochaine occurrence | ✓ |
 | `hopla.adjust_points` | Donner un bonus ou une pénalité à un membre (`user_id`), avec `points` (négatif pour une pénalité) ou un préréglage (`preset_id`), et une raison (`reason`) si tu veux. Une pénalité baisse les points gagnés, donc le rang et le podium, sans jamais faire passer le solde sous zéro | ✓ |
+| `hopla.start_chrono` | Lancer un bonus chrono sur une tâche (`task_id`) : `points` en plus (5 par défaut) pour qui la fait, elle ou une de ses copies, dans les `minutes` qui viennent (15 par défaut), une fois par enfant. Le relancer remplace celui en cours. Répond `points` et `ends_at` | ✓ |
+| `hopla.stop_chrono` | Arrêter avant l'heure le bonus chrono lancé sur une tâche (`task_id`) | ✓ |
 | `hopla.get_points_history` | Lire l'historique des points d'un membre (`user_id`), du plus récent au plus ancien : `limit` lignes (20 par défaut), plus anciennes que la ligne `before` pour remonter. Répond `entries` et `more` | |
 | `hopla.set_family_timezone` | Passer la famille à un autre fuseau horaire (`timezone`, par exemple `Europe/Lisbon`), pour les vacances : les tâches gardent leur heure | ✓ |
 | `hopla.unlock_parent_mode` | Ouvrir le mode parent pour deux minutes avec le code (`pin`) | |
@@ -319,6 +321,27 @@ Le podium montre la série de chacun avec une flamme à côté du prénom, gris�
 n'a encore fait de tâche aujourd'hui pour la continuer. Pendant une période bonus,
 un bandeau rappelle le multiplicateur et le temps restant, et la tâche surprise du
 jour porte une étincelle avec ses points en plus.
+
+Un bonus chrono donne des points en plus à qui fait une tâche vite. Il se règle
+sur la tâche dans Hopla (bloc Récompense : « +5 si faite au plus tard 15 min
+après l'heure prévue »), ou se lance sur le moment. Sous le nom de la tâche, une
+pastille violette donne les points en plus et le temps qui reste (« +5 · 12 min »,
+ou « +5 · avant 19:15 » quand il reste plus d'une heure). Un parent (ou le mode
+parent sur la tablette) touche la pastille, ou le petit chrono sous une tâche qui
+n'en a pas, pour en lancer un : points en plus, durée, Lancer, ou Arrêter le
+chrono en cours. C'est l'heure où l'enfant coche qui compte, même si un parent
+valide plus tard. L'attribut `chrono` du capteur de la tâche donne `points`,
+`ends_at` et `live_id` (rempli quand un parent l'a lancé sur le moment). Pour en
+lancer un depuis une automatisation, par exemple à 18 h avec une annonce :
+
+```yaml
+actions:
+  - action: hopla.start_chrono
+    data:
+      task_id: 12
+      points: 10
+      minutes: 15
+```
 
 Pour une tâche que chacun doit faire, comme faire son lit, crée-la dans Hopla une
 fois par membre. La carte regroupe les tâches de même nom sur une ligne.

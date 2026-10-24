@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 globalThis.HTMLElement = class {};
 globalThis.customElements = {define() {}, get() {}, whenDefined() { return Promise.resolve(); }};
 globalThis.window = {};
-const {adjustEffect, boardData, earnedChange, historyDays, historyKind, labelNames, liveSlot, parentAccess, podium, podiumPlace, rewardState, taskRows} = await import('../custom_components/hopla/frontend/hopla-family-card.js');
+const {adjustEffect, boardData, earnedChange, historyDays, historyKind, labelNames, liveSlot, parentAccess, podium, podiumPlace, rewardState, rowChrono, taskRows} = await import('../custom_components/hopla/frontend/hopla-family-card.js');
 
 assert.deepEqual(labelNames([{name: 'Enfants '}, 'Maison', {name: ''}, null]), ['enfants', 'maison']);
 assert.deepEqual(labelNames('a, b'), ['a', 'b']);
@@ -306,4 +306,22 @@ console.log('family card hides the tasks of a child who is away');
   assert.deepEqual(ledgerData.ledger.map(e => e.id), [9], 'only the members shown');
   assert.equal(boardData(hass, {}, now).adjustable, false);
   console.log('family card points history');
+}
+
+{
+  // A speed bonus shows on its row until it ends, but not on a copy waiting for a parent.
+  const chrono = (id, name, endsAt, extra = {}) => task(id, name, {next_due_date: '2026-10-20T11:50:00Z', assignee_ids: [2], ...extra,
+    chrono: {points: 5, ends_at: endsAt, live_id: 4}});
+  const withChrono = {...hass, states: {
+    'sensor.hopla_points_elena': member(2, 'Elena', 5),
+    'sensor.lit': chrono(20, 'Lit', '2026-10-20T12:10:00'),
+    'sensor.bain': chrono(21, 'Bain', '2026-10-20T11:55:00'),
+    'sensor.linge': chrono(22, 'Linge', '2026-10-20T12:30:00', {pending_approval: true}),
+  }};
+  const rows = boardData(withChrono, {due: 'all', members: [2]}, now).rows;
+  const of = name => rowChrono(rows.find(r => r.name === name), now);
+  assert.deepEqual(of('Lit'), {points: 5, endsAt: new Date('2026-10-20T12:10:00'), live: 4});
+  assert.equal(of('Bain'), null, 'over');
+  assert.equal(of('Linge'), null, 'done, waiting for a parent');
+  console.log('family card speed bonus');
 }

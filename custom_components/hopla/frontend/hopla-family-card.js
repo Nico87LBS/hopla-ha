@@ -183,6 +183,12 @@ export function rewardState(reward, member, now = new Date()) {
   return {kind: 'available'};
 }
 
+// The speed bonus still to win on a row: extra points until it ends, on one
+// of its copies not yet done or waiting for a parent.
+export function rowChrono(row, now = new Date()) {
+  return row.tasks.filter(task => !task.pending).map(task => task.chrono).find(chrono => chrono && chrono.endsAt > now) || null;
+}
+
 // Who may approve and spend points here. Without parents chosen in the
 // integration options, everyone may; otherwise a parent's own account may,
 // and anyone else only while parent mode is open.
@@ -232,7 +238,8 @@ export function boardData(hass, config, now = new Date()) {
         due: a.next_due_date ? new Date(a.next_due_date) : null, labels: labelNames(a.labels),
         assignees: a.assignee_ids || [], assignedTo: a.assigned_to_user_id ?? null,
         together: a.assign_strategy === 'together', pending: a.pending_approval === true, slots: a.slots_today || [],
-        frequencyType: a.frequency_type});
+        frequencyType: a.frequency_type,
+        chrono: a.chrono?.ends_at ? {points: Number(a.chrono.points) || 0, endsAt: new Date(a.chrono.ends_at), live: a.chrono.live_id ?? null} : null});
     } else if (a.hopla_games) {
       surprise = a.surprise || null;
       period = a.bonus_period || null;
@@ -313,6 +320,7 @@ const icon = {
   flame: '<path d="M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-5 3-6 0 2 1 3 2 3 0-4-1-6 1-9z" fill="currentColor"/>',
   sparkle: '<path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5l-2.2-6.3L3.5 10l6.3-1.7zM19 15l.9 2.6 2.6.9-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9z" fill="currentColor"/>',
   bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="currentColor"/>',
+  timer: '<path d="M9.5 2.5h5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="13.5" r="8" fill="currentColor"/><path d="M12 9.5v4.5" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>',
   people: '<path d="M16 17v2H2v-2s0-4 7-4 7 4 7 4m-3.5-9.5A3.5 3.5 0 1 0 9 11a3.5 3.5 0 0 0 3.5-3.5m3.44 5.5A5.3 5.3 0 0 1 18 17v2h4v-2s0-3.63-6.06-4M15 4a3.4 3.4 0 0 0-1.93.59 5 5 0 0 1 0 5.82A3.4 3.4 0 0 0 15 11a3.5 3.5 0 0 0 0-7z" fill="currentColor"/>',
   person: '<path d="M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8m0 10c4.42 0 8 1.79 8 4v2H4v-2c0-2.21 3.58-4 8-4z" fill="currentColor"/>',
   trophy: '<path d="M7 3h10v5a5 5 0 0 1-10 0zM7 5H3v2a4 4 0 0 0 4 4M17 5h4v2a4 4 0 0 1-4 4M12 13v4M8 21h8M9 17h6v4H9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
@@ -337,7 +345,9 @@ export function zoneProposal(hass, device = deviceZone()) {
 const zoneIgnoreKey = (device, family) => `hoplaZoneIgnored:${device}:${family}`;
 const zoneIgnored = key => { try { return globalThis.localStorage?.getItem(key) === '1'; } catch { return false; } };
 
-const RESPONDING = ['complete_task', 'redeem_reward', 'unlock_parent_mode', 'adjust_points', 'get_points_history'];
+const RESPONDING = ['complete_task', 'redeem_reward', 'unlock_parent_mode', 'adjust_points', 'get_points_history', 'start_chrono'];
+const CHRONO_POINTS = [2, 5, 10, 20];
+const CHRONO_MINUTES = [5, 10, 15, 30];
 // The sections a viewer can fold, and whether each starts open.
 const FOLDS = {todo: true, done: false, history: false, rewards: true};
 const svg = (name, size, label) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" ${label ? `role="img" aria-label="${escape(label)}"` : 'aria-hidden="true"'}>${icon[name]}</svg>`;
@@ -357,6 +367,7 @@ class HoplaFamilyCard extends HTMLElement {
     this._armed = null;       // reward key waiting for a confirming second tap
     this._pin = null;         // digits typed on the parent code pad while it is open
     this._sheet = null;       // the member window open over the card: history, rewards or a bonus/penalty
+    this._chrono = null;      // the speed bonus window open over the card: {task, name, points, minutes}
     this._afterPin = null;    // the window to open once the parent code is typed
     this._history = new Map(); // member id -> the points history loaded for the window
     this._open = {};          // section -> folded open or not, once touched
@@ -418,10 +429,11 @@ class HoplaFamilyCard extends HTMLElement {
   }
   async onClick(event) {
     if (event.target.classList?.contains('rank-scrim')) { this._rankFor = null; this.render(); return; }
-    if (event.target.classList?.contains('sheet-scrim')) { this._sheet = null; this.render(); return; }
+    if (event.target.classList?.contains('sheet-scrim')) { this._sheet = null; this._chrono = null; this.render(); return; }
     const button = event.target.closest('button[data-action]');
     if (!button || button.disabled) return;
     const {action, task, member, reward, request, digit, preset, slot, tasks} = button.dataset;
+    if (action.startsWith('chrono-')) { await this.onChrono(action, button.dataset); return; }
     if (action === 'fold') { const {section} = button.dataset; this._open[section] = !this.isOpen(section); this.render(); return; }
     if (action === 'adjust-open') { await this.openAdjust(Number(member), button.dataset.tab || 'bonus'); return; }
     if (['sheet-history', 'sheet-rewards', 'sheet-member', 'sheet-close', 'sheet-filter', 'history-more'].includes(action)
@@ -455,6 +467,7 @@ class HoplaFamilyCard extends HTMLElement {
         const after = this._afterPin;
         this._afterPin = null;
         if (after?.kind === 'zone') await this.onZone(after.action);
+        else if (after?.kind === 'chrono') this._chrono = after;
         else if (after) this._sheet = after;
       } else { this._pin = ''; this._pinError = this._error; this._error = ''; }
       this.render();
@@ -529,6 +542,26 @@ class HoplaFamilyCard extends HTMLElement {
       this.render();
       await this.loadHistory(sheet.member);
     }
+  }
+  // The speed bonus window: a parent starts one on a task, or stops it.
+  async onChrono(action, data) {
+    if (action === 'chrono-open') {
+      const chrono = {kind: 'chrono', task: Number(data.task), points: 5, minutes: 15};
+      // Speed bonuses are for parents: the code first on the tablet.
+      if (!parentAccess(this._hass).parent) { this._afterPin = chrono; this._pin = ''; this._pinError = ''; this.render(); return; }
+      this._chrono = chrono; this._error = ''; this.render();
+      return;
+    }
+    const chrono = this._chrono;
+    if (!chrono) return;
+    if (action === 'chrono-close') { this._chrono = null; this.render(); return; }
+    if (action === 'chrono-points') { chrono.points = Number(data.value); this.render(); return; }
+    if (action === 'chrono-minutes') { chrono.minutes = Number(data.value); this.render(); return; }
+    const service = action === 'chrono-stop' ? 'stop_chrono' : 'start_chrono';
+    const payload = {task_id: chrono.task, ...(service === 'start_chrono' ? {points: chrono.points, minutes: chrono.minutes} : {})};
+    if (await this.call(service, payload, `chrono-${chrono.task}`, null) === null) return;
+    this._chrono = null;
+    this.flash(chrono.task, this.t(service === 'start_chrono' ? 'chrono_started' : 'chrono_stopped'));
   }
   async onZone(action) {
     const proposal = zoneProposal(this._hass);
@@ -771,7 +804,7 @@ class HoplaFamilyCard extends HTMLElement {
       const summary = [pendingCount ? this.t('to_approve', {count: pendingCount}) : '', missedCount ? this.t('missed_slots', {count: missedCount}) : ''].filter(Boolean).join(' · ');
       const waiting = [...new Set(row.slots.filter(entry => entry.slots.some(slot => slot.state === 'pending')).map(entry => entry.task.id))];
       const approveAll = pendingCount > 1 ? `<button class="approve-all" data-action="approve-all" data-tasks="${waiting.join(',')}" ${busy ? 'disabled' : ''}>${svg('check', 16)}${escape(this.t('approve_all', {count: pendingCount}))}</button>` : '';
-      return `<div class="row slotted open-grid"><div class="grid-top"><span class="name"><span>${escape(row.name)}</span>${this.mode(row)}</span>${this.points(row.points)}${sparkle}</div>
+      return `<div class="row slotted open-grid"><div class="grid-top"><span class="name"><span>${escape(row.name)}</span>${this.mode(row)}${this.chrono(row)}</span>${this.points(row.points)}${sparkle}</div>
         <div class="grid" style="grid-template-columns: minmax(80px, 110px) repeat(${row.columns.length}, minmax(0, 1fr))"><span></span>${head}${lines}</div>
         <div class="gfoot"><span>${escape(summary)}</span>${approveAll}</div></div>`;
     }
@@ -785,7 +818,42 @@ class HoplaFamilyCard extends HTMLElement {
       return `<button class="ringbtn${busy && this._busy.get(busy.id) === m.id ? ' busy' : ''}" data-action="complete" data-task="${task.id}" data-member="${m.id}"
         ${open && !busy ? '' : 'disabled'} aria-label="${escape(label)}" title="${escape(label)}">${this.ring(slots)}<span class="ring-face">${this.face(m, 48)}</span>${waiting ? this.badge('amber', 'hourglass') : ''}</button>`;
     }).join('');
-    return `<div class="row slotted${surprise ? ' is-surprise' : ''}"><span class="name"><span>${escape(row.name)}</span>${this.mode(row)}<span class="slot-pills">${pills}</span></span>${this.points(row.points)}${sparkle}<span class="faces">${right}</span></div>`;
+    return `<div class="row slotted${surprise ? ' is-surprise' : ''}"><span class="name"><span>${escape(row.name)}</span>${this.mode(row)}<span class="slot-pills">${pills}</span>${this.chrono(row)}</span>${this.points(row.points)}${sparkle}<span class="faces">${right}</span></div>`;
+  }
+  // The speed bonus open on a row, and for a parent the way to start one.
+  chrono(row) {
+    const now = new Date();
+    const chrono = rowChrono(row, now);
+    const task = row.tasks.find(t => !t.pending);
+    const open = this._access.parent && task;
+    if (!chrono) return open ? `<button class="chrono-add" data-action="chrono-open" data-task="${task.id}" aria-label="${escape(this.t('common.on_task', {action: this.t('chrono_launch'), task: row.name}))}">${svg('timer', 16)}</button>` : '';
+    const left = Math.max(1, Math.ceil((chrono.endsAt - now) / 60000));
+    const text = left <= 60 ? this.t('chrono_left', {points: chrono.points, n: left}) : this.t('chrono_until', {points: chrono.points, time: this.clock(chrono.endsAt)});
+    const title = this.t('chrono_title', {n: chrono.points, time: this.clock(chrono.endsAt)});
+    const inner = `${svg('timer', 14)}${escape(text)}`;
+    return open ? `<button class="chrono" data-action="chrono-open" data-task="${task.id}" title="${escape(title)}" aria-label="${escape(`${title} · ${this.t('chrono_launch')}`)}">${inner}</button>`
+      : `<span class="chrono" title="${escape(title)}">${inner}</span>`;
+  }
+  renderChronoSheet(data) {
+    const chrono = this._chrono;
+    const task = chrono && data.tasks.find(t => t.id === chrono.task);
+    if (!task) return '';
+    const row = data.rows.find(r => r.tasks.some(t => t.id === task.id));
+    const running = row && rowChrono(row);
+    const live = running?.live ? running : null;
+    const busy = this._busy.has(`chrono-${task.id}`) ? 'disabled' : '';
+    const choices = (values, current, action, label) => `<div class="chrono-choices">${values.map(value =>
+      `<button class="${value === current ? 'on' : ''}" data-action="${action}" data-value="${value}" aria-pressed="${value === current}">${escape(label(value))}</button>`).join('')}</div>`;
+    return `<div class="sheet-scrim"><div class="sheet" role="dialog" aria-label="${escape(this.t('chrono_launch'))}">
+      <div class="sheet-head"><span class="chrono-icon">${svg('timer', 22)}</span><span class="sheet-for">${escape(this.t('chrono_launch'))}</span>
+        <button class="round" data-action="chrono-close" aria-label="${escape(this.t('close'))}">${svg('cross', 16)}</button></div>
+      <p class="chrono-help">${escape(this.t('chrono_help', {name: task.name}))}</p>
+      ${live ? `<div class="notice chrono-live">${svg('timer', 16)}${escape(this.t('chrono_running', {points: live.points, n: Math.max(1, Math.ceil((live.endsAt - new Date()) / 60000))}))}</div>` : ''}
+      <h4>${escape(this.t('chrono_points'))}</h4>${choices(CHRONO_POINTS, chrono.points, 'chrono-points', value => `+${value}`)}
+      <h4>${escape(this.t('chrono_minutes'))}</h4>${choices(CHRONO_MINUTES, chrono.minutes, 'chrono-minutes', value => this.t('minutes', {n: value}))}
+      <button class="go chrono-go" data-action="chrono-start" ${busy}>${svg('timer', 18)}${escape(this.t('chrono_start', {n: chrono.points, minutes: chrono.minutes}))}</button>
+      ${live ? `<button class="more" data-action="chrono-stop" ${busy}>${escape(this.t('chrono_stop'))}</button>` : ''}
+      ${this._error ? `<div class="error">${escape(this._error)}</div>` : ''}</div></div>`;
   }
   // The mode of a task shared by several people, under its name.
   mode(row) {
@@ -813,7 +881,7 @@ class HoplaFamilyCard extends HTMLElement {
     const waiting = row.pending ? `<span class="hourglass">${svg('hourglass', 18, this.t('pending'))}</span>` : '';
     const surprise = row.tasks.find(task => task.surprise);
     const sparkle = surprise ? `<span class="surprise" title="${escape(this.t('surprise', {n: surprise.surprise}))}">${svg('sparkle', 14)}+${surprise.surprise}</span>` : '';
-    return `<div class="row${row.pending ? ' is-pending' : ''}${surprise ? ' is-surprise' : ''}"><span class="name"><span>${escape(row.name)}</span>${this.mode(row)}</span>${this.points(row.points)}${sparkle}${waiting}<span class="faces">${right}</span></div>`;
+    return `<div class="row${row.pending ? ' is-pending' : ''}${surprise ? ' is-surprise' : ''}"><span class="name"><span>${escape(row.name)}</span>${this.mode(row)}${this.chrono(row)}</span>${this.points(row.points)}${sparkle}${waiting}<span class="faces">${right}</span></div>`;
   }
   renderDone(row) {
     const faces = row.items.map(item => `<span class="slot" title="${escape(item.member.name)}">${this.face(item.member, 40)}${this.badge('done', 'check')}</span>`).join('');
@@ -1106,6 +1174,18 @@ class HoplaFamilyCard extends HTMLElement {
       .surprise { display: inline-flex; align-items: center; gap: 3px; padding: 4px 9px 4px 7px; border-radius: 999px; font-size: 13px; font-weight: 800;
         background: linear-gradient(90deg, rgba(236,72,153,.16), rgba(124,77,255,.16)); color: #a21caf; white-space: nowrap; }
       .row.is-surprise { border-color: rgba(162,28,175,.45); }
+      .chrono { display: inline-flex; align-self: flex-start; align-items: center; gap: 3px; margin-top: 4px; padding: 3px 9px 3px 7px; border-radius: 999px; font-size: 13px; font-weight: 800;
+        background: rgba(91,79,224,.13); color: #5b4fe0; white-space: nowrap; }
+      button.chrono { touch-action: manipulation; }
+      .chrono-add { align-self: flex-start; display: inline-flex; align-items: center; margin-top: 4px; padding: 3px 7px; border-radius: 999px; color: rgba(91,79,224,.6); background: rgba(91,79,224,.07); }
+      .chrono-icon { width: 40px; height: 40px; flex: none; border-radius: 12px; display: grid; place-items: center; background: rgba(91,79,224,.13); color: #5b4fe0; }
+      .chrono-help { margin: 12px 2px 0; font-size: 14px; color: var(--secondary-text-color); }
+      .notice.chrono-live { background: rgba(91,79,224,.12); color: #5b4fe0; }
+      .sheet h4 { margin: 14px 2px 8px; font-size: 14px; font-weight: 700; }
+      .chrono-choices { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+      .chrono-choices button { height: 44px; border-radius: 12px; border: 2px solid var(--dt-line); font-size: 15px; font-weight: 700; color: var(--secondary-text-color); touch-action: manipulation; }
+      .chrono-choices button.on { border-color: #5b4fe0; background: rgba(91,79,224,.12); color: #5b4fe0; }
+      .go.chrono-go { background: #5b4fe0; }
       .period { display: flex; align-items: center; gap: 8px; margin: 0 0 18px; padding: 10px 14px; border-radius: 14px;
         background: rgba(245,180,0,.16); color: #8a5a00; font-size: 15px; }
       .period-end { margin-left: auto; font-size: 13px; white-space: nowrap; }
@@ -1334,7 +1414,7 @@ class HoplaFamilyCard extends HTMLElement {
       .key.small { font-size: 14px; background: none; }
       .key:not(:disabled):active { transform: scale(.94); }
     </style><ha-card>
-      ${this.renderParentButton()}${this.renderPinPad()}${this._config.show_points ? this.renderRankDetails(data.members, data.ladder) : ''}${this.renderSheet(data)}
+      ${this.renderParentButton()}${this.renderPinPad()}${this._config.show_points ? this.renderRankDetails(data.members, data.ladder) : ''}${this.renderSheet(data)}${this.renderChronoSheet(data)}
       ${this._config.show_points && data.members.length ? this.renderPodium(data.members) : ''}
       ${this.renderZoneBanner()}${this.renderPeriod(data.period)}
       ${this._config.show_goals ? this.renderChallenges(data.challenges, data.members) : ''}

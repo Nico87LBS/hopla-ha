@@ -108,6 +108,9 @@
     },
     "pin_not_set": {
       "message": "No parent code is set. A parent can choose one in the Hopla integration options."
+    },
+    "no_chrono": {
+      "message": "No speed bonus was started on this task."
     }
   },
   "services": {
@@ -440,6 +443,42 @@
         "timezone": {
           "name": "Time zone",
           "description": "An IANA time zone, such as Europe/Lisbon"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
+    },
+    "start_chrono": {
+      "name": "Start a speed bonus",
+      "description": "Give extra points to whoever does a task (or a copy of it) in the next minutes, once per child. Starting again replaces the running one. Only for parents.",
+      "fields": {
+        "task_id": {
+          "name": "Task",
+          "description": "The Hopla ID of the task"
+        },
+        "points": {
+          "name": "Extra points",
+          "description": "Added to the task's points (5 by default)"
+        },
+        "minutes": {
+          "name": "Minutes",
+          "description": "How long the speed bonus lasts (15 by default)"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
+    },
+    "stop_chrono": {
+      "name": "Stop a speed bonus",
+      "description": "End the speed bonus started on a task before its time. Only for parents.",
+      "fields": {
+        "task_id": {
+          "name": "Task",
+          "description": "The Hopla ID of the task"
         },
         "config_entry_id": {
           "name": "Hopla integration",
