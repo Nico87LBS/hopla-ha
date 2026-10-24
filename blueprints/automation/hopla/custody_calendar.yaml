@@ -44,16 +44,26 @@ triggers:
     entity_id: !input calendar
   - trigger: homeassistant
     event: start
+  # L'agenda revient après une coupure (serveur CalDAV injoignable, rechargement).
+  - trigger: state
+    entity_id: !input calendar
+    from: unavailable
   # A safety net, in case an event was moved or Home Assistant was off.
   - trigger: time_pattern
     hours: "/1"
     minutes: 1
 
 variables:
+  calendar_entity: !input calendar
   keyword: !input keyword
   children: !input children
 
 actions:
+  # Au démarrage de Home Assistant, l'agenda peut ne pas être encore chargé :
+  # tant qu'il ne l'est pas, l'action calendar.get_events n'existe pas.
+  - wait_template: "{{ states(calendar_entity) in ['on', 'off'] }}"
+    timeout: "00:10:00"
+    continue_on_timeout: false
   - action: calendar.get_events
     target:
       entity_id: !input calendar
