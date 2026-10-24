@@ -184,6 +184,8 @@ class HoplaTask:
     slots_today: Optional[List[dict]] = None
     # "together": the task is for each of its assignees at once.
     assign_strategy: Optional[str] = None
+    # The speed bonus open now: {"points", "endsAt", "liveId" when a parent launched it}.
+    flash: Optional[dict] = None
 
     @property
     def together(self) -> bool:
@@ -254,6 +256,7 @@ class HoplaTask:
             reminder_templates=cls.reminder_templates_from(data.get("notificationMetadata")),
             slots_today=[slot for slot in data.get("slotsToday") or [] if isinstance(slot, dict)],
             assign_strategy=data.get("assignStrategy"),
+            flash=data.get("flash") if isinstance(data.get("flash"), dict) else None,
         )
     
     @classmethod

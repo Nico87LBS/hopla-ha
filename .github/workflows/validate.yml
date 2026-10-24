@@ -37,6 +37,9 @@ jobs:
       - run: node --experimental-default-type=module tests/test_family_zone_dom.mjs
         env:
           DOM_TEST_MODULE: ${{ runner.temp }}/hopla-card-tests/node_modules/happy-dom/lib/index.js
+      - run: node --experimental-default-type=module tests/test_family_chrono_dom.mjs
+        env:
+          DOM_TEST_MODULE: ${{ runner.temp }}/hopla-card-tests/node_modules/happy-dom/lib/index.js
       - run: node --experimental-default-type=module tests/test_card_editor.mjs
         env:
           DOM_TEST_MODULE: ${{ runner.temp }}/hopla-card-tests/node_modules/happy-dom/lib/index.js

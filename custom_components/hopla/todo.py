@@ -24,6 +24,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from .const import DOMAIN, CONF_URL, CONF_TOKEN, CONF_SHOW_DUE_IN, CONF_SHOW_NO_DUE_DATE, CONF_CREATE_UNIFIED_LIST, CONF_CREATE_PROJECT_LISTS, CONF_CREATE_ASSIGNEE_LISTS
 from .api import HoplaApiClient
+from .games import chrono_attributes
 from .model import HoplaProject, HoplaTask, HoplaMember
 
 _LOGGER = logging.getLogger(__name__)
@@ -216,6 +217,7 @@ class HoplaTodoListBase(CoordinatorEntity, TodoListEntity):
                  "priority": task.priority,
                  "labels": task.labels or [],
                  "points": task.points,
+                 "chrono": chrono_attributes(task.flash),
                  "frequency_type": task.frequency_type,
                  "frequency": task.frequency,
                  "interval_type": task.interval_type,

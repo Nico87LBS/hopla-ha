@@ -13,6 +13,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .approval import STATUS_PENDING_APPROVAL, slot_attributes
+from .games import chrono_attributes
 from .const import DOMAIN
 from .model import HoplaMember, HoplaTask
 
@@ -156,6 +157,7 @@ class HoplaChoreSensor(CoordinatorEntity, SensorEntity):
             "assignee_ids": task.assignee_ids or [],
             "assign_strategy": task.assign_strategy,
             "slots_today": slot_attributes(task.slots_today),
+            "chrono": chrono_attributes(task.flash),
         }
         return attrs
 

@@ -35,6 +35,7 @@ class TaskSensorAttributeTests(unittest.TestCase):
                          STATUS_PENDING_APPROVAL=3)
         load_definitions("model.py", {"_parse_datetime", "HoplaTask"}, namespace)
         load_definitions("approval.py", {"slot_attributes"}, namespace)
+        load_definitions("games.py", {"chrono_attributes"}, namespace)
         load_definitions("chore_sensor.py", {"HoplaChoreSensor"}, namespace)
         cls.task_class = namespace["HoplaTask"]
         cls.sensor_class = namespace["HoplaChoreSensor"]
@@ -43,6 +44,11 @@ class TaskSensorAttributeTests(unittest.TestCase):
         task = self.task_class.from_json({"id": 1, "name": "Maintenance", **fields})
         sensor = self.sensor_class(SimpleNamespace(data=[task]), SimpleNamespace(entry_id="test"), task.id)
         return sensor.extra_state_attributes
+
+    def test_the_speed_bonus_open_now_is_shown(self):
+        chrono = self.attributes(flash={"points": 5, "endsAt": "2026-10-24T16:20:00Z", "liveId": 2})["chrono"]
+        self.assertEqual(chrono, {"points": 5, "ends_at": "2026-10-24T16:20:00Z", "live_id": 2})
+        self.assertIsNone(self.attributes()["chrono"])
 
     def test_points_preserve_zero_and_unset_values(self):
         for value in (10, 0, None):
