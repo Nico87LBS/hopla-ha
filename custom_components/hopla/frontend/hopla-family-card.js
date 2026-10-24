@@ -6,7 +6,7 @@
 // Wait before defining classes so they use the final registry and base class.
 await customElements.whenDefined('home-assistant');
 
-const {translator, browserLanguage, reloadIfOutdated} = await import(new URL(`./hopla-i18n.js${new URL(import.meta.url).search}`, import.meta.url));
+const {translator, browserLanguage, reloadIfOutdated, deviceZone, setFamilyZone, familyZoneOf, wallClock, fromWallClock} = await import(new URL(`./hopla-i18n.js${new URL(import.meta.url).search}`, import.meta.url));
 const KEYS = {allDone: 'all_done', noTasks: 'no_tasks', noMembers: 'no_members'};
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -22,7 +22,11 @@ function isHopla(hass, id) {
   return platform === undefined || platform === 'hopla';
 }
 
-const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+// Days are the family's: on a device in another zone, its own midnight is not theirs.
+const sameDay = (x, y) => {
+  const a = wallClock(x), b = wallClock(y);
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+};
 
 // Only the drawn badges the integration ships, from hopla-1 to hopla-7.
 const rankImage = image => /^hopla-[1-7]$/.test(image || '') ? image : null;
@@ -147,7 +151,7 @@ export function historyDays(entries) {
   for (const entry of entries) {
     const at = new Date(entry.created_at);
     let day = days.find(d => sameDay(d.day, at));
-    if (!day) days.push(day = {day: new Date(at.getFullYear(), at.getMonth(), at.getDate()), entries: [], earned: 0});
+    if (!day) days.push(day = {day: at, entries: [], earned: 0});
     day.entries.push(entry);
     day.earned += earnedChange(entry);
   }
@@ -250,7 +254,8 @@ export function boardData(hass, config, now = new Date()) {
   const shown = chosen ? chosen.map(id => members.find(m => m.id === id)).filter(Boolean) : members;
   const wanted = (config.labels || []).map(label => label.trim().toLowerCase()).filter(Boolean);
   const labelled = labels => !wanted.length || labelNames(labels).some(label => wanted.includes(label));
-  const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const wall = wallClock(now);
+  const endOfDay = fromWallClock(new Date(wall.getFullYear(), wall.getMonth(), wall.getDate(), 23, 59, 59, 999));
   // Once its last slot of the day is ticked, a task is due tomorrow, but it
   // stays on today's board while one of its slots, or one of another child's
   // copy, is still to come or waits for a parent. A slot missed earlier no
@@ -319,6 +324,19 @@ const icon = {
   unlock: '<rect x="5" y="11" width="14" height="10" rx="2" fill="currentColor"/><path d="M8 11V8a4 4 0 0 1 7.5-2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
   back: '<path d="M21 6H8l-6 6 6 6h13zM12 9l6 6M18 9l-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
 };
+// "Europe/Lisbon" → "Lisbon": the city is how the family names a zone.
+export const zoneCity = zone => String(zone || '').split('/').pop().replace(/_/g, ' ');
+
+// The tablet follows the local time where the family is: when it is not the
+// family's, offer to move the family to it, never by itself.
+export function zoneProposal(hass, device = deviceZone()) {
+  const family = familyZoneOf(hass);
+  if (!family || !device || family.zone === device) return null;
+  return {device, family: family.zone, ignored: zoneIgnoreKey(device, family.zone)};
+}
+const zoneIgnoreKey = (device, family) => `hoplaZoneIgnored:${device}:${family}`;
+const zoneIgnored = key => { try { return globalThis.localStorage?.getItem(key) === '1'; } catch { return false; } };
+
 const RESPONDING = ['complete_task', 'redeem_reward', 'unlock_parent_mode', 'adjust_points', 'get_points_history'];
 // The sections a viewer can fold, and whether each starts open.
 const FOLDS = {todo: true, done: false, history: false, rewards: true};
@@ -365,6 +383,7 @@ class HoplaFamilyCard extends HTMLElement {
     if (reloadIfOutdated(hass)) return;
     const previous = this._hass;
     this._hass = hass;
+    setFamilyZone(familyZoneOf(hass)?.zone);
     const relevant = id => (id.startsWith('sensor.') || id.startsWith('binary_sensor.')) && isHopla(hass, id);
     if (previous && Object.keys(hass.states).every(id => !relevant(id) || previous.states[id] === hass.states[id])
       && Object.keys(previous.states).every(id => !relevant(id) || hass.states[id])
@@ -407,6 +426,11 @@ class HoplaFamilyCard extends HTMLElement {
     if (action === 'adjust-open') { await this.openAdjust(Number(member), button.dataset.tab || 'bonus'); return; }
     if (['sheet-history', 'sheet-rewards', 'sheet-member', 'sheet-close', 'sheet-filter', 'history-more'].includes(action)
       || action.startsWith('adjust-')) { await this.onSheet(action, button.dataset); return; }
+    if (action === 'zone-move' || action === 'zone-ignore') {
+      if (!parentAccess(this._hass).parent) { this._afterPin = {kind: 'zone', action}; this._pin = ''; this._pinError = ''; this.render(); return; }
+      await this.onZone(action);
+      return;
+    }
     if (action === 'parent') {
       const access = parentAccess(this._hass);
       if (access.unlocked) await this.call('lock_parent_mode', {config_entry_id: access.entryId}, 'parent', null);
@@ -428,7 +452,10 @@ class HoplaFamilyCard extends HTMLElement {
       if (response) {
         this._pin = null;
         // Back to the window that asked for the code.
-        if (this._afterPin) { this._sheet = this._afterPin; this._afterPin = null; }
+        const after = this._afterPin;
+        this._afterPin = null;
+        if (after?.kind === 'zone') await this.onZone(after.action);
+        else if (after) this._sheet = after;
       } else { this._pin = ''; this._pinError = this._error; this._error = ''; }
       this.render();
       return;
@@ -502,6 +529,25 @@ class HoplaFamilyCard extends HTMLElement {
       this.render();
       await this.loadHistory(sheet.member);
     }
+  }
+  async onZone(action) {
+    const proposal = zoneProposal(this._hass);
+    if (!proposal) { this.render(); return; }
+    if (action === 'zone-ignore') {
+      try { globalThis.localStorage?.setItem(proposal.ignored, '1'); } catch { /* not remembered */ }
+      this.render();
+      return;
+    }
+    const entryId = Object.values(this._hass.states).find(state => state.attributes?.family_timezone)?.attributes.config_entry_id;
+    await this.call('set_family_timezone', {timezone: proposal.device, ...(entryId ? {config_entry_id: entryId} : {})}, 'zone', null);
+  }
+  renderZoneBanner() {
+    const proposal = zoneProposal(this._hass);
+    if (!proposal || zoneIgnored(proposal.ignored)) return '';
+    const busy = this._busy.has('zone') ? 'disabled' : '';
+    return `<div class="zone-banner" role="status">${svg('clock', 18)}<span>${escape(this.t('zone_differs', {device: zoneCity(proposal.device), family: zoneCity(proposal.family)}))}</span>
+      <span class="zone-actions"><button class="zone-move" data-action="zone-move" ${busy}>${escape(this.t('zone_move', {device: zoneCity(proposal.device)}))}</button>
+      <button class="zone-ignore" data-action="zone-ignore" ${busy}>${escape(this.t('zone_ignore'))}</button></span></div>`;
   }
   async openAdjust(member, tab, from) {
     const sheet = {kind: 'adjust', member, tab, preset: null, amount: 0, reason: '', from};
@@ -841,7 +887,7 @@ class HoplaFamilyCard extends HTMLElement {
     return [withName ? entry.user_name : '', this.t(`family.history_kind.${entry.action}`), by].filter(Boolean).join(' · ');
   }
   clock(date) {
-    return date.toLocaleTimeString(this._language || browserLanguage(), {hour: 'numeric', minute: '2-digit'});
+    return wallClock(date).toLocaleTimeString(this._language || browserLanguage(), {hour: 'numeric', minute: '2-digit'});
   }
   // The card's own short history: the newest changes, each opening its member's window.
   renderLedger(ledger, members) {
@@ -883,9 +929,10 @@ class HoplaFamilyCard extends HTMLElement {
     const filters = ['all', 'task', 'bonus', 'reward'].map(f => `<button class="filter${sheet.filter === f ? ' on' : ''}" data-action="sheet-filter" data-filter="${f}" aria-pressed="${sheet.filter === f}">${escape(this.t(`filter_${f}`))}</button>`).join('');
     const entries = (loaded?.entries || []).filter(entry => sheet.filter === 'all' || historyKind(entry) === sheet.filter);
     const now = new Date();
-    const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    const wall = wallClock(now);
+    const yesterday = fromWallClock(new Date(wall.getFullYear(), wall.getMonth(), wall.getDate() - 1, 12));
     const dayName = day => sameDay(day, now) ? this.t('day_today') : sameDay(day, yesterday) ? this.t('day_yesterday')
-      : day.toLocaleDateString(this._language || browserLanguage(), {weekday: 'long', day: 'numeric', month: 'long'});
+      : wallClock(day).toLocaleDateString(this._language || browserLanguage(), {weekday: 'long', day: 'numeric', month: 'long'});
     const days = historyDays(entries).map(day => `<div class="day"><span>${escape(dayName(day.day))}</span>${day.earned ? `<span class="${day.earned < 0 ? 'down' : ''}">${escape(this.t('day_earned', {count: Math.abs(day.earned), sign: day.earned < 0 ? '−' : '+'}))}</span>` : ''}</div>
       ${day.entries.map(entry => {
         const look = this.historyLook(entry);
@@ -1160,6 +1207,15 @@ class HoplaFamilyCard extends HTMLElement {
       .flash { font-weight: 700; color: var(--success-color, var(--dt-green)); }
       .empty-text { font-size: 17px; padding: 14px 2px 4px; }
       .error { color: var(--error-color); margin: 8px 0; }
+      .zone-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 0 0 14px; padding: 10px 12px; border-radius: 12px;
+        background: rgba(59,111,216,.1); color: var(--primary-text-color); font-size: 14px; }
+      .zone-banner > svg { color: var(--dt-blue); flex: none; }
+      .zone-banner > span:first-of-type { flex: 1 1 200px; }
+      .zone-actions { display: flex; gap: 8px; }
+      .zone-actions button { border: none; border-radius: 999px; padding: 6px 12px; font: inherit; font-weight: 600; cursor: pointer; }
+      .zone-move { background: var(--dt-blue); color: #fff; }
+      .zone-ignore { background: none; color: var(--secondary-text-color); }
+      .zone-actions button:disabled { opacity: .5; cursor: default; }
       .podium-face { display: block; border-radius: 50%; touch-action: manipulation; }
       .podium-face:active { transform: scale(.95); }
       button.step { position: relative; touch-action: manipulation; }
@@ -1280,7 +1336,7 @@ class HoplaFamilyCard extends HTMLElement {
     </style><ha-card>
       ${this.renderParentButton()}${this.renderPinPad()}${this._config.show_points ? this.renderRankDetails(data.members, data.ladder) : ''}${this.renderSheet(data)}
       ${this._config.show_points && data.members.length ? this.renderPodium(data.members) : ''}
-      ${this.renderPeriod(data.period)}
+      ${this.renderZoneBanner()}${this.renderPeriod(data.period)}
       ${this._config.show_goals ? this.renderChallenges(data.challenges, data.members) : ''}
       ${this._config.show_todo ? this.section('todo', this.header('todo', 'todo', title, data.rows.length, 'todo'),
         data.rows.length ? data.rows.map(row => this.renderTask(row)).join('') : `<div class="empty-text">${escape(empty)}</div>`) : ''}

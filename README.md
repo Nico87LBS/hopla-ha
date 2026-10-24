@@ -232,6 +232,15 @@ Ensuite :
 
 Sans parent choisi, rien ne change : tout le monde garde tous les droits.
 
+## Heure de la famille
+
+Les cartes comptent les jours et affichent les heures à l'heure de la famille,
+celle choisie dans Hopla, même sur un appareil réglé sur un autre fuseau. Si la
+tablette est à l'heure d'ailleurs (en vacances, par exemple), la carte famille
+propose de passer la famille à cette heure. Il faut un parent (ou le code
+parent), et rien ne change tout seul. « Ignorer sur cette tablette » cache la
+proposition tant que la tablette et la famille restent sur ces deux fuseaux.
+
 ## Services
 
 | Service | Rôle | Réservé aux parents |
@@ -246,6 +255,7 @@ Sans parent choisi, rien ne change : tout le monde garde tous les droits.
 | `hopla.skip_task`, `hopla.postpone_task` | Passer une tâche à sa prochaine occurrence | ✓ |
 | `hopla.adjust_points` | Donner un bonus ou une pénalité à un membre (`user_id`), avec `points` (négatif pour une pénalité) ou un préréglage (`preset_id`), et une raison (`reason`) si tu veux. Une pénalité baisse les points gagnés, donc le rang et le podium, sans jamais faire passer le solde sous zéro | ✓ |
 | `hopla.get_points_history` | Lire l'historique des points d'un membre (`user_id`), du plus récent au plus ancien : `limit` lignes (20 par défaut), plus anciennes que la ligne `before` pour remonter. Répond `entries` et `more` | |
+| `hopla.set_family_timezone` | Passer la famille à un autre fuseau horaire (`timezone`, par exemple `Europe/Lisbon`), pour les vacances : les tâches gardent leur heure | ✓ |
 | `hopla.unlock_parent_mode` | Ouvrir le mode parent pour deux minutes avec le code (`pin`) | |
 | `hopla.lock_parent_mode` | Refermer le mode parent | |
 

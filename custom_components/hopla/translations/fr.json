@@ -432,6 +432,20 @@
           "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
         }
       }
+    },
+    "set_family_timezone": {
+      "name": "Fuseau de la famille",
+      "description": "Passe la famille à un autre fuseau horaire, pour les vacances : ses tâches gardent leur heure. Réservé aux parents.",
+      "fields": {
+        "timezone": {
+          "name": "Fuseau horaire",
+          "description": "Un fuseau IANA, par exemple Europe/Lisbon"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
     }
   }
 }

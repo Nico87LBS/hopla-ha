@@ -310,3 +310,14 @@ get_points_history:
       required: false
       selector:
         text:
+set_family_timezone:
+  fields:
+    timezone:
+      required: true
+      example: Europe/Lisbon
+      selector:
+        text:
+    config_entry_id:
+      required: false
+      selector:
+        text:
