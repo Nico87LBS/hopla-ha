@@ -149,6 +149,8 @@ toute seule, en attendant un peu plus après chaque échec (jusqu'à 5 minutes).
 | `hopla_challenge_won` | Un membre gagne un défi chacun pour soi | `user_id`, `user_name`, `name`, `reward`, `reward_text` |
 | `hopla_goal_reached` | La famille atteint un défi commun | `name`, `total`, `target`, `reward_text`, `member_names` |
 | `hopla_task_reminder` | À chaque rappel réglé sur une tâche dans Hopla | voir ci-dessous |
+| `hopla_chrono_started` | Un bonus chrono commence : un parent le lance, ou l'heure prévue d'une tâche qui a le sien arrive | `task_id`, `task_name`, `points` (en plus), `task_points`, `ends_at`, `minutes_left`, `launched` (lancé par un parent), `assigned_to_name`, `assignee_ids`, `assignee_names` |
+| `hopla_chrono_ended` | Le temps d'un bonus chrono est écoulé sans que la tâche soit faite (rien si elle est faite ou si un parent l'arrête) | les mêmes, sans `minutes_left` |
 
 ### Rappels de tâches
 
@@ -341,6 +343,44 @@ actions:
       task_id: 12
       points: 10
       minutes: 15
+```
+
+Pour l'annoncer, l'événement `hopla_chrono_started` part quand un bonus chrono
+commence et `hopla_chrono_ended` quand son temps est écoulé. Un bonus gagné se
+voit dans `hopla_points_changed`, dont la `reason` contient « chrono » :
+
+```yaml
+alias: Hopla - annonce du bonus chrono
+mode: queued
+triggers:
+  - trigger: event
+    event_type: hopla_chrono_started
+    id: start
+  - trigger: event
+    event_type: hopla_chrono_ended
+    id: end
+  - trigger: event
+    event_type: hopla_points_changed
+    id: won
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.id != 'won' or (trigger.event.data.action == 'task'
+         and 'chrono' in (trigger.event.data.reason or '')) }}
+actions:
+  - action: script.annonce_hopla
+    data:
+      message: >-
+        {% set d = trigger.event.data %}
+        {% if trigger.id == 'start' %}
+          Chrono ! {{ d.task_name }} : {{ d.points }} hops en plus pour
+          {{ d.assignee_names | select | join(' et ') }}, si c'est fait dans
+          {{ d.minutes_left }} minutes.
+        {% elif trigger.id == 'end' %}
+          Le chrono de {{ d.task_name }} est terminé.
+        {% else %}
+          Bravo {{ d.user_name }}, chrono gagné !
+        {% endif %}
 ```
 
 Pour une tâche que chacun doit faire, comme faire son lit, crée-la dans Hopla une

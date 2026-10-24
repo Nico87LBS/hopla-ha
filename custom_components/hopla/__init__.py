@@ -20,6 +20,7 @@ from .approval import ApprovalTracker, STATUS_PENDING_APPROVAL, pending_approval
 from .games import GamesTracker, PointsLedgerTracker, games_today, history_page, presets as points_presets
 from .realtime import RealtimeListener
 from .reminders import ReminderScheduler
+from .chrono import ChronoTracker
 from .presence import present_tasks
 from .parental import (ParentGuard, ParentModeError, RewardRequestTracker, pending_rewards,
                        PARENT_MODE_DURATION)
@@ -221,6 +222,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.bus.async_fire,
     )
     entry.async_on_unload(reminders.cancel_all)
+    chronos = ChronoTracker(
+        lambda when, action: async_track_point_in_utc_time(hass, callback(action), when),
+        hass.bus.async_fire,
+    )
+    entry.async_on_unload(chronos.cancel_all)
     reward_requests = RewardRequestTracker(hass.bus.async_fire)
     ledger = PointsLedgerTracker(hass.bus.async_fire)
     games = GamesTracker(hass.bus.async_fire)
@@ -284,6 +290,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         coordinator.pending_approvals = pending_approvals(all_tasks, history, circle_members)
         approvals.update(coordinator.pending_approvals, entry.entry_id)
         reminders.update(tasks, circle_members, entry.entry_id)
+        chronos.update(tasks, circle_members, entry.entry_id)
         return tasks
 
     coordinator = DataUpdateCoordinator(
