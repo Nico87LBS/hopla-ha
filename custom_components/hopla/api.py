@@ -285,6 +285,26 @@ class HoplaApiClient:
             response.raise_for_status()
             return (await response.json()).get("res") or []
 
+    async def async_get_family_timezone(self) -> Optional[dict]:
+        """Get the family's time zone and the server's (home), or None when the
+        server does not know it yet."""
+        async with self._session.get(
+            f"{self._base_url}/eapi/v1/circle/timezone",
+            headers=self._headers(),
+            timeout=API_TIMEOUT,
+        ) as response:
+            if response.status in (403, 404):
+                _LOGGER.debug("Hopla family time zone unavailable: HTTP %s", response.status)
+                return None
+            response.raise_for_status()
+            return (await response.json()).get("res")
+
+    async def async_set_family_timezone(self, timezone: str) -> Optional[dict]:
+        """Move the family to another time zone; its tasks keep their time of day."""
+        data = await self._post_action("/eapi/v1/circle/timezone", "change the family's time zone",
+                                       {"timezone": timezone}, method="PUT")
+        return data.get("res")
+
     async def async_get_games_today(self) -> Optional[dict]:
         """Get today's games: streaks, the surprise task and the bonus period.
 

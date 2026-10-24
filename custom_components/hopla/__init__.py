@@ -46,11 +46,12 @@ SERVICE_LOCK_PARENT_MODE = "lock_parent_mode"
 SERVICE_ADJUST_POINTS = "adjust_points"
 SERVICE_CATCH_UP_SLOT = "catch_up_slot"
 SERVICE_GET_POINTS_HISTORY = "get_points_history"
+SERVICE_SET_FAMILY_TIMEZONE = "set_family_timezone"
 SERVICES = [SERVICE_COMPLETE_TASK, SERVICE_CREATE_TASK, SERVICE_UPDATE_TASK, SERVICE_DELETE_TASK, SERVICE_SKIP_TASK,
             SERVICE_COMPLETE_ASSIGNED_TASK, SERVICE_POSTPONE_TASK, SERVICE_APPROVE_TASK, SERVICE_REJECT_TASK,
             SERVICE_REDEEM_REWARD, SERVICE_APPROVE_REWARD, SERVICE_REJECT_REWARD,
             SERVICE_UNLOCK_PARENT_MODE, SERVICE_LOCK_PARENT_MODE, SERVICE_ADJUST_POINTS, SERVICE_CATCH_UP_SLOT,
-            SERVICE_GET_POINTS_HISTORY]
+            SERVICE_GET_POINTS_HISTORY, SERVICE_SET_FAMILY_TIMEZONE]
 
 COMPLETE_TASK_SCHEMA = vol.Schema({
     vol.Required("task_id"): vol.Coerce(int),
@@ -130,6 +131,11 @@ UNLOCK_PARENT_MODE_SCHEMA = vol.Schema({
 })
 
 LOCK_PARENT_MODE_SCHEMA = vol.Schema({
+    vol.Optional("config_entry_id"): cv.string,
+})
+
+SET_FAMILY_TIMEZONE_SCHEMA = vol.Schema({
+    vol.Required("timezone"): cv.time_zone,
     vol.Optional("config_entry_id"): cv.string,
 })
 
@@ -250,6 +256,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             except Exception as err:
                 _LOGGER.debug("Failed to refresh the points history: %s", err)
         try:
+            coordinator.family_timezone = await client.async_get_family_timezone()
+        except Exception as err:
+            _LOGGER.debug("Failed to refresh the family's time zone: %s", err)
+        try:
             coordinator.games_today = games_today(await client.async_get_games_today())
             games.update(coordinator.games_today, entry.entry_id, circle_members)
         except Exception as err:
@@ -273,6 +283,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator.points_presets = None
     coordinator.points_history = []
     coordinator.games_today = None
+    coordinator.family_timezone = None
     coordinator.all_tasks = []
     await coordinator.async_config_entry_first_refresh()
 
@@ -428,11 +439,33 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.services.async_register(DOMAIN, SERVICE_GET_POINTS_HISTORY, get_points_history_handler,
                                  schema=GET_POINTS_HISTORY_SCHEMA,
                                  supports_response=SupportsResponse.ONLY)
+
+    async def set_family_timezone_handler(call: ServiceCall) -> None:
+        await async_set_family_timezone_service(hass, call)
+
+    hass.services.async_register(DOMAIN, SERVICE_SET_FAMILY_TIMEZONE, set_family_timezone_handler,
+                                 schema=SET_FAMILY_TIMEZONE_SCHEMA)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     entry.add_update_listener(async_reload_entry)
     
     return True
+
+async def async_set_family_timezone_service(hass: HomeAssistant, call: ServiceCall) -> None:
+    """Move the family to another time zone, for a parent: the tablet offers
+    it when it is on the local time of somewhere else."""
+    entry = await _get_config_entry(hass, call.data.get("config_entry_id"))
+    if not entry:
+        raise HomeAssistantError("No matching Hopla integration found for set_family_timezone")
+    config = hass.data[DOMAIN][entry.entry_id]
+    require_parent(config, call)
+    coordinator = config["coordinator"]
+    try:
+        coordinator.family_timezone = await config["client"].async_set_family_timezone(call.data["timezone"])
+    except Exception as err:
+        raise HomeAssistantError(f"Failed to change the family's time zone: {err}") from err
+    await coordinator.async_request_refresh()
+
 
 async def async_complete_task_service(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
     """Handle the complete_task service call.

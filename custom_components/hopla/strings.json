@@ -432,6 +432,20 @@
           "description": "The Hopla integration to use (optional, the first one by default)"
         }
       }
+    },
+    "set_family_timezone": {
+      "name": "Family time zone",
+      "description": "Move the family to another time zone, for a holiday: its tasks keep their time of day. Only for parents.",
+      "fields": {
+        "timezone": {
+          "name": "Time zone",
+          "description": "An IANA time zone, such as Europe/Lisbon"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
     }
   }
 }

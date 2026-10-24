@@ -163,7 +163,16 @@ class HoplaPointsSensor(_FamilySensor):
             **self._progress(member.user_id),
             # The cards installed now: an open dashboard with older ones reloads.
             "frontend_version": (self.hass.data.get("hopla_frontend") or {}).get("version"),
+            **self._timezone(),
         }
+
+    def _timezone(self) -> dict[str, Any]:
+        # The cards count the days in the family's zone, whatever the device's.
+        family = getattr(self.coordinator, "family_timezone", None)
+        if not family or not family.get("timezone"):
+            return {}
+        return {"family_timezone": family["timezone"], "home_timezone": family.get("server") or None,
+                "config_entry_id": self._config_entry.entry_id}
 
     def _streak(self, user_id: int) -> dict[str, Any]:
         today = getattr(self.coordinator, "games_today", None)

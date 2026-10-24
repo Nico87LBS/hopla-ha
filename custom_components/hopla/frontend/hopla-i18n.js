@@ -63,6 +63,59 @@ export function reloadIfOutdated(hass) {
   return true;
 }
 
+// Every date the cards show follows the family's time zone, whatever the
+// zone of the tablet: one left in UTC shows the same day and times as the
+// phones. wallClock(value) gives a Date whose local fields (day, hours…) are
+// the family's at that instant, so the cards' day arithmetic keeps working;
+// fromWallClock() turns such a Date back into the real instant. Without a
+// known family zone both leave dates as they are.
+let familyZone = null;
+
+export function deviceZone() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch { return null; }
+}
+
+export function setFamilyZone(zone) {
+  if (!zone) { familyZone = null; return; }
+  try { new Intl.DateTimeFormat('en', {timeZone: zone}); familyZone = zone === deviceZone() ? null : zone; }
+  catch { familyZone = null; }
+}
+
+// The family's zone as the integration publishes it, and the server's (home).
+export function familyZoneOf(hass) {
+  const state = Object.values(hass?.states || {}).find(item => item.attributes?.family_timezone);
+  return state ? {zone: state.attributes.family_timezone, home: state.attributes.home_timezone || null} : null;
+}
+
+const zoneParts = (ms, zone) => {
+  const parts = {};
+  for (const {type, value} of new Intl.DateTimeFormat('en-US', {timeZone: zone, hourCycle: 'h23', year: 'numeric',
+    month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric'}).formatToParts(new Date(ms))) {
+    parts[type] = Number(value);
+  }
+  return parts;
+};
+const zoneOffset = (ms, zone) => {
+  const p = zoneParts(ms, zone);
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute, p.second) - (ms - ms % 1000);
+};
+
+export function wallClock(value = new Date()) {
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  if (!familyZone || isNaN(date)) return date;
+  const p = zoneParts(date.getTime(), familyZone);
+  return new Date(p.year, p.month - 1, p.day, p.hour % 24, p.minute, p.second, date.getMilliseconds());
+}
+
+export function fromWallClock(date) {
+  if (!familyZone || !(date instanceof Date) || isNaN(date)) return date;
+  const wall = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours(), date.getMinutes(),
+    date.getSeconds(), date.getMilliseconds());
+  let instant = wall - zoneOffset(wall, familyZone);
+  instant = wall - zoneOffset(instant, familyZone);
+  return new Date(instant);
+}
+
 export function browserLanguage() {
   return globalThis.navigator?.language || 'en';
 }

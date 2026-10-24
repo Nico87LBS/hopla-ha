@@ -2,7 +2,7 @@
 // custom-element registry and HTMLElement with its scoped-registry polyfill.
 // Wait before defining classes so they use the final registry and base class.
 await customElements.whenDefined('home-assistant');
-const {translator, browserLanguage, reloadIfOutdated} = await import(new URL(`./hopla-i18n.js${new URL(import.meta.url).search}`, import.meta.url));
+const {translator, browserLanguage, reloadIfOutdated, setFamilyZone, familyZoneOf, wallClock, fromWallClock} = await import(new URL(`./hopla-i18n.js${new URL(import.meta.url).search}`, import.meta.url));
 const english = translator('en');
 const hassLanguage = hass => hass?.locale?.language || hass?.language || browserLanguage();
 // Each element keeps a translator for its HA language and renders again when
@@ -22,13 +22,13 @@ function compareTasks(a, b, sortBy, language) {
 export function upcomingDayLimit(value) {
   return value === undefined ? 7 : value === null || value === '' ? 0 : Number(value);
 }
-export function completedTasks(state, userId, now = new Date(), config = {}) {
+export function completedTasks(state, userId, now = wallClock(), config = {}) {
   const owner = state?.attributes?.hopla_user_id ?? userId;
   const days = Number(config.completed_days ?? 1);
   const since = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days + 1);
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
   const tasks = (state?.attributes?.completed_tasks || []).filter(task => {
-    const completed = new Date(task.completed_at);
+    const completed = wallClock(task.completed_at);
     const matchesDate = userTasks({attributes:{tasks:[task]}}, 'all',
       config.completed_filter === 'matching' ? config.display_filters ?? config.display_filter : 'all',
       now, config.upcoming_days, 'due_date', undefined, config.include_overdue, config.labels, config.label_match).length > 0;
@@ -73,7 +73,7 @@ export function dateFilters(config) {
 function selectedUser(state, userId) {
   return state?.attributes.hopla_user_id ?? userId ?? 'all';
 }
-export function userTasks(state, userId, displayFilter = 'all', now = new Date(), upcomingDays = 7, sortBy = 'due_date', language, includeOverdue = false, labels = [], labelMatch = 'any', includeAnyone = false) {
+export function userTasks(state, userId, displayFilter = 'all', now = wallClock(), upcomingDays = 7, sortBy = 'due_date', language, includeOverdue = false, labels = [], labelMatch = 'any', includeAnyone = false) {
   if (typeof labels === 'boolean') { includeAnyone = labels; labels = []; }
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
@@ -94,7 +94,7 @@ export function userTasks(state, userId, displayFilter = 'all', now = new Date()
         if (!displayFilter.length) return true;
         if (!task.next_due_date) return displayFilter.includes('undated');
         const value = task.next_due_date;
-        const due = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value);
+        const due = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : wallClock(value);
         return (displayFilter.includes('overdue') && isOverdue(value, now))
           || (displayFilter.includes('today') && due >= today && due < tomorrow)
           || (displayFilter.includes('future') && due >= tomorrow && (limit === 0 || due < upcomingEnd));
@@ -103,7 +103,7 @@ export function userTasks(state, userId, displayFilter = 'all', now = new Date()
       if (displayFilter === 'overdue') return isOverdue(task.next_due_date, now);
       if (!task.next_due_date) return false;
       const value = task.next_due_date;
-      const due = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value);
+      const due = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : wallClock(value);
       if (displayFilter === 'today') return due >= today && due < tomorrow;
       if (displayFilter !== 'upcoming' || isNaN(due)) return false;
       if (isOverdue(value, now)) return includeOverdue;
@@ -111,9 +111,9 @@ export function userTasks(state, userId, displayFilter = 'all', now = new Date()
     })
     .sort((a, b) => compareTasks(a, b, sortBy, language));
 }
-export function dueText(value, language, now = new Date(), timeFormat, display = 'date', t = translator(language)) {
+export function dueText(value, language, now = wallClock(), timeFormat, display = 'date', t = translator(language)) {
   const dateOnly = typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
-  const date = value ? new Date(dateOnly ? `${value}T12:00:00` : value) : null;
+  const date = value ? (dateOnly ? new Date(`${value}T12:00:00`) : wallClock(value)) : null;
   if (!date || isNaN(date)) return t('todo.no_due');
   const day = value => Date.UTC(value.getFullYear(), value.getMonth(), value.getDate());
   const days = Math.round((day(date) - day(now)) / 86400000);
@@ -137,14 +137,14 @@ export function dueText(value, language, now = new Date(), timeFormat, display =
 }
 export function hasDueTime(value) {
   if (!value || /^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(value);
+  const date = wallClock(value);
   // Hopla date-only deadlines can arrive as a local end-of-day timestamp.
   return !isNaN(date) && !(date.getHours() === 23 && date.getMinutes() === 59);
 }
-export function isOverdue(value, now = new Date()) {
+export function isOverdue(value, now = wallClock()) {
   if (!value) return false;
   const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
-  const due = new Date(dateOnly ? `${value}T00:00:00` : value);
+  const due = dateOnly ? new Date(`${value}T00:00:00`) : wallClock(value);
   const cutoff = dateOnly ? new Date(now.getFullYear(), now.getMonth(), now.getDate()) : now;
   return !isNaN(due) && due < cutoff;
 }
@@ -190,8 +190,9 @@ export function completionData(state, task, userId) {
 export function assignableMembers(state, task) {
   return (state?.attributes.circle_members || []).filter(member => !task.assignee_ids?.length || task.assignee_ids.includes(member.user_id));
 }
+// The family's date and time of a value, as YYYY-MM-DDTHH:mm:ss.
 export function localDateTime(value) {
-  const date = value ? new Date(value) : new Date();
+  const date = value instanceof Date ? value : wallClock(value || new Date());
   if (isNaN(date)) return '';
   const pad = value => String(value).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
@@ -275,6 +276,7 @@ class HoplaUserTodoCard extends HTMLElement {
   }
   set hass(hass) {
     if (reloadIfOutdated(hass)) return;
+    setFamilyZone(familyZoneOf(hass)?.zone);
     const previous = this._hass;
     const minute = Math.floor(Date.now() / 60000);
     const unchanged = previous && previous !== hass && this._lastHassMinute === minute
@@ -286,10 +288,10 @@ class HoplaUserTodoCard extends HTMLElement {
   getCardSize() {
     const state = this._hass?.states[this._config?.entity];
     return 2 + (this._config?.task_view === 'completed' ? 0 : this.filteredTasks(state).length)
-      + (this._config?.task_view === 'pending' ? 0 : completedTasks(state, this._config?.user_id, new Date(), this._config).length);
+      + (this._config?.task_view === 'pending' ? 0 : completedTasks(state, this._config?.user_id, wallClock(), this._config).length);
   }
   filteredTasks(state) {
-    return userTasks(state, this._config?.user_id, this._config?.display_filters ?? this._config?.display_filter, new Date(), this._config?.upcoming_days, this._config?.sort_by, this._hass?.locale?.language, this._config?.include_overdue, this._config?.labels, this._config?.label_match, this._config?.include_anyone);
+    return userTasks(state, this._config?.user_id, this._config?.display_filters ?? this._config?.display_filter, wallClock(), this._config?.upcoming_days, this._config?.sort_by, this._hass?.locale?.language, this._config?.include_overdue, this._config?.labels, this._config?.label_match, this._config?.include_anyone);
   }
   async act(task, complete, dueDate, assignedTo) {
     if (this._pending.has(task.task_id)) return;
@@ -435,8 +437,8 @@ class HoplaUserTodoCard extends HTMLElement {
         indicator.setAttribute('aria-hidden', 'true'); name.append(indicator);
       }
       const dateOnly = typeof task.next_due_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(task.next_due_date);
-      const due = task.next_due_date ? new Date(dateOnly ? `${task.next_due_date}T12:00:00` : task.next_due_date) : null;
-      const dueLabel = addText(text, 'span', dueText(task.next_due_date, this._hass.locale?.language, new Date(), this._hass.locale?.time_format, this._config.due_display, t), 'due');
+      const due = task.next_due_date ? (dateOnly ? new Date(`${task.next_due_date}T12:00:00`) : wallClock(task.next_due_date)) : null;
+      const dueLabel = addText(text, 'span', dueText(task.next_due_date, this._hass.locale?.language, wallClock(), this._hass.locale?.time_format, this._config.due_display, t), 'due');
       if (!completed && isOverdue(task.next_due_date)) dueLabel.classList.add('overdue');
       if (due && !isNaN(due)) {
         const clock = document.createElement('ha-icon'); clock.className = 'due-clock';
@@ -531,7 +533,7 @@ class HoplaUserTodoCard extends HTMLElement {
       if (this._panel?.taskId === task.task_id) this.renderPanel(row, task, addText);
     }
     if (this._config.task_view !== 'pending') {
-      const history = completedTasks(state, this._config.user_id, new Date(), this._config);
+      const history = completedTasks(state, this._config.user_id, wallClock(), this._config);
       const days = Number(this._config.completed_days);
       const suffix = days === 1 ? 'today' : 'days';
       addText(card, 'h3', t('todo.history_heading', {period: t(`todo.completed_${suffix}`, {days}), count: history.length}), 'history-heading');
@@ -544,8 +546,8 @@ class HoplaUserTodoCard extends HTMLElement {
         const performer = state.attributes.circle_members?.find(member => member.user_id === task.completed_by);
         const name = performer?.display_name || performer?.username || (task.completed_by ? t('common.user', {id: task.completed_by}) : t('common.unknown_user'));
         const time = Number(this._config.completed_days) > 1
-          ? new Date(task.completed_at).toLocaleString(this._hass.locale?.language, {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:this._hass.locale?.time_format === '12' ? true : this._hass.locale?.time_format === '24' ? false : undefined})
-          : new Date(task.completed_at).toLocaleTimeString(this._hass.locale?.language, {hour:'2-digit', minute:'2-digit', hour12:this._hass.locale?.time_format === '12' ? true : this._hass.locale?.time_format === '24' ? false : undefined});
+          ? wallClock(task.completed_at).toLocaleString(this._hass.locale?.language, {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:this._hass.locale?.time_format === '12' ? true : this._hass.locale?.time_format === '24' ? false : undefined})
+          : wallClock(task.completed_at).toLocaleTimeString(this._hass.locale?.language, {hour:'2-digit', minute:'2-digit', hour12:this._hass.locale?.time_format === '12' ? true : this._hass.locale?.time_format === '24' ? false : undefined});
         addText(text, 'span', `${time} · ${name}`, 'due');
       }
     }
@@ -657,7 +659,8 @@ class HoplaUserTodoCard extends HTMLElement {
       const date = draftDate();
       if (!date) { this._error=t('todo.choose_date'); this.render(); return; }
       if (!changed()) return;
-      this.act(task,false,date.toISOString());
+      // The date typed is the family's.
+      this.act(task,false,fromWallClock(date).toISOString());
     });
   }
 }
