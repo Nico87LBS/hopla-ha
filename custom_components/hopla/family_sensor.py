@@ -312,5 +312,6 @@ class HoplaGamesSensor(_FamilySensor):
             "streak_bonus": today.get("streak_bonus", 0),
             "challenges": today.get("challenges", []),
             "ranks": today.get("rank_ladder", []),
+            "parents_on_podium": today.get("parents_on_podium", False),
             "config_entry_id": self._config_entry.entry_id,
         }

@@ -39,6 +39,11 @@ assert.deepEqual(data.tasks.map(t => t.name), ['Chambre', 'Table', 'Plantes', 'D
 assert.deepEqual(data.tasks.at(-1).members.map(m => m.name), ['Nico']);
 
 // A task assigned only to members outside the board is hidden.
+// The parents stay off the podium unless the family puts them on it.
+assert.deepEqual(boardData(hass, {due: 'all'}, now).podium.map(m => m.id), [2, 3]);
+const podiumGames = on => ({...hass, states: {...hass.states, 'sensor.hopla_games': {state: '', attributes: {hopla_games: true, parents_on_podium: on}}}});
+assert.deepEqual(boardData(podiumGames(true), {due: 'all'}, now).podium.map(m => m.id), [1, 2, 3]);
+assert.deepEqual(boardData(podiumGames(false), {due: 'all', members: [1]}, now).podium.map(m => m.id), [1], 'without children, the parents stand on it');
 data = boardData(hass, {due: 'all', members: [2, 3]}, now);
 assert.equal(data.tasks.some(t => t.name === 'Poubelles'), false);
 // The bare task name is the state; friendly_name may carry the device name.
