@@ -1,4 +1,4 @@
-"""Regression checks for upstream project lists and the existing due window."""
+"""Regression checks for the due window and the task attributes."""
 import ast
 from datetime import datetime, timedelta, timezone
 import importlib.util
@@ -20,18 +20,13 @@ class TaskFilteringTests(unittest.TestCase):
         tree = ast.parse(source.read_text(encoding="utf-8"))
         base = next(node for node in tree.body if isinstance(node, ast.ClassDef)
                     and node.name == "HoplaTodoListBase")
-        project = next(node for node in tree.body if isinstance(node, ast.ClassDef)
-                       and node.name == "HoplaProjectTasksList")
         functions = [next(node for node in base.body if isinstance(node, ast.FunctionDef)
-                          and node.name == "_apply_due_window"),
-                     next(node for node in project.body if isinstance(node, ast.FunctionDef)
-                          and node.name == "_filter_tasks")]
+                          and node.name == "_apply_due_window")]
         namespace = {"datetime": datetime, "timedelta": timedelta, "timezone": timezone,
                      "CONF_SHOW_DUE_IN": "show_due_in", "CONF_SHOW_NO_DUE_DATE": "show_no_due_date",
                      "_LOGGER": logging.getLogger(__name__)}
         exec(compile(ast.Module(body=functions, type_ignores=[]), str(source), "exec"), namespace)
         self.window = namespace["_apply_due_window"]
-        self.project_filter = namespace["_filter_tasks"]
         now = datetime.now(timezone.utc)
         self.overdue = SimpleNamespace(next_due_date=now - timedelta(days=1))
         self.near = SimpleNamespace(next_due_date=now + timedelta(days=1))
@@ -51,14 +46,6 @@ class TaskFilteringTests(unittest.TestCase):
     def test_finite_window_respects_undated_option(self):
         self.assertEqual(self.filter_window(7), [self.overdue, self.near, self.undated])
         self.assertEqual(self.filter_window(7, False), [self.overdue, self.near])
-
-    def test_project_list_excludes_other_projects_and_archived_tasks(self):
-        matching = SimpleNamespace(is_active=True, project_id=2)
-        other = SimpleNamespace(is_active=True, project_id=3)
-        archived = SimpleNamespace(is_active=False, project_id=2)
-        unassigned = SimpleNamespace(is_active=True, project_id=None)
-        self.assertEqual(self.project_filter(SimpleNamespace(_project_id=2),
-                         [matching, other, archived, unassigned]), [matching])
 
     def test_card_task_attributes_expose_labels(self):
         source = Path(__file__).resolve().parents[1] / "custom_components/hopla/todo.py"

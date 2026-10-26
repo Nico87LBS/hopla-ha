@@ -29,27 +29,6 @@ def _parse_datetime(value: Any) -> Optional[datetime]:
         return None
 
 @dataclass
-class HoplaProject:
-    """Hopla project model."""
-    id: int
-    name: str
-    description: Optional[str] = None
-
-    @classmethod
-    def from_json(cls, data: dict) -> "HoplaProject":
-        """Create a HoplaProject from JSON data."""
-        return cls(
-            id=data["id"],
-            name=data["name"],
-            description=data.get("description"),
-        )
-
-    @classmethod
-    def from_json_list(cls, data: List[dict]) -> List["HoplaProject"]:
-        """Create a list of HoplaProjects from JSON data."""
-        return [cls.from_json(project) for project in data]
-
-@dataclass
 class HoplaMember:
     """Hopla circle member model."""
     id: int
@@ -165,7 +144,6 @@ class HoplaTask:
     frequency_type: str
     frequency: int
     frequency_metadata: Optional[Any]
-    project_id: Optional[int] = None
     assigned_to: Optional[int] = None
     description: Optional[str] = None
     created_at: Optional[datetime] = None
@@ -239,7 +217,6 @@ class HoplaTask:
             frequency_type=data.get("frequencyType", "once"),
             frequency=data.get("frequency") or 1,
             frequency_metadata=data.get("frequencyMetadata"),
-            project_id=data.get("projectId"),
             assigned_to=assigned_to,
             assignee_ids=[assignee["userId"] for assignee in (data.get("assignees") or [])
                           if isinstance(assignee, dict) and isinstance(assignee.get("userId"), int)],

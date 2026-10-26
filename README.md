@@ -21,7 +21,7 @@ serveur Hopla n'en envoie aucune.
 - **Adresse du serveur Hopla** : par exemple `http://ton-serveur:2021`.
 - **Jeton d'API** : à créer dans les réglages de ton compte Hopla.
 - **Nombre de jours de tâches à venir** (7 par défaut, 0 pour toutes).
-- **Liste « Toutes les tâches »**, **une liste par personne**, **une liste par projet**.
+- **Liste « Toutes les tâches »** et **une liste par personne**.
 
 Les options de l'intégration ajoutent la sécurité de la tablette (voir plus bas).
 
@@ -37,7 +37,6 @@ renommer ensuite ; les cartes Hopla retrouvent leurs capteurs sans dépendre du 
 | --- | --- | --- |
 | `todo.hopla_toutes_les_taches` | Nombre de tâches à faire | Liste de toutes les tâches : on peut y créer, modifier, terminer et supprimer des tâches. Les tâches terminées aujourd'hui y restent visibles, en lecture seule |
 | `todo.hopla_taches_de_elena` | Idem | Une liste par membre, si l'option est cochée |
-| `todo.hopla_taches_<projet>` | Idem | Une liste par projet, si l'option est cochée |
 | `calendar.hopla_echeances` | Calendrier | Les échéances à venir, récurrences comprises |
 | `calendar.hopla_historique` | Calendrier | Les tâches faites, à leur date |
 | `sensor.<nom de la tâche>` | Nom de la tâche | Un capteur par tâche (détails plus bas) |

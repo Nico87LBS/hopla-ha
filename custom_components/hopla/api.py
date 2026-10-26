@@ -8,7 +8,7 @@ import aiohttp
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import API_TIMEOUT
-from .model import HoplaProject, HoplaTask, HoplaMember, HoplaChoreHistory, HoplaReward, HoplaRedemption
+from .model import HoplaTask, HoplaMember, HoplaChoreHistory, HoplaReward, HoplaRedemption
 _LOGGER = logging.getLogger(__name__)
 
 class HoplaApiClient:
@@ -26,32 +26,6 @@ class HoplaApiClient:
             "secretkey": f"{self._token}",
             "Content-Type": "application/json",
         }
-
-    async def async_get_projects(self) -> List[HoplaProject]:
-        """Get projects from Hopla."""
-        headers = self._headers()
-
-        try:
-            async with self._session.get(
-                f"{self._base_url}/api/v1/projects",
-                headers=headers,
-                timeout=API_TIMEOUT
-            ) as response:
-                response.raise_for_status()
-                data = await response.json()
-
-                if not isinstance(data, list):
-                    _LOGGER.error("Unexpected response format from Hopla API")
-                    return []
-
-                return [HoplaProject.from_json(project) for project in data]
-
-        except aiohttp.ClientError as err:
-            _LOGGER.error("Error fetching projects from Hopla: %s", err)
-            raise
-        except (KeyError, ValueError, json.JSONDecodeError) as err:
-            _LOGGER.error("Error parsing Hopla response: %s", err)
-            return []
 
     async def async_get_tasks(self) -> List[HoplaTask]:
         """Get tasks from Hopla."""
@@ -338,7 +312,7 @@ class HoplaApiClient:
         """End a speed bonus a parent started, before its time."""
         await self._post_action(f"/eapi/v1/games/flashes/{flash_id}", "stop the speed bonus", method="DELETE")
 
-    async def async_create_task(self, name: str, description: str = None, due_date: str = None, created_by: int = None, project_id: int = None) -> HoplaTask:
+    async def async_create_task(self, name: str, description: str = None, due_date: str = None, created_by: int = None) -> HoplaTask:
         """Create a new task"""
         headers = self._headers()
 
@@ -349,8 +323,6 @@ class HoplaApiClient:
             payload["dueDate"] = due_date
         if created_by:
             payload["createdBy"] = created_by
-        if project_id:
-            payload["projectId"] = project_id
         _LOGGER.debug("Creating task with payload: %s", json.dumps(payload))
         try:
             async with self._session.post(
