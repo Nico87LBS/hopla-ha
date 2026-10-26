@@ -294,6 +294,8 @@ console.log('family card hides the tasks of a child who is away');
   assert.deepEqual(rows.map(historyKind), ['bonus', 'reward', 'bonus', 'task', 'task']);
   assert.deepEqual(historyDays(rows).map(d => [d.day.getDate(), d.entries.length, d.earned]), [[20, 2, 15], [19, 3, -3]]);
   assert.equal(historyKind({action: 'reset'}), 'reset');
+  assert.equal(historyKind({action: 'game'}), 'game', 'a game or a mission goes under Jeux');
+  assert.equal(earnedChange({action: 'game', points: 4}), 4, 'the hops of a game count as earned');
 
   const anna = {id: 3, points: 2, earned: 40};
   assert.deepEqual(adjustEffect(anna, 1, 15), {earnedFrom: 40, earnedTo: 55, pointsFrom: 2, pointsTo: 17});

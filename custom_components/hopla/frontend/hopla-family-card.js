@@ -138,11 +138,11 @@ export function taskMode(tasks, name) {
 // A points history row: which filter it falls under, and how it moved the
 // points earned (the podium and the rank). Spending on a reward only moves
 // the balance left to spend.
-const HISTORY_KIND = {task: 'task', undo: 'task', bonus: 'bonus', penalty: 'bonus', redeem: 'reward', reset: 'reset'};
+const HISTORY_KIND = {task: 'task', undo: 'task', game: 'game', bonus: 'bonus', penalty: 'bonus', redeem: 'reward', reset: 'reset'};
 export const historyKind = entry => HISTORY_KIND[entry.action] || 'reset';
 export function earnedChange(entry) {
   const points = Math.abs(Number(entry.points) || 0);
-  return {task: points, bonus: points, undo: -points, penalty: -points}[entry.action] || 0;
+  return {task: points, game: points, bonus: points, undo: -points, penalty: -points}[entry.action] || 0;
 }
 
 // History rows grouped by day, newest first, with what each day earned.
@@ -318,6 +318,7 @@ const icon = {
   lock: '<rect x="5" y="11" width="14" height="10" rx="2" fill="currentColor"/><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2.6"/>',
   clock: '<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
   plusminus: '<path d="M7 3.5v7M3.5 7h7M13.5 17h7M16.5 5.5l-9 13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
+  cap: '<path d="M2.5 9.5L12 5l9.5 4.5L12 14z" fill="currentColor"/><path d="M6.5 11.5v4c0 1.7 2.5 3 5.5 3s5.5-1.3 5.5-3v-4M21.5 9.5V15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
   plus: '<path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>',
   minus: '<path d="M5 12h14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>',
   history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -948,6 +949,7 @@ class HoplaFamilyCard extends HTMLElement {
     return {
       task: {icon: 'check', cls: 'task', text: `+${points}`},
       undo: {icon: 'replay', cls: 'undo', text: `−${points}`},
+      game: {icon: 'cap', cls: 'game', text: `+${points}`},
       bonus: {icon: 'plus', cls: 'plus', text: `+${points}`},
       penalty: {icon: 'minus', cls: 'minus', text: `−${points}`},
       redeem: {icon: 'gift', cls: 'gift', text: `−${points}`},
@@ -1000,7 +1002,7 @@ class HoplaFamilyCard extends HTMLElement {
     if (loaded && !loaded.loading && loaded.seen !== `${member.earned}/${member.points}`) queueMicrotask(() => this.loadHistory(member.id));
     const {place, tied} = this._config.show_points ? podiumPlace(data.podium, member) : {place: null, tied: []};
     const tie = place && tied.length ? `<span class="tie">${svg('crown', 16)}${escape(this.t(`tie_${place}`, {names: tied.map(m => m.name).join(', ')}))}</span>` : '';
-    const filters = ['all', 'task', 'bonus', 'reward'].map(f => `<button class="filter${sheet.filter === f ? ' on' : ''}" data-action="sheet-filter" data-filter="${f}" aria-pressed="${sheet.filter === f}">${escape(this.t(`filter_${f}`))}</button>`).join('');
+    const filters = ['all', 'task', 'game', 'bonus', 'reward'].map(f => `<button class="filter${sheet.filter === f ? ' on' : ''}" data-action="sheet-filter" data-filter="${f}" aria-pressed="${sheet.filter === f}">${escape(this.t(`filter_${f}`))}</button>`).join('');
     const entries = (loaded?.entries || []).filter(entry => sheet.filter === 'all' || historyKind(entry) === sheet.filter);
     const now = new Date();
     const wall = wallClock(now);
@@ -1323,7 +1325,7 @@ class HoplaFamilyCard extends HTMLElement {
       .badge.kind.gift { background: #d99a00; } .badge.kind.undo { background: #80868b; }
       .amount { font-size: 15px; font-weight: 800; white-space: nowrap; text-align: right; min-width: 44px; }
       .amount small { display: block; font-size: 11px; font-weight: 500; color: var(--secondary-text-color); }
-      .amount.task { color: #4f46e5; } .amount.plus { color: #1e7a37; } .amount.minus { color: #c5221f; } .amount.gift { color: #8a5a00; } .amount.undo { color: var(--secondary-text-color); }
+      .amount.task { color: #4f46e5; } .amount.plus { color: #1e7a37; } .amount.minus { color: #c5221f; } .amount.gift { color: #8a5a00; } .amount.game { color: #b4470f; } .amount.undo { color: var(--secondary-text-color); }
       .kids { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 12px; }
       .kid { display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: 18px; background: rgba(124,77,255,.04); border: 1px solid rgba(124,77,255,.16); }
       .kid-top { display: flex; align-items: center; gap: 12px; } .kid-top b { font-size: 17px; }
@@ -1363,7 +1365,7 @@ class HoplaFamilyCard extends HTMLElement {
       .hrow { display: flex; align-items: center; gap: 12px; padding: 9px 2px; border-bottom: 1px solid var(--dt-line); }
       .hic { width: 36px; height: 36px; flex: none; border-radius: 11px; display: grid; place-items: center; }
       .hic.task { background: rgba(59,111,216,.12); color: var(--dt-blue); } .hic.plus { background: rgba(30,142,62,.12); color: var(--dt-green); }
-      .hic.minus { background: rgba(217,48,37,.1); color: #c5221f; } .hic.gift { background: rgba(245,180,0,.18); color: #a87300; } .hic.undo { background: rgba(127,127,127,.12); color: var(--secondary-text-color); }
+      .hic.minus { background: rgba(217,48,37,.1); color: #c5221f; } .hic.gift { background: rgba(245,180,0,.18); color: #a87300; } .hic.game { background: rgba(255,122,47,.14); color: #b4470f; } .hic.undo { background: rgba(127,127,127,.12); color: var(--secondary-text-color); }
       .more { width: 100%; margin-top: 12px; padding: 11px; border-radius: 12px; background: rgba(99,102,241,.08); color: #4f46e5; font-size: 14px; font-weight: 700; }
       .hero { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 12px 14px; border-radius: 14px; background: var(--secondary-background-color, rgba(127,127,127,.08)); }
       .hero svg { color: var(--dt-gold); } .hero b { font-size: 26px; font-weight: 800; line-height: 1; } .hero span { font-size: 15px; font-weight: 700; }
