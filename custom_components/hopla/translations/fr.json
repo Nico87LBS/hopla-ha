@@ -16,7 +16,6 @@
           "show_due_in": "Nombre de jours de tâches à venir à afficher",
           "show_no_due_date": "Afficher les tâches sans échéance",
           "create_unified_list": "Créer la liste « Toutes les tâches »",
-          "create_project_lists": "Créer une liste par projet",
           "create_assignee_lists": "Créer une liste par personne"
         }
       }
@@ -38,7 +37,6 @@
           "show_due_in": "Nombre de jours de tâches à venir à afficher",
           "show_no_due_date": "Afficher les tâches sans échéance",
           "create_unified_list": "Créer la liste « Toutes les tâches »",
-          "create_project_lists": "Créer une liste par projet",
           "create_assignee_lists": "Créer une liste par personne"
         },
         "data_description": {
@@ -74,9 +72,6 @@
     "todo": {
       "all_tasks": {
         "name": "Toutes les tâches"
-      },
-      "project_tasks": {
-        "name": "Tâches {project}"
       },
       "member_tasks": {
         "name": "Tâches de {name}"

@@ -14,7 +14,7 @@ from homeassistant.helpers.selector import (
     TextSelector, TextSelectorConfig, TextSelectorType,
 )
 
-from .const import (DOMAIN, CONF_URL, CONF_TOKEN, CONF_SHOW_DUE_IN, CONF_SHOW_NO_DUE_DATE, CONF_CREATE_PROJECT_LISTS,
+from .const import (DOMAIN, CONF_URL, CONF_TOKEN, CONF_SHOW_DUE_IN, CONF_SHOW_NO_DUE_DATE,
                     CONF_CREATE_UNIFIED_LIST, CONF_CREATE_ASSIGNEE_LISTS, CONF_PARENT_USERS, CONF_PARENT_PIN,
                     CONF_PARENT_PIN_HASH, CONF_PARENT_PIN_SALT)
 from .api import HoplaApiClient
@@ -75,7 +75,6 @@ class HoplaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_SHOW_DUE_IN: user_input.get(CONF_SHOW_DUE_IN, 7),
                 CONF_SHOW_NO_DUE_DATE: user_input.get(CONF_SHOW_NO_DUE_DATE, True),
                 CONF_CREATE_UNIFIED_LIST: user_input.get(CONF_CREATE_UNIFIED_LIST, True),
-                CONF_CREATE_PROJECT_LISTS: user_input.get(CONF_CREATE_PROJECT_LISTS, False),
                 CONF_CREATE_ASSIGNEE_LISTS: user_input.get(CONF_CREATE_ASSIGNEE_LISTS, False),
             }
             
@@ -90,7 +89,6 @@ class HoplaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_SHOW_DUE_IN, default=7): vol.Coerce(int),
                 vol.Optional(CONF_SHOW_NO_DUE_DATE, default=True): bool,
                 vol.Optional(CONF_CREATE_UNIFIED_LIST, default=True): bool,
-                vol.Optional(CONF_CREATE_PROJECT_LISTS, default=False): bool,
                 vol.Optional(CONF_CREATE_ASSIGNEE_LISTS, default=False): bool,
             }),
         )
@@ -129,7 +127,6 @@ class HoplaOptionsFlowHandler(config_entries.OptionsFlow):
                 CONF_SHOW_DUE_IN: user_input.get(CONF_SHOW_DUE_IN, 7),
                 CONF_SHOW_NO_DUE_DATE: user_input.get(CONF_SHOW_NO_DUE_DATE, True),
                 CONF_CREATE_UNIFIED_LIST: user_input.get(CONF_CREATE_UNIFIED_LIST, True),
-                CONF_CREATE_PROJECT_LISTS: user_input.get(CONF_CREATE_PROJECT_LISTS, False),
                 CONF_CREATE_ASSIGNEE_LISTS: user_input.get(CONF_CREATE_ASSIGNEE_LISTS, False),
             }
 
@@ -169,10 +166,6 @@ class HoplaOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_CREATE_UNIFIED_LIST,
                     default=self.entry.data.get(CONF_CREATE_UNIFIED_LIST, True)
-                ): bool,
-                vol.Optional(
-                    CONF_CREATE_PROJECT_LISTS,
-                    default=self.entry.data.get(CONF_CREATE_PROJECT_LISTS, False)
                 ): bool,
                 vol.Optional(
                     CONF_CREATE_ASSIGNEE_LISTS,

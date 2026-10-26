@@ -28,8 +28,8 @@ class CompletionHistoryTests(IsolatedAsyncioTestCase):
         self.methods = namespace
 
     async def test_native_list_preserves_pending_and_uses_local_day(self):
-        records = [dict(uid='history--1',task_id=10,name='Daily task',description='',completed_at='2026-10-12T22:30:00+00:00',completed_by=1,project_id=3),
-                   dict(uid='history--2',task_id=10,name='Yesterday',description='',completed_at='2026-10-12T20:30:00+00:00',completed_by=1,project_id=3)]
+        records = [dict(uid='history--1',task_id=10,name='Daily task',description='',completed_at='2026-10-12T22:30:00+00:00',completed_by=1),
+                   dict(uid='history--2',task_id=10,name='Yesterday',description='',completed_at='2026-10-12T20:30:00+00:00',completed_by=1)]
         task=SimpleNamespace(id=10,name='Daily task',description='',next_due_date=datetime(2026,10,14,tzinfo=timezone.utc),is_active=True)
         entity=SimpleNamespace(coordinator=SimpleNamespace(data=[task],completed_tasks=records),entity_id='todo.tasks',_filter_tasks=lambda tasks:tasks,_apply_due_window=lambda tasks:tasks,get_status=lambda *args:'needs_action')
         entity._completed_tasks=lambda:self.methods['_completed_tasks'](entity)
@@ -39,8 +39,7 @@ class CompletionHistoryTests(IsolatedAsyncioTestCase):
         entity._member=SimpleNamespace(user_id=2)
         self.assertEqual(entity._completed_tasks(),[])
         entity._member.user_id=1
-        entity._project=SimpleNamespace(id=4)
-        self.assertEqual(entity._completed_tasks(),[])
+        self.assertEqual(len(entity._completed_tasks()),2)
 
     async def test_native_history_cannot_change_underlying_task(self):
         with self.assertRaisesRegex(ValueError,'read-only'):
@@ -49,7 +48,7 @@ class CompletionHistoryTests(IsolatedAsyncioTestCase):
             await self.methods['async_delete_todo_items'](None,['10--date','history--1'])
 
     async def test_history_keeps_occurrences_and_original_performer(self):
-        task = SimpleNamespace(id=10, name='Daily task', description='', project_id=3, assigned_to=2, labels=[])
+        task = SimpleNamespace(id=10, name='Daily task', description='', assigned_to=2, labels=[])
         def occurrence(i, status=1):
             return SimpleNamespace(id=i, chore_id=10, status=status, performed_at=datetime(2026,10,13,i,tzinfo=timezone.utc), assigned_to=1, completed_by=1, due_date=None)
         client = SimpleNamespace(async_get_task_history=AsyncMock(return_value=[occurrence(1),occurrence(2),occurrence(2),occurrence(3,2),occurrence(4,6),occurrence(5,3)]), async_get_task_detail=AsyncMock())
@@ -63,5 +62,5 @@ class CompletionHistoryTests(IsolatedAsyncioTestCase):
         history = [SimpleNamespace(id=1,chore_id=10,status=1,performed_at=datetime.now(timezone.utc),assigned_to=1,completed_by=1,due_date=None)]
         client = SimpleNamespace(async_get_task_history=AsyncMock(return_value=history), async_get_task_detail=AsyncMock(return_value=None))
         self.assertEqual(await module.async_completed_occurrences(client, []), [])
-        client.async_get_task_detail.return_value = SimpleNamespace(id=10,name='One-off',description=None,project_id=None,labels=[])
+        client.async_get_task_detail.return_value = SimpleNamespace(id=10,name='One-off',description=None,labels=[])
         self.assertEqual((await module.async_completed_occurrences(client, []))[0]['name'], 'One-off')

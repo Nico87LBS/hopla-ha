@@ -13,6 +13,7 @@ from homeassistant.components.todo import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
@@ -22,10 +23,10 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
-from .const import DOMAIN, CONF_URL, CONF_TOKEN, CONF_SHOW_DUE_IN, CONF_SHOW_NO_DUE_DATE, CONF_CREATE_UNIFIED_LIST, CONF_CREATE_PROJECT_LISTS, CONF_CREATE_ASSIGNEE_LISTS
+from .const import DOMAIN, CONF_URL, CONF_TOKEN, CONF_SHOW_DUE_IN, CONF_SHOW_NO_DUE_DATE, CONF_CREATE_UNIFIED_LIST, CONF_CREATE_ASSIGNEE_LISTS
 from .api import HoplaApiClient
 from .games import chrono_attributes
-from .model import HoplaProject, HoplaTask, HoplaMember
+from .model import HoplaTask, HoplaMember
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -74,20 +75,14 @@ async def async_setup_entry(
     else:
         _LOGGER.debug("Assignee lists not enabled in config")
 
-    # Create per-project lists if enabled (check options first, then data)
-    create_project_lists = config_entry.options.get(CONF_CREATE_PROJECT_LISTS, config_entry.data.get(CONF_CREATE_PROJECT_LISTS, False))
-    if create_project_lists:
-        _LOGGER.debug("Project lists enabled in config")
-        try:
-            projects = await client.async_get_projects()
-            _LOGGER.debug("Found %d projects", len(projects))
-            for project in projects:
-                entity = HoplaProjectTasksList(coordinator, config_entry, project)
-                entity._circle_members = circle_members
-                entities.append(entity)
-        except Exception as e:
-            _LOGGER.error("Failed to get projects: %s", e)
-    
+    # Lists per project are gone with the projects: forget the ones made
+    # before, so they do not stay behind as unavailable entities.
+    registry = er.async_get(hass)
+    prefix = f"dt_{config_entry.entry_id}_project_"
+    for entry in er.async_entries_for_config_entry(registry, config_entry.entry_id):
+        if entry.domain == "todo" and entry.unique_id.startswith(prefix):
+            registry.async_remove(entry.entity_id)
+
     _LOGGER.debug("Creating %d total entities", len(entities))
     async_add_entities(entities)
 
@@ -167,12 +162,10 @@ class HoplaTodoListBase(CoordinatorEntity, TodoListEntity):
         return pending + completed
 
     def _completed_tasks(self):
-        """Filter history by the performer and project, not today's assignment."""
+        """Filter history by the performer, not today's assignment."""
         tasks = getattr(self.coordinator, "completed_tasks", [])
         if hasattr(self, "_member"):
             tasks = [task for task in tasks if task["completed_by"] == self._member.user_id]
-        if hasattr(self, "_project"):
-            tasks = [task for task in tasks if task["project_id"] == self._project.id]
         return tasks
 
     def get_status(self, due_date: datetime, is_active: bool) -> TodoItemStatus:
@@ -187,7 +180,6 @@ class HoplaTodoListBase(CoordinatorEntity, TodoListEntity):
         attributes = {
             "config_entry_id": self._config_entry.entry_id,
             "hopla_url": self._config_entry.data[CONF_URL],
-            "hopla_project_id": hasattr(self, '_project') and self._project.id or None,
         }
         
         # Add circle members data for custom card user selection
@@ -254,10 +246,7 @@ class HoplaTodoListBase(CoordinatorEntity, TodoListEntity):
             if hasattr(self, '_member'):
                 created_by = self._member.user_id
             
-            project_id = None
-            if hasattr(self, '_project'):
-                project_id = self._project.id
-            _LOGGER.debug("Creating task '%s' in project %d by user %d", item.summary, project_id, created_by)
+            _LOGGER.debug("Creating task '%s' by user %s", item.summary, created_by)
 
             # Convert due date to RFC3339 format if provided
             due_date = None
@@ -269,9 +258,8 @@ class HoplaTodoListBase(CoordinatorEntity, TodoListEntity):
                 description=item.description,
                 due_date=due_date,
                 created_by=created_by,
-                project_id=project_id
             )
-            _LOGGER.info("Created task '%s' in project %s with ID %d", item.summary, getattr(self, '_project_id', None), result.id)
+            _LOGGER.info("Created task '%s' with ID %d", item.summary, result.id)
             
         except Exception as e:
             _LOGGER.error("Failed to create task '%s': %s", item.summary, e)
@@ -385,26 +373,6 @@ class HoplaAllTasksList(HoplaTodoListBase):
     def _filter_tasks(self, tasks):
         """Return all active tasks."""
         return [task for task in tasks if task.is_active]
-
-class HoplaProjectTasksList(HoplaTodoListBase):
-    """Hopla Project-specific Tasks List entity."""
-
-    def __init__(self, coordinator: DataUpdateCoordinator, config_entry: ConfigEntry, project: HoplaProject) -> None:
-        """Initialize the Project Tasks List."""
-        super().__init__(coordinator, config_entry)
-        self._project = project
-        self._project_id = project.id
-        self._project_name = project.name
-        self._attr_unique_id = f"dt_{config_entry.entry_id}_project_{project.id}_tasks"
-        self._attr_has_entity_name = True
-        self._attr_translation_key = "project_tasks"
-        self._attr_translation_placeholders = {"project": project.name}
-
-    def _filter_tasks(self, tasks):
-        """Return tasks belonging to this project."""
-        filtered_tasks = [task for task in tasks if task.is_active and task.project_id == self._project_id]
-        _LOGGER.debug("Project %d has %d tasks", self._project_id, len(filtered_tasks))
-        return filtered_tasks
 
 class HoplaAssigneeTasksList(HoplaTodoListBase):
     """Hopla Assignee-specific Tasks List entity."""
