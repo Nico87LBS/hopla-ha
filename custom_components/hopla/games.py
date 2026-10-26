@@ -138,6 +138,9 @@ def _challenge(challenge):
         "members": challenge.get("members") or [],
         # JSON object keys are strings; member ids are ints everywhere else.
         "progress": {int(user_id): value for user_id, value in (challenge.get("progress") or {}).items()},
+        # A member who was away has a lower target in a challenge that isn't shared.
+        "targets": {int(user_id): value for user_id, value in (challenge.get("targets") or {}).items()},
+        "days_away": {int(user_id): value for user_id, value in (challenge.get("daysAway") or {}).items()},
         "total": challenge.get("total", 0),
         "reward": challenge.get("reward", 0),
         "reward_text": challenge.get("rewardText") or None,

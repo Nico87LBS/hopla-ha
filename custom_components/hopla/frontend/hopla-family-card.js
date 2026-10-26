@@ -742,9 +742,15 @@ class HoplaFamilyCard extends HTMLElement {
       const end = c.done ? '' : `<span class="period-end">${escape(this.t('period_left', {time: this.duration(new Date(c.ends_at))}))}</span>`;
       const lines = c.shared
         ? `<div class="goal-line"><span class="goal-faces">${c.members.map(id => byId.get(id)).filter(Boolean).map(m => this.face(m, 26)).join('')}</span>${this.gauge(c.total, c.target, c.done)}</div>`
-        : c.members.map(id => byId.get(id)).filter(Boolean).map(m => `<div class="goal-line">${this.face(m, 26)}${this.gauge(c.progress[m.id] || 0, c.target, c.winners.includes(m.id))}</div>`).join('');
+        : c.members.map(id => byId.get(id)).filter(Boolean).map(m => `<div class="goal-line">${this.face(m, 26)}${this.awayDays(c.days_away?.[m.id])}${this.gauge(c.progress[m.id] || 0, c.targets?.[m.id] ?? c.target, c.winners.includes(m.id))}</div>`).join('');
       return `<div class="goal${c.done ? ' done' : ''}"><div class="goal-head">${svg('trophy', 18)}<b>${escape(c.name)}</b>${c.shared ? `<span class="goal-tag">${escape(this.t('goal_family'))}</span>` : ''}${end}</div>${lines}${reward}</div>`;
     }).join('');
+  }
+  // The days a member was away during a challenge, which lowered their target.
+  awayDays(days) {
+    if (!days) return '';
+    const label = this.t('challenge_away', {count: days});
+    return `<span class="away-days" title="${escape(label)}" aria-label="${escape(label)}">${svg('suitcase', 11)}${days}</span>`;
   }
   renderQuests(members) {
     const rows = members.flatMap(m => m.quests.map(q => ({...q, member: m})));
@@ -1238,6 +1244,7 @@ class HoplaFamilyCard extends HTMLElement {
       .goal-head b { color: var(--primary-text-color); }
       .goal-tag { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(245,180,0,.2); }
       .goal-line { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+      .away-days { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; padding: 0 6px; border-radius: 999px; background: rgba(127,127,127,.14); color: var(--secondary-text-color); font-size: 11px; font-weight: 600; line-height: 16px; }
       .goal-faces { display: flex; } .goal-faces .face + .face { margin-left: -8px; }
       .goal-reward { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 14px; font-weight: 600; }
       .row.quest .name { flex: 1 1 40%; } .row.quest .gauge { flex: 1 1 30%; }

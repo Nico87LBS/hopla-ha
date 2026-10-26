@@ -161,6 +161,8 @@ export default {
     close: 'Fermer',
     quests: 'Quêtes',
     goal_family: 'En famille',
+    challenge_away_one: 'Pas là {count} jour : objectif réduit',
+    challenge_away_other: 'Pas là {count} jours : objectif réduit',
     goal_to_win: 'À gagner : {reward}',
     goal_won: 'Gagné : {reward} !',
     errors: {

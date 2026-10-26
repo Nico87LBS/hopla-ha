@@ -130,6 +130,7 @@ def progress(level=1, quest_done=False, solo_winners=(), goal_done=False, total=
                  "completedAt": "2026-10-22T00:00:00Z" if goal_done else None, "winners": [1, 2] if goal_done else []},
                 {"id": 2, "name": "Chambre", "kind": "tasks", "choreId": 10, "target": 3, "shared": False,
                  "members": [2], "progress": {"2": 1}, "total": 1, "reward": 5, "rewardText": "",
+                 "targets": {"2": 2}, "daysAway": {"2": 3},
                  "startsAt": "2026-10-20T00:00:00Z", "endsAt": "2026-10-30T00:00:00Z", "completedAt": None,
                  "winners": list(solo_winners)},
             ]}
@@ -149,6 +150,8 @@ class ProgressionTests(unittest.TestCase):
         self.assertEqual(goal["reward_text"], "Sortie piscine")
         self.assertFalse(goal["done"])
         self.assertIsNone(solo["reward_text"])
+        self.assertEqual((solo["targets"], solo["days_away"]), ({2: 2}, {2: 3}), "away 3 days: a lower target")
+        self.assertEqual((goal["targets"], goal["days_away"]), ({}, {}))
         self.assertEqual([(rank["name"], rank["min_points"]) for rank in today["rank_ladder"]],
                          [("Petit Hop", 0), ("Hop Hop", 100), ("Super Hop", 300)])
         self.assertEqual(today["rank_ladder"][0], {"name": "Petit Hop", "icon": "🐣", "image": None, "min_points": 0})

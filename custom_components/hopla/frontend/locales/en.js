@@ -161,6 +161,8 @@ export default {
     close: 'Close',
     quests: 'Quests',
     goal_family: 'Family',
+    challenge_away_one: 'Away {count} day: lower target',
+    challenge_away_other: 'Away {count} days: lower target',
     goal_to_win: 'To win: {reward}',
     goal_won: 'Won: {reward}!',
     errors: {
