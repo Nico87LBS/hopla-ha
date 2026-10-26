@@ -189,6 +189,8 @@ def games_today(data):
         } for rank in sorted(data.get("ranks") or [], key=lambda rank: rank.get("minPoints", 0))],
         "quests": {item["userId"]: [_quest(q) for q in item.get("quests") or []] for item in data.get("members") or []},
         "challenges": [_challenge(c) for c in data.get("challenges") or []],
+        # Whether the parents stand on the podium with the children.
+        "parents_on_podium": data.get("parentsOnPodium", False),
     }
 
 

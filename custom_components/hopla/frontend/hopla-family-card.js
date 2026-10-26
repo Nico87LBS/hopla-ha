@@ -220,6 +220,7 @@ export function boardData(hass, config, now = new Date()) {
   let period = null;
   let challenges = [];
   let ladder = [];
+  let parentsOnPodium = false;
   for (const [id, state] of Object.entries(hass.states)) {
     if (!id.startsWith('sensor.') || !isHopla(hass, id)) continue;
     const a = state.attributes;
@@ -244,6 +245,7 @@ export function boardData(hass, config, now = new Date()) {
       surprise = a.surprise || null;
       period = a.bonus_period || null;
       challenges = Array.isArray(a.challenges) ? a.challenges : [];
+      parentsOnPodium = a.parents_on_podium === true;
       ladder = Array.isArray(a.ranks) ? a.ranks.map(r => ({name: r.name || '', icon: r.icon || '', image: rankImage(r.image), points: Number(r.min_points) || 0})) : [];
     } else if (Array.isArray(a.points_presets)) {
       presets = a.points_presets;
@@ -259,6 +261,10 @@ export function boardData(hass, config, now = new Date()) {
   }
   const chosen = config.members?.length ? config.members.map(Number) : null;
   const shown = chosen ? chosen.map(id => members.find(m => m.id === id)).filter(Boolean) : members;
+  // The podium is the children's; the parents stand on it when the family
+  // puts them there, or when it has no children, as on the web.
+  const isChild = m => m.role && m.role !== 'admin' && m.role !== 'manager';
+  const onPodium = parentsOnPodium || !shown.some(isChild) ? shown : shown.filter(isChild);
   const wanted = (config.labels || []).map(label => label.trim().toLowerCase()).filter(Boolean);
   const labelled = labels => !wanted.length || labelNames(labels).some(label => wanted.includes(label));
   const wall = wallClock(now);
@@ -295,7 +301,7 @@ export function boardData(hass, config, now = new Date()) {
     .filter(item => item.completed_at && sameDay(new Date(item.completed_at), now) && labelled(item.labels))
     .map(item => ({...item, member})))
     .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
-  return {members: shown, tasks: visible, rows: withMode(taskRows(visible, done, shown)), done, doneRows: withMode(doneRows(done)), rewards: rewards || [], requests,
+  return {members: shown, podium: onPodium, tasks: visible, rows: withMode(taskRows(visible, done, shown)), done, doneRows: withMode(doneRows(done)), rewards: rewards || [], requests,
     presets, presetsEntry, surprise, period, ladder, adjustable,
     // The newest points changes of the members shown, newest first.
     ledger: ledger.filter(entry => shown.some(m => m.id === entry.user_id)),
@@ -992,7 +998,7 @@ class HoplaFamilyCard extends HTMLElement {
     const loaded = this._history.get(member.id);
     // A points change while the window is open (a task ticked elsewhere): load again.
     if (loaded && !loaded.loading && loaded.seen !== `${member.earned}/${member.points}`) queueMicrotask(() => this.loadHistory(member.id));
-    const {place, tied} = this._config.show_points ? podiumPlace(data.members, member) : {place: null, tied: []};
+    const {place, tied} = this._config.show_points ? podiumPlace(data.podium, member) : {place: null, tied: []};
     const tie = place && tied.length ? `<span class="tie">${svg('crown', 16)}${escape(this.t(`tie_${place}`, {names: tied.map(m => m.name).join(', ')}))}</span>` : '';
     const filters = ['all', 'task', 'bonus', 'reward'].map(f => `<button class="filter${sheet.filter === f ? ' on' : ''}" data-action="sheet-filter" data-filter="${f}" aria-pressed="${sheet.filter === f}">${escape(this.t(`filter_${f}`))}</button>`).join('');
     const entries = (loaded?.entries || []).filter(entry => sheet.filter === 'all' || historyKind(entry) === sheet.filter);
@@ -1415,7 +1421,7 @@ class HoplaFamilyCard extends HTMLElement {
       .key:not(:disabled):active { transform: scale(.94); }
     </style><ha-card>
       ${this.renderParentButton()}${this.renderPinPad()}${this._config.show_points ? this.renderRankDetails(data.members, data.ladder) : ''}${this.renderSheet(data)}${this.renderChronoSheet(data)}
-      ${this._config.show_points && data.members.length ? this.renderPodium(data.members) : ''}
+      ${this._config.show_points && data.podium.length ? this.renderPodium(data.podium) : ''}
       ${this.renderZoneBanner()}${this.renderPeriod(data.period)}
       ${this._config.show_goals ? this.renderChallenges(data.challenges, data.members) : ''}
       ${this._config.show_todo ? this.section('todo', this.header('todo', 'todo', title, data.rows.length, 'todo'),
