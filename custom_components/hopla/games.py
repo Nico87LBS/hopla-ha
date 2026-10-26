@@ -53,7 +53,7 @@ def presets(rows):
 
 
 class PointsLedgerTracker:
-    """Fire an event for each new ledger row: task, undo, redeem, bonus or penalty.
+    """Fire an event for each new ledger row: task, undo, redeem, game, bonus or penalty.
 
     Like approvals, the first refresh only records where the ledger stands.
     """
