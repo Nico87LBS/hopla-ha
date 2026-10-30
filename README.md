@@ -75,7 +75,7 @@ L'état est le nom de la tâche.
 
 | Attribut | Contenu |
 | --- | --- |
-| `task_id`, `description`, `labels`, `priority`, `is_active` | La tâche |
+| `task_id`, `description`, `labels`, `is_active` | La tâche |
 | `points` | Points qu'elle rapporte |
 | `next_due_date` | Prochaine échéance |
 | `frequency_type`, `frequency`, `interval_type` | Récurrence ; `interval_type` vaut `hours`, `days`, `weeks`, `months` ou `years` |
@@ -463,7 +463,7 @@ completed_days: 1               # jours d'historique (1 à 7)
 completed_filter: all           # matching : suivre le filtre de dates
 labels: [maison]                # filtrer par étiquettes
 label_match: any                # any (OU) ou all (ET)
-sort_by: due_date               # due_date, priority ou name
+sort_by: due_date               # due_date ou name
 due_display: date               # date, relative ou both
 show_points: true
 show_recurrence: true

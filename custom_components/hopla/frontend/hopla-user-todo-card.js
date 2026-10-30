@@ -15,8 +15,7 @@ function elementTranslator(element) {
 
 function compareTasks(a, b, sortBy, language) {
   const timestamp = value => Number.isFinite(Date.parse(value)) ? Date.parse(value) : Infinity;
-  const primary = sortBy === 'priority' ? (Number(b.priority) || 0) - (Number(a.priority) || 0)
-    : sortBy === 'name' ? (a.name || '').localeCompare(b.name || '', language, {sensitivity:'base',numeric:true}) : 0;
+  const primary = sortBy === 'name' ? (a.name || '').localeCompare(b.name || '', language, {sensitivity:'base',numeric:true}) : 0;
   return primary || timestamp(a.next_due_date) - timestamp(b.next_due_date) || a.task_id - b.task_id;
 }
 export function upcomingDayLimit(value) {
@@ -264,6 +263,7 @@ class HoplaUserTodoCard extends HTMLElement {
     if (config.display_filters !== undefined && (!Array.isArray(config.display_filters) || config.display_filters.some(filter=>!['overdue','today','future','undated'].includes(filter)))) throw error('display_filters');
     if (config.labels !== undefined && (!Array.isArray(config.labels) || config.labels.some(label => typeof label !== 'string' || !label.trim()))) throw error('labels');
     if (config.label_match !== undefined && !['any','all'].includes(config.label_match)) throw error('label_match');
+    // priority is no longer offered; old cards keep working, sorted by due date.
     if (config.sort_by && !['due_date','priority','name'].includes(config.sort_by)) throw error('sort_by');
     if (config.due_display && !['date','relative','both'].includes(config.due_display)) throw error('due_display');
     if (config.row_spacing !== undefined && !['auto','compact','comfortable'].includes(config.row_spacing)) throw error('row_spacing');
@@ -852,7 +852,7 @@ class HoplaUserTodoEditor extends HTMLElement {
       {name:'display_filters',title:t(hasPending ? 'editor.labels.display_filters' : 'editor.labels.original_due_dates'),selector:{select:{mode:'dropdown',multiple:true,options:['overdue','today','future','undated'].map(value=>({value,label:t(`todo.filters.${value}`)}))}}},
       ...(filters.includes('future') ? [{name:'upcoming_days',selector:{number:{min:0,max:365,step:1,mode:'box',unit_of_measurement:t('editor.days')}}}] : [])
       ] : []),
-      ...(hasPending ? [choices('sort_by','sort',['due_date','priority','name'])] : [])
+      ...(hasPending ? [choices('sort_by','sort',['due_date','name'])] : [])
       ])},
       ...(hasCompleted ? [group('completed_options',[
         {name:'completed_days',selector:{number:{min:1,max:7,step:1,mode:'box',unit_of_measurement:t('editor.days')}}},

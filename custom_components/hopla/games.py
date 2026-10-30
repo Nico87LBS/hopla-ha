@@ -1,4 +1,6 @@
 """Bonuses, penalties and the points ledger kept by Hopla."""
+from datetime import datetime, timedelta
+
 EVENT_POINTS_CHANGED = "hopla_points_changed"
 
 # How many ledger rows the sensor shows, newest first.
@@ -194,7 +196,55 @@ def games_today(data):
         "challenges": [_challenge(c) for c in data.get("challenges") or []],
         # Whether the parents stand on the podium with the children.
         "parents_on_podium": data.get("parentsOnPodium", False),
+        # When the games change on their own: midnight, a bonus period edge.
+        "next_change_at": data.get("nextChangeAt"),
     }
+
+
+class NextChangeRefresh:
+    """Refresh right after the games change on their own (midnight, a bonus
+    period starting or ending): no task changes then, so no live event comes.
+
+    schedule(when, action) runs action at when and returns a cancel callback.
+    """
+
+    def __init__(self, schedule, refresh):
+        self._schedule = schedule
+        self._refresh = refresh
+        self._when = None
+        self._cancel = None
+
+    def update(self, today):
+        when = _parse_time((today or {}).get("next_change_at"))
+        if when == self._when:
+            return
+        self.cancel()
+        self._when = when
+        if when is not None:
+            # A second late, so Hopla's clock is past the change too.
+            self._cancel = self._schedule(when + timedelta(seconds=1), self._fire)
+
+    def _fire(self, *_args):
+        self._cancel = None
+        self._when = None
+        self._refresh()
+
+    def cancel(self):
+        if self._cancel:
+            self._cancel()
+        self._cancel = None
+        self._when = None
+
+
+def _parse_time(value):
+    if not value:
+        return None
+    try:
+        when = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    # Go's zero time means Hopla is too old to say.
+    return when if when.year > 1 and when.tzinfo else None
 
 
 class GamesTracker:

@@ -343,11 +343,11 @@ card.setConfig({entity:'todo.all',user_id:'all'});click('Change due date: Weekly
 const picker=document.createElement('ha-dialog-date-picker');document.body.append(picker);
 picker.dispatchEvent(new window.PointerEvent('pointerdown',{bubbles:true}));assert.ok(root.querySelector('form'));
 picker.remove();document.body.dispatchEvent(new window.PointerEvent('pointerdown',{bubbles:true}));assert.equal(root.querySelector('form'),null);
-hass.states['todo.all'].attributes.tasks[0].priority=4;
-hass.states['todo.all'].attributes.tasks[1].priority=1;
-hass.states['todo.all'].attributes.tasks[2].priority=3;
+// Priority is gone: an old card set to it keeps the due-date order.
+card.setConfig({entity:'todo.all',user_id:'all'});
+const dueOrder=[...root.querySelectorAll('.name')].map(node=>node.textContent);
 card.setConfig({entity:'todo.all',user_id:'all',sort_by:'priority'});
-assert.deepEqual([...root.querySelectorAll('.name')].map(node=>node.textContent),['Weekly','Other user','One-off']);
+assert.deepEqual([...root.querySelectorAll('.name')].map(node=>node.textContent),dueOrder);
 card.setConfig({entity:'todo.all',user_id:'all',sort_by:'name'});
 assert.deepEqual([...root.querySelectorAll('.name')].map(node=>node.textContent),['One-off','Other user','Weekly']);
 assert.throws(()=>card.setConfig({entity:'todo.all',user_id:1,sort_by:'unknown'}),/valid sort order/);
