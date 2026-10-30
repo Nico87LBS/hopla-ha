@@ -480,6 +480,20 @@
           "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
         }
       }
+    },
+    "open_games": {
+      "name": "Ouvrir les jeux Apprendre",
+      "description": "L'adresse des jeux d'un membre, valable une fois et une minute : elle les ouvre sans compte et ne permet que de jouer. Sans code parent.",
+      "fields": {
+        "user_id": {
+          "name": "Membre",
+          "description": "L'ID Hopla du membre qui joue"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
     }
   }
 }

@@ -20,6 +20,11 @@ class HoplaApiClient:
         self._token = token
         self._session = session
 
+    @property
+    def base_url(self) -> str:
+        """Hopla's address, as the integration reaches it."""
+        return self._base_url
+
     def _headers(self) -> dict:
         """Return headers for Hopla API requests."""
         return {
@@ -301,6 +306,11 @@ class HoplaApiClient:
         payload = {"userId": user_id, "points": points or 0, "reason": reason, "presetId": preset_id}
         data = await self._post_action("/eapi/v1/points/adjust", "change the points", payload)
         return data["res"]
+
+    async def async_new_play_link(self, user_id: int) -> dict:
+        """A link good once, for a minute, that opens a member's learning games without signing in."""
+        data = await self._post_action("/eapi/v1/learn/play-links", "open the games", {"userId": user_id})
+        return data.get("res") or {}
 
     async def async_start_chrono(self, task_id: int, points: int, minutes: int) -> dict:
         """Start a speed bonus on a task: extra points for doing it in the next minutes."""

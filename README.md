@@ -259,6 +259,7 @@ proposition tant que la tablette et la famille restent sur ces deux fuseaux.
 | `hopla.start_chrono` | Lancer un bonus chrono sur une tâche (`task_id`) : `points` en plus (5 par défaut) pour qui la fait, elle ou une de ses copies, dans les `minutes` qui viennent (15 par défaut), une fois par enfant. Le relancer remplace celui en cours. Répond `points` et `ends_at` | ✓ |
 | `hopla.stop_chrono` | Arrêter avant l'heure le bonus chrono lancé sur une tâche (`task_id`) | ✓ |
 | `hopla.get_points_history` | Lire l'historique des points d'un membre (`user_id`), du plus récent au plus ancien : `limit` lignes (20 par défaut), plus anciennes que la ligne `before` pour remonter. Répond `entries` et `more` | |
+| `hopla.open_games` | Donner l'adresse des jeux Apprendre d'un membre (`user_id`), valable une fois et une minute, qui les ouvre sans compte et ne permet que de jouer. Répond `url` et `expires_at` | |
 | `hopla.set_family_timezone` | Passer la famille à un autre fuseau horaire (`timezone`, par exemple `Europe/Lisbon`), pour les vacances : les tâches gardent leur heure | ✓ |
 | `hopla.unlock_parent_mode` | Ouvrir le mode parent pour deux minutes avec le code (`pin`) | |
 | `hopla.lock_parent_mode` | Refermer le mode parent | |
@@ -417,6 +418,12 @@ Hopla (onglet Jeux de la page Points) ou un autre montant, avec une raison si tu
 veux. Sur la tablette, il demande le code parent. En mode parent, ou pour un
 parent, la carte montre aussi une tuile par enfant avec ses boutons Bonus et
 Pénalité.
+
+La manette de la fenêtre d'un enfant ouvre ses jeux Apprendre en plein écran,
+sans code parent : la tablette demande à Hopla un lien valable une fois et une
+minute, qui ne permet que de jouer. La croix en haut à droite revient à la
+carte. La tablette doit pouvoir ouvrir l'adresse de Hopla réglée dans
+l'intégration (en `https` si Home Assistant l'est).
 
 Les titres À faire, Déjà fait, Historique et Récompenses se replient d'une
 touche ; les options choisissent s'ils sont dépliés au départ.
