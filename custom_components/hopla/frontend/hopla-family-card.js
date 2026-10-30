@@ -327,6 +327,7 @@ const icon = {
   flame: '<path d="M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-5 3-6 0 2 1 3 2 3 0-4-1-6 1-9z" fill="currentColor"/>',
   sparkle: '<path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5l-2.2-6.3L3.5 10l6.3-1.7zM19 15l.9 2.6 2.6.9-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9z" fill="currentColor"/>',
   bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="currentColor"/>',
+  gamepad: '<path d="M7 7h10a5 5 0 0 1 4.9 6l-.7 3.6a2.6 2.6 0 0 1-4.6 1.1L14.8 15H9.2l-1.8 2.7a2.6 2.6 0 0 1-4.6-1.1L2.1 13A5 5 0 0 1 7 7z" fill="currentColor"/><path d="M8 9.5v3M6.5 11h3" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><circle cx="15.5" cy="10.3" r="1.1" fill="#fff"/><circle cx="17.3" cy="12.2" r="1.1" fill="#fff"/>',
   timer: '<path d="M9.5 2.5h5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="13.5" r="8" fill="currentColor"/><path d="M12 9.5v4.5" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>',
   people: '<path d="M16 17v2H2v-2s0-4 7-4 7 4 7 4m-3.5-9.5A3.5 3.5 0 1 0 9 11a3.5 3.5 0 0 0 3.5-3.5m3.44 5.5A5.3 5.3 0 0 1 18 17v2h4v-2s0-3.63-6.06-4M15 4a3.4 3.4 0 0 0-1.93.59 5 5 0 0 1 0 5.82A3.4 3.4 0 0 0 15 11a3.5 3.5 0 0 0 0-7z" fill="currentColor"/>',
   person: '<path d="M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8m0 10c4.42 0 8 1.79 8 4v2H4v-2c0-2.21 3.58-4 8-4z" fill="currentColor"/>',
@@ -352,12 +353,34 @@ export function zoneProposal(hass, device = deviceZone()) {
 const zoneIgnoreKey = (device, family) => `hoplaZoneIgnored:${device}:${family}`;
 const zoneIgnored = key => { try { return globalThis.localStorage?.getItem(key) === '1'; } catch { return false; } };
 
-const RESPONDING = ['complete_task', 'redeem_reward', 'unlock_parent_mode', 'adjust_points', 'get_points_history', 'start_chrono'];
+const RESPONDING = ['complete_task', 'redeem_reward', 'unlock_parent_mode', 'adjust_points', 'get_points_history', 'start_chrono', 'open_games'];
 const CHRONO_POINTS = [2, 5, 10, 20];
 const CHRONO_MINUTES = [5, 10, 15, 30];
 // The sections a viewer can fold, and whether each starts open.
 const FOLDS = {todo: true, done: false, history: false, rewards: true};
 const svg = (name, size, label) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" ${label ? `role="img" aria-label="${escape(label)}"` : 'aria-hidden="true"'}>${icon[name]}</svg>`;
+
+// A member's learning games, full screen over the dashboard. They live in the
+// page, not in the card, so a redraw of the card never reloads a game.
+const GAMES_ID = 'hopla-games';
+const closeGames = () => document.getElementById(GAMES_ID)?.remove();
+const openGames = (url, labels) => {
+  closeGames();
+  const host = document.createElement('div');
+  host.id = GAMES_ID;
+  const root = host.attachShadow({mode: 'open'});
+  root.innerHTML = `<style>
+      .games { position: fixed; inset: 0; z-index: 9999; background: var(--card-background-color, #fff); }
+      iframe { width: 100%; height: 100%; border: 0; display: block; }
+      button { position: absolute; top: max(10px, env(safe-area-inset-top)); right: 12px; width: 44px; height: 44px; border-radius: 50%; border: 0;
+        display: grid; place-items: center; background: rgba(20,18,30,.55); color: #fff; cursor: pointer; }
+    </style><div class="games" role="dialog" aria-label="${escape(labels.title)}">
+      <iframe src="${escape(url)}" title="${escape(labels.title)}" allow="autoplay; fullscreen"></iframe>
+      <button aria-label="${escape(labels.close)}">${svg('cross', 18)}</button></div>`;
+  root.querySelector('button').addEventListener('click', closeGames);
+  document.body.append(host);
+  return host;
+};
 
 class HoplaFamilyCard extends HTMLElement {
   static getConfigElement() { return document.createElement('hopla-family-card-editor'); }
@@ -387,7 +410,7 @@ class HoplaFamilyCard extends HTMLElement {
     // Quota countdowns move on even when no sensor changes.
     this._timer = setInterval(() => this.render(), 60000);
   }
-  disconnectedCallback() { clearInterval(this._timer); clearTimeout(this._lockTimer); }
+  disconnectedCallback() { clearInterval(this._timer); clearTimeout(this._lockTimer); closeGames(); }
   setConfig(config) {
     if (config.due && !['today', 'all'].includes(config.due)) throw new Error(this.t('errors.due'));
     if (config.members !== undefined && !Array.isArray(config.members)) throw new Error(this.t('errors.members'));
@@ -443,6 +466,7 @@ class HoplaFamilyCard extends HTMLElement {
     const {action, task, member, reward, request, digit, preset, slot, tasks} = button.dataset;
     if (action.startsWith('chrono-')) { await this.onChrono(action, button.dataset); return; }
     if (action === 'fold') { const {section} = button.dataset; this._open[section] = !this.isOpen(section); this.render(); return; }
+    if (action === 'games-open') { await this.onGames(Number(member)); return; }
     if (action === 'adjust-open') { await this.openAdjust(Number(member), button.dataset.tab || 'bonus'); return; }
     if (['sheet-history', 'sheet-rewards', 'sheet-member', 'sheet-close', 'sheet-filter', 'history-more'].includes(action)
       || action.startsWith('adjust-')) { await this.onSheet(action, button.dataset); return; }
@@ -509,6 +533,14 @@ class HoplaFamilyCard extends HTMLElement {
       const response = await this.call('redeem_reward', {reward_id: Number(reward), user_id: Number(member)}, key, Number(member));
       if (response) this.flash(key, response.pending ? this.t('requested') : this.t('bravo'));
     }
+  }
+  // The learning games of a member, opened on this screen: no parent code.
+  async onGames(memberId) {
+    const member = this._data?.members.find(m => m.id === memberId);
+    const response = await this.call('open_games', {user_id: memberId}, `games-${memberId}`, memberId);
+    if (!response?.url) return;
+    this._sheet = null; this.render();
+    openGames(response.url, {title: this.t('games_of', {name: member?.name || ''}), close: this.t('games_close')});
   }
   // The member window: who it is for and what it shows.
   async onSheet(action, data) {
@@ -994,12 +1026,14 @@ class HoplaFamilyCard extends HTMLElement {
       ? `<button class="round" data-action="adjust-back" aria-label="${escape(this.t('back'))}">${svg('left', 18)}</button>${this.face(member, 34)}<span class="sheet-for">${escape(this.t('adjust_for', {name: member.name}))}</span>`
       : `<div class="menu" role="group">${data.members.map(m => `<button class="who${m.id === member.id ? ' on' : ''}" data-action="sheet-member" data-member="${m.id}" aria-pressed="${m.id === member.id}">${this.face(m, 34)}<span>${escape(m.name)}</span></button>`).join('')}</div><span class="grow"></span>`;
     // Always offered in the history: the same server gives the history and the bonuses.
-    const tools = sheet.kind === 'history'
+    const games = `<button class="round games" data-action="games-open" data-member="${member.id}" aria-label="${escape(this.t('games_of', {name: member.name}))}"${this._busy.has(`games-${member.id}`) ? ' disabled' : ''}>${svg('gamepad', 24)}</button>`;
+    const tools = adjust ? '' : games;
+    const adjustTool = sheet.kind === 'history'
       ? `<button class="round adj" data-action="adjust-open" data-member="${member.id}" data-tab="bonus" aria-label="${escape(this.t('adjust_open', {name: member.name}))}">${svg('plusminus', 22)}</button>` : '';
     const body = sheet.kind === 'history' ? this.renderHistorySheet(data, member)
       : sheet.kind === 'rewards' ? this.renderRewardsSheet(data, member) : this.renderAdjustSheet(data, member);
     return `<div class="sheet-scrim"><div class="sheet" role="dialog" aria-label="${escape(member.name)}">
-      <div class="sheet-head">${menu}${tools}<button class="round" data-action="sheet-close" aria-label="${escape(this.t('close'))}">${svg('cross', 16)}</button></div>
+      <div class="sheet-head">${menu}${tools}${adjustTool}<button class="round" data-action="sheet-close" aria-label="${escape(this.t('close'))}">${svg('cross', 16)}</button></div>
       ${body}${this._error ? `<div class="error">${escape(this._error)}</div>` : ''}</div></div>`;
   }
   renderHistorySheet(data, member) {
@@ -1352,6 +1386,7 @@ class HoplaFamilyCard extends HTMLElement {
       .grow { flex: 1; }
       .round { width: 40px; height: 40px; flex: none; border-radius: 50%; display: grid; place-items: center; background: rgba(127,127,127,.12); color: var(--secondary-text-color); }
       .round.adj { background: var(--dt-ring); color: #fff; box-shadow: 0 2px 6px rgba(99,102,241,.35); }
+      .round.games { background: rgba(99,102,241,.14); color: var(--dt-ring); }
       .menu { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 24px; background: rgba(127,127,127,.1); min-width: 0; }
       .who { display: flex; align-items: center; gap: 8px; padding: 4px 14px 4px 4px; border-radius: 999px; font-size: 15px; font-weight: 700; color: var(--secondary-text-color); }
       .who:not(.on) .face { opacity: .6; }

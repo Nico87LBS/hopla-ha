@@ -50,11 +50,13 @@ SERVICE_GET_POINTS_HISTORY = "get_points_history"
 SERVICE_SET_FAMILY_TIMEZONE = "set_family_timezone"
 SERVICE_START_CHRONO = "start_chrono"
 SERVICE_STOP_CHRONO = "stop_chrono"
+SERVICE_OPEN_GAMES = "open_games"
 SERVICES = [SERVICE_COMPLETE_TASK, SERVICE_CREATE_TASK, SERVICE_UPDATE_TASK, SERVICE_DELETE_TASK, SERVICE_SKIP_TASK,
             SERVICE_COMPLETE_ASSIGNED_TASK, SERVICE_POSTPONE_TASK, SERVICE_APPROVE_TASK, SERVICE_REJECT_TASK,
             SERVICE_REDEEM_REWARD, SERVICE_APPROVE_REWARD, SERVICE_REJECT_REWARD,
             SERVICE_UNLOCK_PARENT_MODE, SERVICE_LOCK_PARENT_MODE, SERVICE_ADJUST_POINTS, SERVICE_CATCH_UP_SLOT,
-            SERVICE_GET_POINTS_HISTORY, SERVICE_SET_FAMILY_TIMEZONE, SERVICE_START_CHRONO, SERVICE_STOP_CHRONO]
+            SERVICE_GET_POINTS_HISTORY, SERVICE_SET_FAMILY_TIMEZONE, SERVICE_START_CHRONO, SERVICE_STOP_CHRONO,
+            SERVICE_OPEN_GAMES]
 
 COMPLETE_TASK_SCHEMA = vol.Schema({
     vol.Required("task_id"): vol.Coerce(int),
@@ -165,6 +167,11 @@ START_CHRONO_SCHEMA = vol.Schema({
 
 STOP_CHRONO_SCHEMA = vol.Schema({
     vol.Required("task_id"): vol.All(vol.Coerce(int), vol.Range(min=1)),
+    vol.Optional("config_entry_id"): cv.string,
+})
+
+OPEN_GAMES_SCHEMA = vol.Schema({
+    vol.Required("user_id"): vol.All(vol.Coerce(int), vol.Range(min=1)),
     vol.Optional("config_entry_id"): cv.string,
 })
 
@@ -482,6 +489,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                  schema=GET_POINTS_HISTORY_SCHEMA,
                                  supports_response=SupportsResponse.ONLY)
 
+    async def open_games_handler(call: ServiceCall) -> ServiceResponse:
+        return await async_open_games_service(hass, call)
+
+    hass.services.async_register(DOMAIN, SERVICE_OPEN_GAMES, open_games_handler,
+                                 schema=OPEN_GAMES_SCHEMA,
+                                 supports_response=SupportsResponse.ONLY)
+
     async def set_family_timezone_handler(call: ServiceCall) -> None:
         await async_set_family_timezone_service(hass, call)
 
@@ -670,6 +684,25 @@ async def async_stop_chrono_service(hass: HomeAssistant, call: ServiceCall) -> N
         raise HomeAssistantError(str(err)) from err
     finally:
         await coordinator.async_refresh()
+
+
+async def async_open_games_service(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
+    """The address of a member's learning games, good once and for a minute.
+
+    No parent code: playing is for the children, and the link can only play.
+    """
+    config = await _get_config(hass, call)
+    client = config["client"]
+    try:
+        link = await client.async_new_play_link(call.data["user_id"])
+    except Exception as err:
+        raise HomeAssistantError(str(err)) from err
+    return {"url": games_url(client.base_url, link.get("path", "")), "expires_at": link.get("expiresAt")}
+
+
+def games_url(base_url: str, path: str) -> str:
+    """Join Hopla's address and the path of a play link."""
+    return base_url.rstrip("/") + "/" + path.lstrip("/")
 
 
 async def async_get_points_history_service(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:

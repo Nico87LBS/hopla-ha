@@ -362,3 +362,15 @@ set_family_timezone:
       required: false
       selector:
         text:
+open_games:
+  fields:
+    user_id:
+      required: true
+      selector:
+        number:
+          min: 1
+          mode: box
+    config_entry_id:
+      required: false
+      selector:
+        text:

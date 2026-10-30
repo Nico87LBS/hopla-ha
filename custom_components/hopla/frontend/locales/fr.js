@@ -100,6 +100,8 @@ export default {
     today_bonus: "+{n} aujourd'hui",
     today_penalty: "−{n} aujourd'hui",
     adjust_open: 'Bonus ou pénalité pour {name}',
+    games_of: 'Jeux de {name}',
+    games_close: 'Fermer les jeux',
     adjust_for: 'Pour {name}',
     back: 'Retour',
     other_amount: 'Autre montant',

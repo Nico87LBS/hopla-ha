@@ -480,6 +480,20 @@
           "description": "The Hopla integration to use (optional, the first one by default)"
         }
       }
+    },
+    "open_games": {
+      "name": "Open the learning games",
+      "description": "The address of a member's learning games, good once and for a minute; it opens them without signing in and can only play. No parent code.",
+      "fields": {
+        "user_id": {
+          "name": "Member",
+          "description": "The Hopla ID of the member who plays"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
     }
   }
 }
