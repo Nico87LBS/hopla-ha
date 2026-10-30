@@ -22,7 +22,7 @@ async def async_setup_entry(
     """Add a home switch for each child, including those who join later."""
     config = hass.data[DOMAIN][config_entry.entry_id]
     coordinator = config["coordinator"]
-    members: list[HoplaMember] = config["circle_members"]
+    members: list[HoplaMember] = config["family_members"]
     known: set[int] = set()
 
     @callback
@@ -52,7 +52,7 @@ class HoplaHomeSwitch(CoordinatorEntity, SwitchEntity):
 
     @property
     def _member(self) -> HoplaMember | None:
-        members = self.hass.data[DOMAIN][self._config_entry.entry_id]["circle_members"]
+        members = self.hass.data[DOMAIN][self._config_entry.entry_id]["family_members"]
         return next((m for m in members if m.user_id == self.user_id), None)
 
     @property

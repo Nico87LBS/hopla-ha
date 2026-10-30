@@ -45,7 +45,7 @@ def reconnect_delay(attempt: int, base: float = 5, cap: float = 300) -> float:
 
 
 def needs_refresh(event: dict) -> bool:
-    """Whether an event means the circle's data changed."""
+    """Whether an event means the family's data changed."""
     return event.get("type") not in (EVENT_HEARTBEAT, None)
 
 

@@ -30,10 +30,10 @@ def _parse_datetime(value: Any) -> Optional[datetime]:
 
 @dataclass
 class HoplaMember:
-    """Hopla circle member model."""
+    """Hopla family member model."""
     id: int
     user_id: int
-    circle_id: int
+    family_id: int
     role: str
     is_active: bool
     username: str
@@ -52,7 +52,8 @@ class HoplaMember:
         return cls(
             id=data["id"],
             user_id=data["userId"],
-            circle_id=data["circleId"],
+            # circleId: from a server older than 1.29.0.
+            family_id=data["familyId"] if "familyId" in data else data["circleId"],
             role=data["role"],
             is_active=data["isActive"],
             username=data["username"],
@@ -176,11 +177,6 @@ class HoplaTask:
         if self.together:
             return list(self.assignee_ids or [])
         return [self.assigned_to] if self.assigned_to is not None else []
-
-    @property
-    def has_slots(self) -> bool:
-        """Return True when the task is done several times a day."""
-        return isinstance(self.frequency_metadata, dict) and bool(self.frequency_metadata.get("slots"))
 
     @property
     def interval_type(self) -> Optional[str]:

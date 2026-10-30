@@ -55,7 +55,7 @@ class FamilyTimezoneApiTests(unittest.IsolatedAsyncioTestCase):
         calls = []
         zone = {"timezone": "Europe/Lisbon", "server": "Europe/Paris", "custom": True}
         self.assertEqual(await self.client(Response({"res": zone}), calls).async_get_family_timezone(), zone)
-        self.assertEqual(calls, [("GET", "https://hopla.invalid/eapi/v1/circle/timezone", None)])
+        self.assertEqual(calls, [("GET", "https://hopla.invalid/eapi/v1/family/timezone", None)])
 
     async def test_an_older_server_has_no_family_zone(self):
         self.assertIsNone(await self.client(Response({}, status=404), []).async_get_family_timezone())
@@ -65,7 +65,7 @@ class FamilyTimezoneApiTests(unittest.IsolatedAsyncioTestCase):
         zone = {"timezone": "Europe/Lisbon", "server": "Europe/Paris", "custom": True}
         result = await self.client(Response({"res": zone}), calls).async_set_family_timezone("Europe/Lisbon")
         self.assertEqual(result, zone)
-        self.assertEqual(calls, [("PUT", "https://hopla.invalid/eapi/v1/circle/timezone", {"timezone": "Europe/Lisbon"})])
+        self.assertEqual(calls, [("PUT", "https://hopla.invalid/eapi/v1/family/timezone", {"timezone": "Europe/Lisbon"})])
 
     async def test_a_refusal_keeps_the_server_reason(self):
         with self.assertRaisesRegex(ValueError, "Only parents can do this"):

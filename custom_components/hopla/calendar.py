@@ -552,12 +552,12 @@ async def async_setup_entry(
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
     client = data["client"]
-    circle_members = data.get("circle_members", [])
+    family_members = data.get("family_members", [])
 
     async_add_entities(
         [
-            HoplaCalendar(coordinator, client, circle_members, entry),
-            HoplaActivityCalendar(coordinator, client, circle_members, entry),
+            HoplaCalendar(coordinator, client, family_members, entry),
+            HoplaActivityCalendar(coordinator, client, family_members, entry),
         ]
     )
 
@@ -572,13 +572,13 @@ class HoplaCalendar(CoordinatorEntity, CalendarEntity):
         self,
         coordinator: DataUpdateCoordinator,
         client: HoplaApiClient,
-        circle_members: List[HoplaMember],
+        family_members: List[HoplaMember],
         entry: ConfigEntry,
     ) -> None:
         """Initialize the calendar."""
         super().__init__(coordinator)
         self._client = client
-        self._circle_members = circle_members
+        self._family_members = family_members
         self._attr_unique_id = f"{entry.entry_id}_calendar"
         # On the main Hopla device, so the calendars are calendar.hopla_….
         self._attr_device_info = {
@@ -598,7 +598,7 @@ class HoplaCalendar(CoordinatorEntity, CalendarEntity):
         for task in tasks:
             if not task.is_active:
                 continue
-            event = _task_to_event(task, self._circle_members)
+            event = _task_to_event(task, self._family_members)
             if event is None:
                 continue
             event_start = _event_sort_key(event)
@@ -638,7 +638,7 @@ class HoplaCalendar(CoordinatorEntity, CalendarEntity):
                     task.start_time = detail.start_time
                     task.timer_updated_at = detail.timer_updated_at
                     task.duration = detail.duration
-            events.extend(_generate_occurrences(task, self._circle_members, range_start, range_end))
+            events.extend(_generate_occurrences(task, self._family_members, range_start, range_end))
 
         events.sort(key=_event_sort_key)
         return events
@@ -654,13 +654,13 @@ class HoplaActivityCalendar(CoordinatorEntity, CalendarEntity):
         self,
         coordinator: DataUpdateCoordinator,
         client: HoplaApiClient,
-        circle_members: List[HoplaMember],
+        family_members: List[HoplaMember],
         entry: ConfigEntry,
     ) -> None:
         """Initialize the activity log calendar."""
         super().__init__(coordinator)
         self._client = client
-        self._circle_members = circle_members
+        self._family_members = family_members
         self._attr_unique_id = f"{entry.entry_id}_activity_calendar"
         # On the main Hopla device, so the calendars are calendar.hopla_….
         self._attr_device_info = {
@@ -709,7 +709,7 @@ class HoplaActivityCalendar(CoordinatorEntity, CalendarEntity):
 
         events: List[CalendarEvent] = []
         for history in histories:
-            event = _history_to_event(history, tasks_by_id, self._circle_members)
+            event = _history_to_event(history, tasks_by_id, self._family_members)
             if event is not None and _event_in_range(event, range_start, range_end):
                 events.append(event)
 

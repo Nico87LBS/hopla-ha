@@ -730,7 +730,7 @@ class HoplaFamilyCard extends HTMLElement {
     const label = this.t('streak', {count: member.streak});
     return `<span class="streak${member.streakToday ? '' : ' at-risk'}" title="${escape(member.streakToday ? label : `${label} · ${this.t('streak_at_risk')}`)}">${svg('flame', 14)}${member.streak}</span>`;
   }
-  // A drawn badge, or the rank's emoji when the circle chose its own ranks.
+  // A drawn badge, or the rank's emoji when the family chose its own ranks.
   rankBadge(rank, size, extra = '') {
     return rank.image ? `<img class="rank-img${extra}" style="width:${size}px;height:${size}px" src="${badgeUrl(rank.image)}" alt="">`
       : `<span class="rank-img${extra}" style="width:${size}px;height:${size}px;font-size:${Math.round(size * .7)}px">${escape(rank.icon)}</span>`;

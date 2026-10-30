@@ -6,7 +6,7 @@ customElements.define('home-assistant',class extends HTMLElement {});
 const {completedTasks} = await import('../custom_components/hopla/frontend/hopla-user-todo-card.js');
 const today = new Date(Date.now()-60000);
 const yesterday = new Date(today); yesterday.setDate(yesterday.getDate()-1);
-const state = {state:'1',attributes:{circle_members:[{user_id:1,display_name:'Alex'},{user_id:2,display_name:'Sam'}],tasks:[{task_id:10,name:'Daily task',assigned_to:2,next_due_date:new Date(today.getTime()+86400000).toISOString()}],completed_tasks:[
+const state = {state:'1',attributes:{family_members:[{user_id:1,display_name:'Alex'},{user_id:2,display_name:'Sam'}],tasks:[{task_id:10,name:'Daily task',assigned_to:2,next_due_date:new Date(today.getTime()+86400000).toISOString()}],completed_tasks:[
   {uid:'history--1',task_id:10,name:'Daily task',completed_at:today.toISOString(),completed_by:1},
   {uid:'history--2',task_id:10,name:'Yesterday',completed_at:yesterday.toISOString(),completed_by:1}
 ]}};

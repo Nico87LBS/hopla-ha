@@ -48,7 +48,7 @@ class LateSensorTests(unittest.TestCase):
     def run_setup(self, coordinator, members):
         added = []
         entry = SimpleNamespace(entry_id="e", async_on_unload=lambda f: None)
-        hass = SimpleNamespace(data={"hopla": {"e": {"coordinator": coordinator, "circle_members": members}}})
+        hass = SimpleNamespace(data={"hopla": {"e": {"coordinator": coordinator, "family_members": members}}})
         asyncio.run(self.namespace["async_setup_family_sensors"](
             hass, entry, lambda entities: added.extend(type(e).__name__ for e in entities)))
         return added

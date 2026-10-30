@@ -204,7 +204,7 @@ def games_today(data):
         "streak_every": rules.get("streakEvery", 0),
         "streak_bonus": rules.get("streakBonus", 0),
         "ranks": {item["userId"]: _rank(item) for item in data.get("members") or []},
-        # Every rank of the circle, lowest first, for the card's rank details.
+        # Every rank of the family, lowest first, for the card's rank details.
         "rank_ladder": [{
             "name": rank.get("name"),
             "icon": rank.get("icon"),

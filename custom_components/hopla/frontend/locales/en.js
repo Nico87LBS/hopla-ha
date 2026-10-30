@@ -311,7 +311,7 @@ export default {
   editor: {
     loading: 'Loading Home Assistant editor controls…',
     load_error: 'Could not load Home Assistant editor controls. Reload the dashboard and reopen this editor.',
-    no_members: 'Select a Hopla list with circle members to choose its users. The integration must be loaded.',
+    no_members: 'Select a Hopla list with family members to choose its users. The integration must be loaded.',
     days: 'days',
     labels: {
       entity: 'Hopla task list',
@@ -364,7 +364,7 @@ export default {
       label_match: 'Any (OR) matches at least one selected label. All (AND) requires every selected label. User and date filters still apply.',
       show_labels: 'Show small label chips below each task’s due date. Hidden by default; long names wrap within the task column.',
       use_label_colors: 'Use each label’s Hopla background color and matching readable text. Labels without a valid color keep the neutral style.',
-      entity: 'Choose All Tasks to make tasks for every circle user available.',
+      entity: 'Choose All Tasks to make tasks for every family user available.',
       user_id: 'Show one user’s tasks or all users. Completion is credited to each task’s current assignee, or the API token owner for Anyone tasks.',
       include_anyone: 'Show Anyone tasks alongside the selected user’s tasks, using the same date filters and sorting.',
       show_assignee: 'Show the assigned name beside the due date. Available when the list can contain multiple users.',

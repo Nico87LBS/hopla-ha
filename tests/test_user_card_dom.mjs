@@ -14,7 +14,7 @@ assert.equal(descriptionText('<p><br></p><p>&nbsp;</p>'),'');
 assert.equal(descriptionText('<script>alert(1)</script><style>body{display:none}</style><p onclick="alert(1)">Safe<img src="bad" onerror="alert(1)"></p>'),'Safe');
 assert.equal(descriptionText('<p>&lt;script&gt;literal&lt;/script&gt;</p>'),'<script>literal</script>');
 const calls=[]; let fail=false;
-const hass={locale:{language:'en'},states:{'todo.all':{state:'2',attributes:{config_entry_id:'entry',circle_members:[{user_id:1,display_name:'Torben'}],tasks:[
+const hass={locale:{language:'en'},states:{'todo.all':{state:'2',attributes:{config_entry_id:'entry',family_members:[{user_id:1,display_name:'Torben'}],tasks:[
   {task_id:1,assigned_to:1,name:'Weekly',description:'First line\n<script>plain text</script>',can_postpone:true,next_due_date:'2036-10-20T16:00:00Z'},
   {task_id:2,assigned_to:1,name:'One-off',can_postpone:false},
   {task_id:3,assigned_to:2,name:'Other user',can_postpone:true}
@@ -48,7 +48,7 @@ delete hass.states['sensor.games'];card.hass=hass;
 card.setConfig({entity:'todo.all',user_id:1});
 const sharedCard=document.createElement('hopla-user-todo-card');
 const sharedHass={...hass,states:{'todo.member':{attributes:{config_entry_id:'entry',hopla_user_id:1,
-  circle_members:[{user_id:1,display_name:'Torben'}],
+  family_members:[{user_id:1,display_name:'Torben'}],
   tasks:[{task_id:10,assigned_to:1,name:'My task',can_postpone:false}],
   anyone_tasks:[{task_id:11,assigned_to:null,name:'Shared task',can_postpone:false}]}}}};
 sharedCard.setConfig({entity:'todo.member',user_id:1});sharedCard.hass=sharedHass;
@@ -254,7 +254,7 @@ await new Promise(resolve=>setTimeout(resolve,1050));
 card.setConfig({entity:'todo.all',user_id:1,complete_control:'button',button_content:'icon_and_label'});
 assert.equal(root.querySelectorAll('input[type=checkbox]').length,0);
 // Multi-user labels depend on the view's scope, even when only one user's tasks match.
-hass.states['todo.all'].attributes.circle_members.push({user_id:2,display_name:'Melissa'},{user_id:3,display_name:'Not eligible'});
+hass.states['todo.all'].attributes.family_members.push({user_id:2,display_name:'Melissa'},{user_id:3,display_name:'Not eligible'});
 hass.states['todo.all'].attributes.tasks[0].assignee_ids=[1,2];
 card.setConfig({entity:'todo.all',user_id:'all'});
 assert.equal(root.querySelectorAll('.row').length,3);
