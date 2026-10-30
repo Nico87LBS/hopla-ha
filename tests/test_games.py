@@ -199,5 +199,58 @@ class ProgressionTests(unittest.TestCase):
         self.assertEqual(fired, [])
 
 
+class NextChangeRefreshTests(unittest.TestCase):
+    def setUp(self):
+        self.timers = []
+        self.refreshes = 0
+
+        def schedule(when, action):
+            timer = {"when": when, "action": action, "live": True}
+            self.timers.append(timer)
+
+            def cancel():
+                timer["live"] = False
+            return cancel
+
+        def refresh():
+            self.refreshes += 1
+
+        self.next = games.NextChangeRefresh(schedule, refresh)
+
+    def live(self):
+        return [t for t in self.timers if t["live"]]
+
+    def test_refreshes_a_second_after_the_next_change(self):
+        self.next.update({"next_change_at": "2026-10-30T23:00:00Z"})
+        self.assertEqual(len(self.live()), 1)
+        self.assertEqual(self.live()[0]["when"].isoformat(), "2026-10-30T23:00:01+00:00")
+        self.live()[0]["action"]()
+        self.assertEqual(self.refreshes, 1)
+
+    def test_the_same_time_is_scheduled_once_and_a_new_one_replaces_it(self):
+        self.next.update({"next_change_at": "2026-10-30T23:00:00Z"})
+        self.next.update({"next_change_at": "2026-10-30T23:00:00Z"})
+        self.assertEqual(len(self.live()), 1)
+        self.next.update({"next_change_at": "2026-10-30T15:00:00Z"})
+        self.assertEqual(len(self.live()), 1)
+        self.assertEqual(self.live()[0]["when"].hour, 15)
+
+    def test_nothing_is_scheduled_without_a_time(self):
+        self.next.update(None)
+        self.next.update({"next_change_at": None})
+        # An older Hopla sends Go's zero time.
+        self.next.update({"next_change_at": "0001-01-01T00:00:00Z"})
+        self.assertEqual(self.live(), [])
+
+    def test_cancel_stops_the_timer(self):
+        self.next.update({"next_change_at": "2026-10-30T23:00:00Z"})
+        self.next.cancel()
+        self.assertEqual(self.live(), [])
+
+    def test_games_today_carries_the_next_change(self):
+        self.assertEqual(games.games_today({"nextChangeAt": "2026-10-30T23:00:00Z"})["next_change_at"],
+                         "2026-10-30T23:00:00Z")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -206,7 +206,6 @@ class HoplaTodoListBase(CoordinatorEntity, TodoListEntity):
                  "assignee_ids": task.assignee_ids or [],
                  "assign_strategy": task.assign_strategy,
                  "description": task.description,
-                 "priority": task.priority,
                  "labels": task.labels or [],
                  "points": task.points,
                  "chrono": chrono_attributes(task.flash),

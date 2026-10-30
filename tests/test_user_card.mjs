@@ -44,7 +44,8 @@ const sortingState={attributes:{tasks:[
 ]}};
 const sortedIds=sort=>userTasks(sortingState,1,'all',new Date(),7,sort,'en').map(task=>task.task_id);
 assert.deepEqual(sortedIds('due_date'),[1,5,3,2,4,6]);
-assert.deepEqual(sortedIds('priority'),[3,2,6,5,1,4]);
+// Priority is gone: an old card set to it sorts by due date.
+assert.deepEqual(sortedIds('priority'),sortedIds('due_date'));
 assert.deepEqual(sortedIds('name'),[3,2,4,6,5,1]);
 assert.deepEqual(sortingState.attributes.tasks.map(task=>task.task_id),[1,2,3,4,5,6]);
 assert.deepEqual(actionData(state, state.attributes.tasks[0]), {task_id: 1, config_entry_id: 'entry'});

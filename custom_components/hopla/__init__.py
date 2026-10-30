@@ -17,7 +17,7 @@ from .api import HoplaApiClient
 from .frontend import async_setup_frontend
 from .completion_history import async_completed_occurrences
 from .approval import ApprovalTracker, STATUS_PENDING_APPROVAL, pending_approvals, member_name
-from .games import GamesTracker, PointsLedgerTracker, games_today, history_page, presets as points_presets
+from .games import GamesTracker, NextChangeRefresh, PointsLedgerTracker, games_today, history_page, presets as points_presets
 from .realtime import RealtimeListener
 from .reminders import ReminderScheduler
 from .chrono import ChronoTracker
@@ -230,6 +230,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     reward_requests = RewardRequestTracker(hass.bus.async_fire)
     ledger = PointsLedgerTracker(hass.bus.async_fire)
     games = GamesTracker(hass.bus.async_fire)
+    # The coordinator is created below; it exists by the time this fires.
+    next_change = NextChangeRefresh(
+        lambda when, action: async_track_point_in_utc_time(hass, callback(action), when),
+        lambda: hass.async_create_task(coordinator.async_request_refresh()),
+    )
+    entry.async_on_unload(next_change.cancel)
 
     @callback
     def parent_mode_changed() -> None:
@@ -284,6 +290,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             coordinator.games_today = games_today(await client.async_get_games_today())
             games.update(coordinator.games_today, entry.entry_id, circle_members)
+            next_change.update(coordinator.games_today)
         except Exception as err:
             _LOGGER.debug("Failed to refresh today's games: %s", err)
         # What she did before leaving can still be approved.
