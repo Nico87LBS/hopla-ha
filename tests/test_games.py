@@ -93,6 +93,15 @@ class GamesTodayTests(unittest.TestCase):
         quiet = games.games_today({"surprise": None, "period": None, "streaks": None})
         self.assertIsNone(quiet["surprise"])
         self.assertEqual(quiet["streaks"], {})
+        self.assertEqual(quiet["routines"], [])
+
+    def test_routines_carry_each_child_step(self):
+        today = games.games_today({"routines": [{"id": 3, "name": "Matin", "bonus": 5, "choreIds": [1, 2],
+                                                 "taskIds": [1, 2, 4],
+                                                 "members": [{"userId": 2, "current": 2, "step": 2, "done": 1,
+                                                              "total": 2, "finished": False}]}]})
+        self.assertEqual(today["routines"], [{"id": 3, "name": "Matin", "bonus": 5, "task_ids": [1, 2, 4], "members": [
+            {"user_id": 2, "current": 2, "step": 2, "done": 1, "total": 2, "finished": False}]}])
 
     def test_events_for_a_new_surprise_and_periods_starting_and_ending(self):
         fired = []
