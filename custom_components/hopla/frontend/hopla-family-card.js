@@ -6,7 +6,7 @@
 // Wait before defining classes so they use the final registry and base class.
 await customElements.whenDefined('home-assistant');
 
-const {translator, browserLanguage, reloadIfOutdated, deviceZone, setFamilyZone, familyZoneOf, wallClock, fromWallClock} = await import(new URL(`./hopla-i18n.js${new URL(import.meta.url).search}`, import.meta.url));
+const {translator, browserLanguage, reloadIfOutdated, deviceZone, setFamilyZone, familyZoneOf, setFamilyCurrency, familyCurrencyOf, wallClock, fromWallClock} = await import(new URL(`./hopla-i18n.js${new URL(import.meta.url).search}`, import.meta.url));
 const KEYS = {allDone: 'all_done', noTasks: 'no_tasks', noMembers: 'no_members'};
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -402,6 +402,7 @@ class HoplaFamilyCard extends HTMLElement {
     const previous = this._hass;
     this._hass = hass;
     setFamilyZone(familyZoneOf(hass)?.zone);
+    setFamilyCurrency(familyCurrencyOf(hass));
     const relevant = id => (id.startsWith('sensor.') || id.startsWith('binary_sensor.')) && isHopla(hass, id);
     if (previous && Object.keys(hass.states).every(id => !relevant(id) || previous.states[id] === hass.states[id])
       && Object.keys(previous.states).every(id => !relevant(id) || hass.states[id])

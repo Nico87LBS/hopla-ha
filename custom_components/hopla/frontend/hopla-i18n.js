@@ -24,6 +24,29 @@ export function loadLanguage(language) {
 
 const lookup = (table, key) => key.split('.').reduce((node, part) => node?.[part], table);
 
+// What the family earns (hops, stars, carrots…), as Hopla publishes it on
+// the games sensor. Its words, from the language file, fill {unit}, {units},
+// {Unit}, {Units}, {AUnit}, {ofUnits} and {e} in every text.
+export const CURRENCIES = ['hops', 'points', 'stars', 'carrots', 'coins', 'tokens'];
+let familyCurrency = CURRENCIES[0];
+
+export function setFamilyCurrency(name) {
+  familyCurrency = CURRENCIES.includes(name) ? name : CURRENCIES[0];
+}
+
+export function familyCurrencyOf(hass) {
+  return Object.values(hass?.states || {}).find(state => state.attributes?.hopla_games)?.attributes.family_currency || null;
+}
+
+const capitalize = word => word.charAt(0).toUpperCase() + word.slice(1);
+
+function currencyWords(base) {
+  const words = lookup(strings.get(base), `currency.${familyCurrency}`) ?? lookup(strings.get('en'), `currency.${familyCurrency}`);
+  if (!words) return {};
+  return {unit: words.one, units: words.other, Unit: capitalize(words.one), Units: capitalize(words.other),
+    AUnit: capitalize(words.a), ofUnits: words.of, e: words.e || ''};
+}
+
 // Returns t(key, values). A number in values.count picks the plural form
 // key_one or key_other for the language, and {name} inserts values.name.
 export function translator(language, onLoad) {
@@ -40,7 +63,8 @@ export function translator(language, onLoad) {
       return typeof text === 'string' ? text : undefined;
     };
     const text = find(strings.get(base)) ?? find(strings.get('en')) ?? key;
-    return text.replace(/\{(\w+)\}/g, (match, name) => values[name] ?? match);
+    const words = currencyWords(base);
+    return text.replace(/\{(\w+)\}/g, (match, name) => values[name] ?? words[name] ?? match);
   };
 }
 

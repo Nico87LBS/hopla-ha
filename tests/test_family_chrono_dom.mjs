@@ -53,7 +53,7 @@ assert.equal(root.querySelector('.chrono-choices'), null, 'the window closes');
 // The running one can be stopped.
 click('[data-action="chrono-open"][data-task="7"]');
 await settle();
-assert.match(root.querySelector('.chrono-live').textContent, /\+5 points/);
+assert.match(root.querySelector('.chrono-live').textContent, /\+5 hops/);
 click('[data-action="chrono-stop"]');
 await settle();
 assert.deepEqual(calls.at(-1).slice(1, 3), ['stop_chrono', {task_id: 7}]);

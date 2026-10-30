@@ -196,6 +196,8 @@ def games_today(data):
         "challenges": [_challenge(c) for c in data.get("challenges") or []],
         # Whether the parents stand on the podium with the children.
         "parents_on_podium": data.get("parentsOnPodium", False),
+        # What the family earns: hops, points, stars, carrots, coins or tokens.
+        "currency": data.get("currency") or "hops",
         # When the games change on their own: midnight, a bonus period edge.
         "next_change_at": data.get("nextChangeAt"),
     }

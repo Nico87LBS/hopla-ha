@@ -313,5 +313,7 @@ class HoplaGamesSensor(_FamilySensor):
             "challenges": today.get("challenges", []),
             "ranks": today.get("rank_ladder", []),
             "parents_on_podium": today.get("parents_on_podium", False),
+            # The cards name what the family earns with it.
+            "family_currency": today.get("currency", "hops"),
             "config_entry_id": self._config_entry.entry_id,
         }
