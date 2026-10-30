@@ -95,6 +95,7 @@ L'état est le nom de la tâche.
 | | `bonus_period` | Période bonus en cours : `name`, `multiplier`, `starts_at`, `ends_at` |
 | | `streak_every`, `streak_bonus` | Le bonus de série : tous les combien de jours, et combien de points |
 | | `challenges` | Défis en cours : `name`, `shared` (défi en famille), `members`, `progress` par membre, `total`, `target`, `reward`, `reward_text`, `done`, `winners`, `ends_at` |
+| | `routines` | Routines (tâches à faire dans l'ordre) : `id`, `name`, `bonus`, `task_ids` (toutes les tâches de la routine, copies de chaque enfant comprises) et `members`, où en est chaque enfant aujourd'hui : `user_id`, `current` (la tâche de l'étape à faire, ou rien), `step`, `done`, `total`, `finished`. Les cartes ne montrent que l'étape à faire |
 | | `family_currency` | Ce que la famille gagne, choisi dans Hopla : `hops`, `points`, `stars`, `carrots`, `coins` ou `tokens`. Les cartes l'utilisent dans tous leurs textes |
 
 Les jeux se règlent dans Hopla, onglet Jeux de la page Points.

@@ -215,6 +215,29 @@ export function descriptionText(value) {
   return [...template.content.childNodes].map(text).join('').replace(/\u00a0/g,' ')
     .replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
 }
+// The games sensor of the family a list belongs to: it carries the routines.
+function gamesState(hass, state) {
+  const entry = state?.attributes?.config_entry_id;
+  return Object.entries(hass?.states || {}).find(([id, games]) => id.startsWith('sensor.') && games.attributes?.hopla_games
+    && (!entry || games.attributes.config_entry_id === entry))?.[1];
+}
+// A routine chains tasks in order; each child sees the step to do now. The
+// routine and the child's progress when a task is that step, else null.
+export function routineStepOf(routines, task) {
+  const routine = (routines || []).find(r => (r.task_ids || []).includes(task.task_id));
+  if (!routine) return null;
+  const holders = !together(task) && task.assigned_to != null ? [task.assigned_to] : task.assignee_ids || [];
+  const progress = (routine.members || []).find(p => p.current === task.task_id && holders.includes(p.user_id));
+  return progress ? {routine, progress} : null;
+}
+// A step due today that is nobody's step to do now waits, hidden, for the
+// steps before it. Steps due another day show as usual.
+export function waitsInRoutine(routines, task, now = wallClock()) {
+  if (!(routines || []).some(r => (r.task_ids || []).includes(task.task_id)) || !task.next_due_date) return false;
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  if (!(wallClock(task.next_due_date) < tomorrow)) return false;
+  return !routineStepOf(routines, task);
+}
 // HA replaces its hass object for unrelated entity updates too. Only the selected
 // list and presentation settings affect this card's DOM.
 function samePresentation(previous, next) {
@@ -282,6 +305,7 @@ class HoplaUserTodoCard extends HTMLElement {
     const minute = Math.floor(Date.now() / 60000);
     const unchanged = previous && previous !== hass && this._lastHassMinute === minute
       && previous.states[this._config?.entity] === hass.states[this._config?.entity]
+      && gamesState(previous, previous.states[this._config?.entity]) === gamesState(hass, hass.states[this._config?.entity])
       && samePresentation(previous, hass);
     this._hass = hass; this._lastHassMinute = minute;
     if (!unchanged) this.render();
@@ -291,8 +315,11 @@ class HoplaUserTodoCard extends HTMLElement {
     return 2 + (this._config?.task_view === 'completed' ? 0 : this.filteredTasks(state).length)
       + (this._config?.task_view === 'pending' ? 0 : completedTasks(state, this._config?.user_id, wallClock(), this._config).length);
   }
+  routines(state) { return gamesState(this._hass, state)?.attributes.routines || []; }
   filteredTasks(state) {
-    return userTasks(state, this._config?.user_id, this._config?.display_filters ?? this._config?.display_filter, wallClock(), this._config?.upcoming_days, this._config?.sort_by, this._hass?.locale?.language, this._config?.include_overdue, this._config?.labels, this._config?.label_match, this._config?.include_anyone);
+    const routines = this.routines(state);
+    return userTasks(state, this._config?.user_id, this._config?.display_filters ?? this._config?.display_filter, wallClock(), this._config?.upcoming_days, this._config?.sort_by, this._hass?.locale?.language, this._config?.include_overdue, this._config?.labels, this._config?.label_match, this._config?.include_anyone)
+      .filter(task => this._completed.has(task.task_id) || !waitsInRoutine(routines, task));
   }
   async act(task, complete, dueDate, assignedTo) {
     if (this._pending.has(task.task_id)) return;
@@ -353,6 +380,7 @@ class HoplaUserTodoCard extends HTMLElement {
       .task-chrono { display:inline-flex; align-items:center; gap:3px; flex-shrink:0; padding:0 6px; border-radius:10px; background:rgba(91,79,224,.13); color:#5b4fe0; font-size:11px; font-weight:700; line-height:18px; white-space:nowrap; }
       .task-chrono ha-icon { --mdc-icon-size:12px; }
       .task-mode { display:flex; align-items:center; gap:4px; font-size:12px; font-weight:600; line-height:16px; } .task-mode ha-icon { --mdc-icon-size:14px; }
+      .task-routine { display:flex; align-items:center; gap:4px; font-size:12px; font-weight:700; line-height:16px; color:#1f8a4c; } .task-routine ha-icon { --mdc-icon-size:14px; }
       .task-mode.each { color:#3b6fd8; } .task-mode.first { color:#e8590c; } .task-mode.one { color:var(--secondary-text-color); }
       .task-recurrence { display:flex; align-items:center; gap:4px; color:var(--secondary-text-color); font-size:12px; line-height:16px; }
       .task-recurrence ha-icon { --mdc-icon-size:14px; flex-shrink:0; }
@@ -474,6 +502,13 @@ class HoplaUserTodoCard extends HTMLElement {
       if (mode) {
         const label = addText(text, 'span', t(`common.mode_${mode}`), `task-mode ${mode}`);
         const icon = document.createElement('ha-icon'); icon.setAttribute('icon', MODE_ICONS[mode]);
+        icon.setAttribute('aria-hidden', 'true'); label.prepend(icon);
+      }
+      const step = routineStepOf(this.routines(state), task);
+      if (step) {
+        const label = addText(text, 'span', `${step.routine.name} ${t('todo.routine_step', {step: step.progress.step, total: step.progress.total})}`, 'task-routine');
+        label.title = t('todo.routine_title', {name: step.routine.name, step: step.progress.step, total: step.progress.total});
+        const icon = document.createElement('ha-icon'); icon.setAttribute('icon', 'mdi:format-list-numbered');
         icon.setAttribute('aria-hidden', 'true'); label.prepend(icon);
       }
       if (recurrence) {

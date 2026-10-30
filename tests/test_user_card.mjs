@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 globalThis.HTMLElement = class {};
 globalThis.customElements = {define() {}, get() {}, whenDefined() { return Promise.resolve(); }};
 globalThis.window = {};
-const {userTasks, actionData, emptyMessage, dueText, upcomingDayLimit, taskLabels, dateFilters, recurrenceText} = await import('../custom_components/hopla/frontend/hopla-user-todo-card.js');
+const {userTasks, routineStepOf, waitsInRoutine, actionData, emptyMessage, dueText, upcomingDayLimit, taskLabels, dateFilters, recurrenceText} = await import('../custom_components/hopla/frontend/hopla-user-todo-card.js');
 for (const unit of ['hours','days','weeks','months','years']) {
   assert.equal(recurrenceText({frequency_type:'interval',frequency:6,interval_type:unit}),`Every 6 ${unit}`);
   assert.equal(recurrenceText({frequency_type:'interval',frequency:1,interval_type:unit}),`Every 1 ${unit.slice(0,-1)}`);
@@ -181,3 +181,15 @@ const modeTasks = [
 ];
 assert.deepEqual(modeTasks.map(task => taskMode(task, modeTasks)), ['each', 'each', 'first', 'one', '']);
 console.log('Shared tasks show how they work');
+
+{
+  // A routine shows one step at a time: the others due today wait their turn.
+  const routines = [{id: 1, name: 'Matin', task_ids: [1, 2, 3], members: [{user_id: 2, current: 2, step: 2, done: 1, total: 3}]}];
+  const now = new Date(2026, 9, 30, 8, 0);
+  const step = (id, due) => ({task_id: id, assigned_to: 2, assignee_ids: [2], next_due_date: due});
+  assert.equal(waitsInRoutine(routines, step(2, '2026-10-30T09:00:00'), now), false, 'the step to do now');
+  assert.equal(waitsInRoutine(routines, step(3, '2026-10-30T09:00:00'), now), true, 'the next one waits');
+  assert.equal(waitsInRoutine(routines, step(3, '2026-11-02T09:00:00'), now), false, 'another day shows');
+  assert.equal(waitsInRoutine(routines, step(9, '2026-10-30T09:00:00'), now), false, 'not in a routine');
+  assert.equal(routineStepOf(routines, step(2)).progress.step, 2);
+}

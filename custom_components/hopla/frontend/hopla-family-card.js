@@ -189,6 +189,25 @@ export function rowChrono(row, now = new Date()) {
   return row.tasks.filter(task => !task.pending).map(task => task.chrono).find(chrono => chrono && chrono.endsAt > now) || null;
 }
 
+// A routine chains tasks in order; each child sees the step to do now. The
+// routine and the child's progress when a task is that step for one of its
+// children, else null.
+export function routineStep(routines, task) {
+  const routine = (routines || []).find(r => (r.task_ids || []).includes(task.id));
+  if (!routine) return null;
+  const holders = !task.together && task.assignedTo != null ? [task.assignedTo] : task.assignees || [];
+  const progress = (routine.members || []).find(p => p.current === task.id && holders.includes(p.user_id));
+  return progress ? {routine, progress} : null;
+}
+
+// A step of a routine due today that is nobody's step to do now waits,
+// hidden, for the steps before it. Steps due another day show as usual.
+export function waitsInRoutine(routines, task, endOfDay) {
+  if (!(routines || []).some(r => (r.task_ids || []).includes(task.id))) return false;
+  if (!task.due || task.due > endOfDay) return false;
+  return !routineStep(routines, task);
+}
+
 // Who may approve and spend points here. Without parents chosen in the
 // integration options, everyone may; otherwise a parent's own account may,
 // and anyone else only while parent mode is open.
@@ -221,6 +240,7 @@ export function boardData(hass, config, now = new Date()) {
   let challenges = [];
   let ladder = [];
   let parentsOnPodium = false;
+  let routines = [];
   for (const [id, state] of Object.entries(hass.states)) {
     if (!id.startsWith('sensor.') || !isHopla(hass, id)) continue;
     const a = state.attributes;
@@ -246,6 +266,7 @@ export function boardData(hass, config, now = new Date()) {
       period = a.bonus_period || null;
       challenges = Array.isArray(a.challenges) ? a.challenges : [];
       parentsOnPodium = a.parents_on_podium === true;
+      routines = Array.isArray(a.routines) ? a.routines : [];
       ladder = Array.isArray(a.ranks) ? a.ranks.map(r => ({name: r.name || '', icon: r.icon || '', image: rankImage(r.image), points: Number(r.min_points) || 0})) : [];
     } else if (Array.isArray(a.points_presets)) {
       presets = a.points_presets;
@@ -280,7 +301,8 @@ export function boardData(hass, config, now = new Date()) {
   // given a date; other tasks without a date can be done any day.
   const visible = tasks.filter(task => labelled(task.labels)
     && !(task.frequencyType === 'trigger' && !task.due)
-    && (config.due !== 'today' || !task.due || task.due <= endOfDay || slottedToday(task)))
+    && (config.due !== 'today' || !task.due || task.due <= endOfDay || slottedToday(task))
+    && !waitsInRoutine(routines, task, endOfDay))
     .map(task => {
       // The heads of who has the task now: its assignee, or all of them for a
       // task for everyone together (or anyone's, with nobody chosen).
@@ -291,7 +313,7 @@ export function boardData(hass, config, now = new Date()) {
       const isSurprise = surprise && (surprise.task_id === task.id || (surprise.task_ids || []).includes(task.id)
         || sameName(surprise.task_name) === sameName(task.name));
       const slots = todaySlots(task.slots, now);
-      return {...task, slots, members: candidates, surprise: isSurprise ? surprise.points : 0,
+      return {...task, slots, members: candidates, surprise: isSurprise ? surprise.points : 0, routine: routineStep(routines, task),
         completedBy: task.pending && !slots.length ? shown.find(m => m.id === completers.get(task.id)) || null : null};
     })
     .filter(task => task.members.length || task.pending)
@@ -326,6 +348,7 @@ const icon = {
   left: '<path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>',
   flame: '<path d="M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-5 3-6 0 2 1 3 2 3 0-4-1-6 1-9z" fill="currentColor"/>',
   sparkle: '<path d="M12 2l2.2 6.3L20.5 10l-6.3 2.2L12 18.5l-2.2-6.3L3.5 10l6.3-1.7zM19 15l.9 2.6 2.6.9-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9z" fill="currentColor"/>',
+  steps: '<path d="M10 6h11M10 12h11M10 18h11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M4 5l1.5-1v5M3.5 14.5a1.5 1.5 0 0 1 3 0c0 1.5-3 2.5-3 4h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
   bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="currentColor"/>',
   gamepad: '<path d="M7 7h10a5 5 0 0 1 4.9 6l-.7 3.6a2.6 2.6 0 0 1-4.6 1.1L14.8 15H9.2l-1.8 2.7a2.6 2.6 0 0 1-4.6-1.1L2.1 13A5 5 0 0 1 7 7z" fill="currentColor"/><path d="M8 9.5v3M6.5 11h3" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><circle cx="15.5" cy="10.3" r="1.1" fill="#fff"/><circle cx="17.3" cy="12.2" r="1.1" fill="#fff"/>',
   timer: '<path d="M9.5 2.5h5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="13.5" r="8" fill="currentColor"/><path d="M12 9.5v4.5" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>',
@@ -850,7 +873,7 @@ class HoplaFamilyCard extends HTMLElement {
       const summary = [pendingCount ? this.t('to_approve', {count: pendingCount}) : '', missedCount ? this.t('missed_slots', {count: missedCount}) : ''].filter(Boolean).join(' · ');
       const waiting = [...new Set(row.slots.filter(entry => entry.slots.some(slot => slot.state === 'pending')).map(entry => entry.task.id))];
       const approveAll = pendingCount > 1 ? `<button class="approve-all" data-action="approve-all" data-tasks="${waiting.join(',')}" ${busy ? 'disabled' : ''}>${svg('check', 16)}${escape(this.t('approve_all', {count: pendingCount}))}</button>` : '';
-      return `<div class="row slotted open-grid"><div class="grid-top"><span class="name"><span>${escape(row.name)}</span>${this.mode(row)}${this.chrono(row)}</span>${this.points(row.points)}${sparkle}</div>
+      return `<div class="row slotted open-grid"><div class="grid-top"><span class="name"><span>${escape(row.name)}</span>${this.mode(row)}${this.routine(row)}${this.chrono(row)}</span>${this.points(row.points)}${sparkle}</div>
         <div class="grid" style="grid-template-columns: minmax(80px, 110px) repeat(${row.columns.length}, minmax(0, 1fr))"><span></span>${head}${lines}</div>
         <div class="gfoot"><span>${escape(summary)}</span>${approveAll}</div></div>`;
     }
@@ -864,7 +887,7 @@ class HoplaFamilyCard extends HTMLElement {
       return `<button class="ringbtn${busy && this._busy.get(busy.id) === m.id ? ' busy' : ''}" data-action="complete" data-task="${task.id}" data-member="${m.id}"
         ${open && !busy ? '' : 'disabled'} aria-label="${escape(label)}" title="${escape(label)}">${this.ring(slots)}<span class="ring-face">${this.face(m, 48)}</span>${waiting ? this.badge('amber', 'hourglass') : ''}</button>`;
     }).join('');
-    return `<div class="row slotted${surprise ? ' is-surprise' : ''}"><span class="name"><span>${escape(row.name)}</span>${this.mode(row)}<span class="slot-pills">${pills}</span>${this.chrono(row)}</span>${this.points(row.points)}${sparkle}<span class="faces">${right}</span></div>`;
+    return `<div class="row slotted${surprise ? ' is-surprise' : ''}"><span class="name"><span>${escape(row.name)}</span>${this.mode(row)}${this.routine(row)}<span class="slot-pills">${pills}</span>${this.chrono(row)}</span>${this.points(row.points)}${sparkle}<span class="faces">${right}</span></div>`;
   }
   // The speed bonus open on a row, and for a parent the way to start one.
   chrono(row) {
@@ -902,6 +925,14 @@ class HoplaFamilyCard extends HTMLElement {
       ${this._error ? `<div class="error">${escape(this._error)}</div>` : ''}</div></div>`;
   }
   // The mode of a task shared by several people, under its name.
+  // The routine of a step to do now: its name, and how far the child is when
+  // the row is one child's.
+  routine(row) {
+    const step = row.tasks.map(task => task.routine).find(Boolean);
+    if (!step) return '';
+    const count = row.tasks.length === 1 ? `<span>${escape(this.t('routine_step', {step: step.progress.step, total: step.progress.total}))}</span>` : '';
+    return `<span class="routine" title="${escape(this.t('routine_title', {name: step.routine.name, step: step.progress.step, total: step.progress.total}))}">${svg('steps', 14)}<span class="routine-name">${escape(step.routine.name)}</span>${count}</span>`;
+  }
   mode(row) {
     if (!row.mode) return '';
     const symbol = {each: 'people', first: 'bolt', one: 'person'}[row.mode];
@@ -927,7 +958,7 @@ class HoplaFamilyCard extends HTMLElement {
     const waiting = row.pending ? `<span class="hourglass">${svg('hourglass', 18, this.t('pending'))}</span>` : '';
     const surprise = row.tasks.find(task => task.surprise);
     const sparkle = surprise ? `<span class="surprise" title="${escape(this.t('surprise', {n: surprise.surprise}))}">${svg('sparkle', 14)}+${surprise.surprise}</span>` : '';
-    return `<div class="row${row.pending ? ' is-pending' : ''}${surprise ? ' is-surprise' : ''}"><span class="name"><span>${escape(row.name)}</span>${this.mode(row)}${this.chrono(row)}</span>${this.points(row.points)}${sparkle}${waiting}<span class="faces">${right}</span></div>`;
+    return `<div class="row${row.pending ? ' is-pending' : ''}${surprise ? ' is-surprise' : ''}"><span class="name"><span>${escape(row.name)}</span>${this.mode(row)}${this.routine(row)}${this.chrono(row)}</span>${this.points(row.points)}${sparkle}${waiting}<span class="faces">${right}</span></div>`;
   }
   renderDone(row) {
     const faces = row.items.map(item => `<span class="slot" title="${escape(item.member.name)}">${this.face(item.member, 40)}${this.badge('done', 'check')}</span>`).join('');
@@ -1226,6 +1257,9 @@ class HoplaFamilyCard extends HTMLElement {
       .chrono { display: inline-flex; align-self: flex-start; align-items: center; gap: 3px; margin-top: 4px; padding: 3px 9px 3px 7px; border-radius: 999px; font-size: 13px; font-weight: 800;
         background: rgba(91,79,224,.13); color: #5b4fe0; white-space: nowrap; }
       button.chrono { touch-action: manipulation; }
+      .routine { display: inline-flex; align-self: flex-start; align-items: center; gap: 4px; max-width: 100%; margin-top: 4px; padding: 3px 9px 3px 7px; border-radius: 999px;
+        font-size: 13px; font-weight: 800; line-height: 1.2; color: #1f8a4c; background: rgba(35,147,79,.14); white-space: nowrap; }
+      .routine-name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
       .chrono-add { align-self: flex-start; display: inline-flex; align-items: center; margin-top: 4px; padding: 3px 7px; border-radius: 999px; color: rgba(91,79,224,.6); background: rgba(91,79,224,.07); }
       .chrono-icon { width: 40px; height: 40px; flex: none; border-radius: 12px; display: grid; place-items: center; background: rgba(91,79,224,.13); color: #5b4fe0; }
       .chrono-help { margin: 12px 2px 0; font-size: 14px; color: var(--secondary-text-color); }

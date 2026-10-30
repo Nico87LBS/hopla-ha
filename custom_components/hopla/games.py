@@ -153,6 +153,25 @@ def _challenge(challenge):
     }
 
 
+def _routine(routine):
+    """A routine, its tasks (each child's copy included) and where each
+    member stands today."""
+    return {
+        "id": routine["id"],
+        "name": routine.get("name"),
+        "bonus": routine.get("bonus", 0),
+        "task_ids": routine.get("taskIds") or [],
+        "members": [{
+            "user_id": item["userId"],
+            "current": item.get("current"),
+            "step": item.get("step", 0),
+            "done": item.get("done", 0),
+            "total": item.get("total", 0),
+            "finished": item.get("finished", False),
+        } for item in routine.get("members") or []],
+    }
+
+
 def games_today(data):
     """Today's games from Hopla, in the shape the sensors and events use."""
     if not data:
@@ -200,6 +219,8 @@ def games_today(data):
         "currency": data.get("currency") or "hops",
         # When the games change on their own: midnight, a bonus period edge.
         "next_change_at": data.get("nextChangeAt"),
+        # Tasks chained in order: each child sees the step to do now.
+        "routines": [_routine(r) for r in data.get("routines") or []],
     }
 
 

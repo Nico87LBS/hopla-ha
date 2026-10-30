@@ -137,6 +137,8 @@ export default {
     period: '{Units} ×{multiplier}',
     period_left: 'encore {time}',
     surprise: 'Tâche surprise : +{n} {units} en plus',
+    routine_step: '{step}/{total}',
+    routine_title: 'Routine « {name} » : étape {step} sur {total}',
     chrono_left: '+{points} · {n} min',
     chrono_until: '+{points} · avant {time}',
     chrono_title: 'Bonus chrono : +{n} {units} si faite avant {time}',
@@ -205,6 +207,8 @@ export default {
     },
   },
   todo: {
+    routine_step: '{step}/{total}',
+    routine_title: 'Routine « {name} » : étape {step} sur {total}',
     chrono_left: '+{points} · {n} min',
     chrono_until: '+{points} · avant {time}',
     chrono_title: 'Bonus chrono : +{n} {units} si faite avant {time}',
