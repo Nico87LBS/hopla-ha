@@ -49,7 +49,7 @@ class SSEParserTests(unittest.TestCase):
 
     def test_only_heartbeats_skip_the_refresh(self):
         self.assertFalse(sse.needs_refresh({"type": "heartbeat"}))
-        for kind in ("connection.established", "chore.completed", "rewards.updated", "circle.updated"):
+        for kind in ("connection.established", "chore.completed", "rewards.updated", "family.updated"):
             self.assertTrue(sse.needs_refresh({"type": kind}))
 
     def test_reconnect_backs_off_up_to_five_minutes(self):

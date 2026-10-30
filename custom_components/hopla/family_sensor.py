@@ -55,7 +55,7 @@ async def async_setup_family_sensors(
     """Set up one points sensor per member, and the approvals, rewards, bonus and games sensors."""
     config = hass.data[DOMAIN][config_entry.entry_id]
     coordinator = config["coordinator"]
-    members: list[HoplaMember] = config["circle_members"]
+    members: list[HoplaMember] = config["family_members"]
 
     async_add_entities([HoplaPendingApprovalSensor(coordinator, config_entry)])
 
@@ -96,7 +96,7 @@ class _FamilySensor(CoordinatorEntity, SensorEntity):
 
     @property
     def _members(self) -> list[HoplaMember]:
-        return self.hass.data[DOMAIN][self._config_entry.entry_id]["circle_members"]
+        return self.hass.data[DOMAIN][self._config_entry.entry_id]["family_members"]
 
     @property
     def device_info(self) -> dict[str, Any]:

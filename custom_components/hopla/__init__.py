@@ -222,7 +222,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     # Updated in place so entities holding this list see points and photos change.
-    circle_members = []
+    family_members = []
     approvals = ApprovalTracker(hass.bus.async_fire)
     reminders = ReminderScheduler(
         lambda when, action: async_track_point_in_utc_time(hass, callback(action), when),
@@ -258,12 +258,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         history = await client.async_get_task_history(days=7)
         coordinator.completed_tasks = await async_completed_occurrences(client, all_tasks, history)
         try:
-            circle_members[:] = await client.async_get_circle_members()
+            family_members[:] = await client.async_get_family_members()
         except Exception as err:
-            _LOGGER.warning("Failed to refresh circle members: %s", err)
+            _LOGGER.warning("Failed to refresh family members: %s", err)
         # The tasks of a child who is away wait for her: no list, card,
         # calendar or reminder shows them until she is back.
-        tasks = present_tasks(all_tasks, circle_members)
+        tasks = present_tasks(all_tasks, family_members)
         # The task sensors stay, so the cards can show her tasks again on her return.
         coordinator.all_tasks = all_tasks
         try:
@@ -273,7 +273,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if coordinator.rewards is not None:
             try:
                 coordinator.pending_rewards = pending_rewards(
-                    await client.async_get_redemptions("pending"), circle_members)
+                    await client.async_get_redemptions("pending"), family_members)
                 reward_requests.update(coordinator.pending_rewards, entry.entry_id)
             except Exception as err:
                 _LOGGER.debug("Failed to refresh reward requests: %s", err)
@@ -285,7 +285,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             try:
                 # Named like the cards' history window: the reason, else the task or reward.
                 rows = await client.async_get_points_history()
-                coordinator.points_history = history_page(rows, circle_members, len(rows or []), all_tasks,
+                coordinator.points_history = history_page(rows, family_members, len(rows or []), all_tasks,
                                                           coordinator.rewards)["entries"]
                 ledger.update(coordinator.points_history, entry.entry_id)
             except Exception as err:
@@ -296,15 +296,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.debug("Failed to refresh the family's time zone: %s", err)
         try:
             coordinator.games_today = games_today(await client.async_get_games_today())
-            games.update(coordinator.games_today, entry.entry_id, circle_members)
+            games.update(coordinator.games_today, entry.entry_id, family_members)
             next_change.update(coordinator.games_today)
         except Exception as err:
             _LOGGER.debug("Failed to refresh today's games: %s", err)
         # What she did before leaving can still be approved.
-        coordinator.pending_approvals = pending_approvals(all_tasks, history, circle_members)
+        coordinator.pending_approvals = pending_approvals(all_tasks, history, family_members)
         approvals.update(coordinator.pending_approvals, entry.entry_id)
-        reminders.update(tasks, circle_members, entry.entry_id)
-        chronos.update(tasks, circle_members, entry.entry_id)
+        reminders.update(tasks, family_members, entry.entry_id)
+        chronos.update(tasks, family_members, entry.entry_id)
         return tasks
 
     coordinator = DataUpdateCoordinator(
@@ -333,7 +333,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     def task_completed(details: dict) -> None:
         hass.bus.async_fire(EVENT_TASK_COMPLETED, {
             **details,
-            "completed_by_name": member_name(circle_members, details["completed_by"]),
+            "completed_by_name": member_name(family_members, details["completed_by"]),
             "config_entry_id": entry.entry_id,
         })
 
@@ -350,7 +350,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         CONF_SHOW_DUE_IN: entry.data.get(CONF_SHOW_DUE_IN, 7),
         "coordinator": coordinator,
         "client": client,
-        "circle_members": circle_members,
+        "family_members": family_members,
         "listener": listener,
         "parental": parental,
     }
@@ -715,7 +715,7 @@ async def async_get_points_history_service(hass: HomeAssistant, call: ServiceCal
             limit + 1, call.data["user_id"], call.data.get("before"))
     except Exception as err:
         raise HomeAssistantError(str(err)) from err
-    return history_page(rows, config["circle_members"], limit,
+    return history_page(rows, config["family_members"], limit,
                         getattr(coordinator, "all_tasks", None), getattr(coordinator, "rewards", None))
 
 

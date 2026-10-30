@@ -168,7 +168,7 @@ const elenaProgress = progress.members.find(m => m.id === 2);
 assert.deepEqual(elenaProgress.rank, {name: 'Hop Hop', icon: '🐸', image: null, level: 2, from: 100, next: {name: 'Super Hop', icon: '🦘', image: null, points: 300},
   stars: 0, points: 140, starAt: 0});
 assert.equal(elenaProgress.earned, 140);
-// Every rank of the circle, for the rank details.
+// Every rank of the family, for the rank details.
 assert.deepEqual(progress.ladder, [{name: 'Lapineau', icon: '🐰', image: 'hopla-1', points: 0}, {name: 'Bizarre', icon: '', image: null, points: 100}]);
 assert.deepEqual(boardData(hass, {}, now).ladder, []);
 // A drawn badge is kept only when the integration ships it.

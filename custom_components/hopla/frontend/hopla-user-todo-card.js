@@ -187,7 +187,7 @@ export function completionData(state, task, userId) {
   return data;
 }
 export function assignableMembers(state, task) {
-  return (state?.attributes.circle_members || []).filter(member => !task.assignee_ids?.length || task.assignee_ids.includes(member.user_id));
+  return (state?.attributes.family_members || []).filter(member => !task.assignee_ids?.length || task.assignee_ids.includes(member.user_id));
 }
 // The family's date and time of a value, as YYYY-MM-DDTHH:mm:ss.
 export function localDateTime(value) {
@@ -247,8 +247,8 @@ function samePresentation(previous, next) {
 class HoplaUserTodoCard extends HTMLElement {
   static getConfigElement() { return document.createElement('hopla-user-todo-editor'); }
   static getStubConfig(hass) {
-    const entity = Object.keys(hass.states).find(id => id.startsWith('todo.') && hass.states[id].attributes.circle_members);
-    return {entity, user_id: hass.states[entity]?.attributes.hopla_user_id ?? hass.states[entity]?.attributes.circle_members?.[0]?.user_id};
+    const entity = Object.keys(hass.states).find(id => id.startsWith('todo.') && hass.states[id].attributes.family_members);
+    return {entity, user_id: hass.states[entity]?.attributes.hopla_user_id ?? hass.states[entity]?.attributes.family_members?.[0]?.user_id};
   }
   constructor() {
     super(); this.attachShadow({mode: 'open'}); this._pending = new Map(); this._completed = new Map();
@@ -357,7 +357,7 @@ class HoplaUserTodoCard extends HTMLElement {
     if (!this._config || !this._hass) return;
     const state = this._hass.states[this._config.entity];
     const userId = selectedUser(state, this._config.user_id);
-    const member = state?.attributes.circle_members?.find(m => m.user_id === userId);
+    const member = state?.attributes.family_members?.find(m => m.user_id === userId);
     const focusedField = this.shadowRoot.activeElement?.dataset.field;
     this.shadowRoot.activeElement?.blur();
     this.shadowRoot.innerHTML = `<style>
@@ -493,8 +493,8 @@ class HoplaUserTodoCard extends HTMLElement {
         recurring.setAttribute('role', 'img'); recurring.setAttribute('aria-label', t('todo.recurring'));
         dueLabel.prepend(recurring);
       }
-      if (this._config.show_assignee && (userId !== 'all' && this._config.include_anyone || userId === 'all' && state.attributes.circle_members?.length > 1)) {
-        const assignee = state.attributes.circle_members.find(member => member.user_id === task.assigned_to);
+      if (this._config.show_assignee && (userId !== 'all' && this._config.include_anyone || userId === 'all' && state.attributes.family_members?.length > 1)) {
+        const assignee = state.attributes.family_members.find(member => member.user_id === task.assigned_to);
         const name = assignee?.display_name || assignee?.username || (task.assigned_to ? t('common.user', {id: task.assigned_to}) : t('common.anyone'));
         const label = addText(dueLabel, 'span', `· ${name}`, 'assignee'); label.title = t('todo.assigned_to', {name});
       }
@@ -591,7 +591,7 @@ class HoplaUserTodoCard extends HTMLElement {
         const check = document.createElement('ha-icon'); check.className = 'history-check'; check.setAttribute('icon','mdi:check-circle-outline'); check.setAttribute('aria-label',t('todo.completed')); row.append(check);
         const text = document.createElement('div'); text.className = 'task'; row.append(text);
         addText(text, 'span', task.name, 'name');
-        const performer = state.attributes.circle_members?.find(member => member.user_id === task.completed_by);
+        const performer = state.attributes.family_members?.find(member => member.user_id === task.completed_by);
         const name = performer?.display_name || performer?.username || (task.completed_by ? t('common.user', {id: task.completed_by}) : t('common.unknown_user'));
         const time = Number(this._config.completed_days) > 1
           ? wallClock(task.completed_at).toLocaleString(this._hass.locale?.language, {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:this._hass.locale?.time_format === '12' ? true : this._hass.locale?.time_format === '24' ? false : undefined})
@@ -766,7 +766,7 @@ class HoplaUserTodoEditor extends HTMLElement {
   }
   set hass(hass) {
     const previous = this._hass;
-    const lists = Object.entries(hass.states).filter(([id,state])=>id.startsWith('todo.') && state.attributes.circle_members);
+    const lists = Object.entries(hass.states).filter(([id,state])=>id.startsWith('todo.') && state.attributes.family_members);
     const unchanged = previous && previous !== hass && samePresentation(previous,hass)
       && previous.entities === hass.entities && previous.devices === hass.devices && previous.areas === hass.areas
       && this._editorLists?.length === lists.length
@@ -804,7 +804,7 @@ class HoplaUserTodoEditor extends HTMLElement {
     const state=this._hass.states[config.entity];
     if (state?.attributes.hopla_user_id !== undefined) config.user_id=state.attributes.hopla_user_id;
     else if (config.entity !== this._config.entity) {
-      const members=state?.attributes.circle_members || [];
+      const members=state?.attributes.family_members || [];
       if (config.user_id !== 'all' && !members.some(member=>member.user_id===config.user_id)) {
         if (members.length) config.user_id=members[0].user_id;
         else delete config.user_id;
@@ -832,8 +832,8 @@ class HoplaUserTodoEditor extends HTMLElement {
       this._form.computeHelper=schema=>text(`editor.help.${schema.name}`) || (schema.name.endsWith('_color') ? this.t('editor.help.color') : schema.name.endsWith('_icon') ? this.t('editor.help.icon') : schema.name.endsWith('_label') ? this.t('editor.help.label') : undefined);
       this._form.addEventListener('value-changed',event=>this.formChanged(event));
     }
-    const entities=Object.keys(this._hass.states).filter(id=>id.startsWith('todo.') && this._hass.states[id].attributes.circle_members);
-    const members=this._hass.states[this._config.entity]?.attributes.circle_members || [];
+    const entities=Object.keys(this._hass.states).filter(id=>id.startsWith('todo.') && this._hass.states[id].attributes.family_members);
+    const members=this._hass.states[this._config.entity]?.attributes.family_members || [];
     const owner=this._hass.states[this._config.entity]?.attributes.hopla_user_id;
     const filters=dateFilters(this._config);
     // Keep selected names available when no current task has that label.

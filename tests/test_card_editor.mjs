@@ -6,7 +6,7 @@ customElements.define('home-assistant',class extends HTMLElement {});
 let loaded=0;
 window.loadCardHelpers=async()=>({createCardElement:()=>({constructor:{getConfigElement:async()=>{loaded++;customElements.define('ha-form',class extends HTMLElement {});}}})});
 const {actionColor}=await import('../custom_components/hopla/frontend/hopla-user-todo-card.js');
-const hass={states:{'todo.all':{attributes:{circle_members:[{user_id:1,display_name:'Torben'},{user_id:2,display_name:'Melissa'}]}},'todo.other':{attributes:{circle_members:[{user_id:3,display_name:'Third user'}]}}}};
+const hass={states:{'todo.all':{attributes:{family_members:[{user_id:1,display_name:'Torben'},{user_id:2,display_name:'Melissa'}]}},'todo.other':{attributes:{family_members:[{user_id:3,display_name:'Third user'}]}}}};
 const editor=document.createElement('hopla-user-todo-editor');
 editor.setConfig({type:'custom:hopla-user-todo-card',entity:'todo.all',user_id:1,title:'My tasks',unrelated_option:'preserved'});
 editor.hass=hass;document.body.append(editor);await new Promise(resolve=>setTimeout(resolve,0));
@@ -185,7 +185,7 @@ assert.equal(latest.display_filter,undefined);assert.equal(latest.include_overdu
 update({display_filters:undefined});assert.deepEqual(latest.display_filters,[]);
 assert.equal(editorFields().some(field=>field.name==='upcoming_days'),false);
 // A per-user entity always controls the assignment, even with stale card config.
-hass.states['todo.admin']={attributes:{hopla_user_id:2,circle_members:hass.states['todo.all'].attributes.circle_members}};
+hass.states['todo.admin']={attributes:{hopla_user_id:2,family_members:hass.states['todo.all'].attributes.family_members}};
 update({entity:'todo.admin'});
 assert.equal(latest.user_id,2);assert.equal(form.data.user_id,'2');
 assert.equal(editorFields().some(field=>field.name==='user_id'),false);

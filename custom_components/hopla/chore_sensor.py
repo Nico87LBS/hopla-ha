@@ -28,6 +28,7 @@ async def async_setup_chore_sensors(
     """Set up Hopla chore sensor entities."""
     config = hass.data[DOMAIN][config_entry.entry_id]
     coordinator = config["coordinator"]
+    _rename_old_unique_ids(hass, config_entry)
 
     entities = []
     if _all_tasks(coordinator):
@@ -41,6 +42,30 @@ async def async_setup_chore_sensors(
 
     # Listen for coordinator updates to add/remove sensors as chores change
     _track_new_chores(hass, coordinator, config_entry, async_add_entities)
+
+
+UNIQUE_ID_PREFIX = "hopla_chore_"
+# The prefix of the sensors made before 0.25.0.
+_OLD_UNIQUE_ID_PREFIX = "dt_chore_"
+
+
+def chore_unique_id(config_entry: ConfigEntry, task_id: int) -> str:
+    """The unique id of the sensor of a task."""
+    return f"{UNIQUE_ID_PREFIX}{config_entry.entry_id}_{task_id}"
+
+
+def _rename_old_unique_ids(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
+    """Give the task sensors made before 0.25.0 their unique id of today.
+
+    The entity ids stay, and with them the sensors' history and the
+    dashboards that show them.
+    """
+    registry = er.async_get(hass)
+    for entry in er.async_entries_for_config_entry(registry, config_entry.entry_id):
+        if entry.domain == "sensor" and entry.unique_id.startswith(_OLD_UNIQUE_ID_PREFIX):
+            new_id = UNIQUE_ID_PREFIX + entry.unique_id[len(_OLD_UNIQUE_ID_PREFIX):]
+            if registry.async_get_entity_id("sensor", DOMAIN, new_id) is None:
+                registry.async_update_entity(entry.entity_id, new_unique_id=new_id)
 
 
 def _all_tasks(coordinator) -> list:
@@ -79,7 +104,7 @@ def _track_new_chores(
         if removed_ids:
             registry = er.async_get(hass)
             for task_id in removed_ids:
-                unique_id = f"dt_chore_{config_entry.entry_id}_{task_id}"
+                unique_id = chore_unique_id(config_entry, task_id)
                 entity_id = registry.async_get_entity_id("sensor", DOMAIN, unique_id)
                 if entity_id:
                     _LOGGER.debug("Removing sensor for inactive chore %s", task_id)
@@ -103,7 +128,7 @@ class HoplaChoreSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._task_id = task_id
         self._config_entry = config_entry
-        self._attr_unique_id = f"dt_chore_{config_entry.entry_id}_{task_id}"
+        self._attr_unique_id = chore_unique_id(config_entry, task_id)
 
     @property
     def _task(self) -> HoplaTask | None:
@@ -161,11 +186,11 @@ class HoplaChoreSensor(CoordinatorEntity, SensorEntity):
         return attrs
 
     def _resolve_user_name(self, user_id: int | None) -> str | None:
-        """Resolve a user ID to a display name using circle members."""
+        """Resolve a user ID to a display name using family members."""
         if user_id is None:
             return None
         config = self.hass.data[DOMAIN].get(self._config_entry.entry_id, {})
-        members: list[HoplaMember] = config.get("circle_members", [])
+        members: list[HoplaMember] = config.get("family_members", [])
         for member in members:
             if member.user_id == user_id:
                 return member.display_name or member.username

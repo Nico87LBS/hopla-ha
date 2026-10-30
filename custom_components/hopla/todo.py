@@ -46,31 +46,31 @@ async def async_setup_entry(
     create_unified = config_entry.options.get(CONF_CREATE_UNIFIED_LIST, config_entry.data.get(CONF_CREATE_UNIFIED_LIST, True))
     if create_unified:
         entity = HoplaAllTasksList(coordinator, config_entry)
-        entity._circle_members = []  # Will be set after we get members
+        entity._family_members = []  # Will be set after we get members
         entities.append(entity)
     
-    # Get circle members for all entities (useful for custom cards)
-    circle_members = []
+    # Get family members for all entities (useful for custom cards)
+    family_members = []
     try:
-        circle_members = await client.async_get_circle_members()
-        _LOGGER.debug("Found %d circle members", len(circle_members))
+        family_members = await client.async_get_family_members()
+        _LOGGER.debug("Found %d family members", len(family_members))
         
-        # Set circle members on unified entity if it exists
-        if entities and hasattr(entities[0], '_circle_members'):
-            entities[0]._circle_members = circle_members
+        # Set family members on unified entity if it exists
+        if entities and hasattr(entities[0], '_family_members'):
+            entities[0]._family_members = family_members
             
     except Exception as e:
-        _LOGGER.error("Failed to get circle members: %s", e)
+        _LOGGER.error("Failed to get family members: %s", e)
     
     # Create per-assignee lists if enabled (check options first, then data)
     create_assignee_lists = config_entry.options.get(CONF_CREATE_ASSIGNEE_LISTS, config_entry.data.get(CONF_CREATE_ASSIGNEE_LISTS, False))
     if create_assignee_lists:
         _LOGGER.debug("Assignee lists enabled in config")
-        for member in circle_members:
+        for member in family_members:
             if member.is_active:
                 _LOGGER.debug("Creating entity for member: %s (ID: %d)", member.display_name, member.user_id)
                 entity = HoplaAssigneeTasksList(coordinator, config_entry, member)
-                entity._circle_members = circle_members
+                entity._family_members = family_members
                 entities.append(entity)
     else:
         _LOGGER.debug("Assignee lists not enabled in config")
@@ -86,7 +86,7 @@ async def async_setup_entry(
     _LOGGER.debug("Creating %d total entities", len(entities))
     async_add_entities(entities)
 
-# Remove old assignee detection function since we now use circle members
+# Remove old assignee detection function since we now use family members
 
 class HoplaTodoListBase(CoordinatorEntity, TodoListEntity):
     """Base class for Hopla Todo List entities."""
@@ -182,15 +182,15 @@ class HoplaTodoListBase(CoordinatorEntity, TodoListEntity):
             "hopla_url": self._config_entry.data[CONF_URL],
         }
         
-        # Add circle members data for custom card user selection
-        if hasattr(self, '_circle_members'):
-            attributes["circle_members"] = [
+        # Add family members data for custom card user selection
+        if hasattr(self, '_family_members'):
+            attributes["family_members"] = [
                 {
                     "user_id": member.user_id,
                     "display_name": member.display_name,
                     "username": member.username,
                 }
-                for member in self._circle_members
+                for member in self._family_members
             ]
         
         tasks = self._apply_due_window(self._filter_tasks(self.coordinator.data or []))

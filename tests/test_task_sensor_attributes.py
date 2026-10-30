@@ -32,11 +32,11 @@ class TaskSensorAttributeTests(unittest.TestCase):
         namespace = dict(dataclass=dataclass, datetime=datetime, Any=Any, List=List,
                          Optional=Optional, _LOGGER=logging.getLogger(__name__),
                          CoordinatorEntity=CoordinatorStub, SensorEntity=type("SensorStub", (), {}),
-                         STATUS_PENDING_APPROVAL=3)
+                         STATUS_PENDING_APPROVAL=3, UNIQUE_ID_PREFIX="hopla_chore_")
         load_definitions("model.py", {"_parse_datetime", "HoplaTask"}, namespace)
         load_definitions("approval.py", {"slot_attributes"}, namespace)
         load_definitions("games.py", {"chrono_attributes"}, namespace)
-        load_definitions("chore_sensor.py", {"HoplaChoreSensor"}, namespace)
+        load_definitions("chore_sensor.py", {"HoplaChoreSensor", "chore_unique_id"}, namespace)
         cls.task_class = namespace["HoplaTask"]
         cls.sensor_class = namespace["HoplaChoreSensor"]
 

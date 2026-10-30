@@ -10,7 +10,7 @@ customElements.define('ha-form',class extends HTMLElement {
 });
 await import('../custom_components/hopla/frontend/hopla-user-todo-card.js');
 const task={task_id:1,assigned_to:1,name:'Daily task',labels:['original']};
-const state={state:'1',attributes:{circle_members:[{user_id:1,display_name:'Demo'}],tasks:[task]}};
+const state={state:'1',attributes:{family_members:[{user_id:1,display_name:'Demo'}],tasks:[task]}};
 let hass={states:{'todo.demo':state},locale:{language:'en'},themes:{darkMode:false},callService:async()=>{}};
 const config={entity:'todo.demo',user_id:1};
 const card=document.createElement('hopla-user-todo-card');card.setConfig(config);card.hass=hass;
