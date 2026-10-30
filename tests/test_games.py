@@ -251,6 +251,10 @@ class NextChangeRefreshTests(unittest.TestCase):
         self.assertEqual(games.games_today({"nextChangeAt": "2026-10-30T23:00:00Z"})["next_change_at"],
                          "2026-10-30T23:00:00Z")
 
+    def test_games_today_carries_the_currency_hops_by_default(self):
+        self.assertEqual(games.games_today({"currency": "carrots"})["currency"], "carrots")
+        self.assertEqual(games.games_today({"surprise": None})["currency"], "hops")
+
 
 if __name__ == "__main__":
     unittest.main()

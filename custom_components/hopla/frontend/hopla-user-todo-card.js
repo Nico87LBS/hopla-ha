@@ -2,7 +2,7 @@
 // custom-element registry and HTMLElement with its scoped-registry polyfill.
 // Wait before defining classes so they use the final registry and base class.
 await customElements.whenDefined('home-assistant');
-const {translator, browserLanguage, reloadIfOutdated, setFamilyZone, familyZoneOf, wallClock, fromWallClock} = await import(new URL(`./hopla-i18n.js${new URL(import.meta.url).search}`, import.meta.url));
+const {translator, browserLanguage, reloadIfOutdated, setFamilyZone, familyZoneOf, setFamilyCurrency, familyCurrencyOf, wallClock, fromWallClock} = await import(new URL(`./hopla-i18n.js${new URL(import.meta.url).search}`, import.meta.url));
 const english = translator('en');
 const hassLanguage = hass => hass?.locale?.language || hass?.language || browserLanguage();
 // Each element keeps a translator for its HA language and renders again when
@@ -277,6 +277,7 @@ class HoplaUserTodoCard extends HTMLElement {
   set hass(hass) {
     if (reloadIfOutdated(hass)) return;
     setFamilyZone(familyZoneOf(hass)?.zone);
+    setFamilyCurrency(familyCurrencyOf(hass));
     const previous = this._hass;
     const minute = Math.floor(Date.now() / 60000);
     const unchanged = previous && previous !== hass && this._lastHassMinute === minute

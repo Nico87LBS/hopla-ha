@@ -27,7 +27,7 @@ assert.equal(root.querySelector('.task-points'),null);
 assert.equal(root.querySelector('.task-recurrence'),null);
 card.setConfig({entity:'todo.all',user_id:1,show_points:true,show_recurrence:true});
 assert.equal(root.querySelector('.task-points').textContent,'10');
-assert.equal(root.querySelector('.task-points').getAttribute('aria-label'),'10 points');
+assert.equal(root.querySelector('.task-points').getAttribute('aria-label'),'10 hops');
 assert.equal(root.querySelector('.task-points').parentElement.className,'name');
 assert.equal(root.querySelector('.task-recurrence').textContent,'Every 6 weeks');
 assert.equal(root.querySelector('.task-recurrence').previousElementSibling.className,'due');
@@ -40,7 +40,11 @@ weeklyTask.points=null;delete weeklyTask.interval_type;card.hass=hass;
 assert.equal(root.querySelector('.task-points'),null);
 assert.equal(root.querySelector('.task-recurrence'),null);
 weeklyTask.points=1;weeklyTask.interval_type='weeks';card.hass=hass;
-assert.equal(root.querySelector('.task-points').getAttribute('aria-label'),'1 point');
+assert.equal(root.querySelector('.task-points').getAttribute('aria-label'),'1 hop');
+// The family's currency, published on the games sensor, names what a task earns.
+hass.states['sensor.games']={state:'',attributes:{hopla_games:true,family_currency:'stars'}};card.hass=hass;
+assert.equal(root.querySelector('.task-points').getAttribute('aria-label'),'1 star');
+delete hass.states['sensor.games'];card.hass=hass;
 card.setConfig({entity:'todo.all',user_id:1});
 const sharedCard=document.createElement('hopla-user-todo-card');
 const sharedHass={...hass,states:{'todo.member':{attributes:{config_entry_id:'entry',hopla_user_id:1,

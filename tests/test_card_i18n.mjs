@@ -4,15 +4,17 @@ globalThis.customElements = {define() {}, get() {}, whenDefined() { return Promi
 globalThis.window = {};
 const {default: en} = await import('../custom_components/hopla/frontend/locales/en.js');
 const {default: fr} = await import('../custom_components/hopla/frontend/locales/fr.js');
-const {translator, loadLanguage, baseLanguage} = await import('../custom_components/hopla/frontend/hopla-i18n.js');
+const {translator, loadLanguage, baseLanguage, setFamilyCurrency} = await import('../custom_components/hopla/frontend/hopla-i18n.js');
 const {recurrenceText, dueText, emptyMessage} = await import('../custom_components/hopla/frontend/hopla-user-todo-card.js');
 
-// Every language file has exactly the English keys, and the same {placeholders}.
+// Every language file has exactly the English keys, and the same {placeholders},
+// except the words of the family's currency, which each language uses its way.
+const CURRENCY_WORDS = ['unit', 'units', 'Unit', 'Units', 'AUnit', 'ofUnits', 'e'];
 const flatten = (node, prefix = '') => Object.entries(node).flatMap(([key, value]) =>
   typeof value === 'string' ? [[prefix + key, value]] : flatten(value, `${prefix}${key}.`));
 const english = new Map(flatten(en));
 const french = new Map(flatten(fr));
-const placeholders = text => [...text.matchAll(/\{(\w+)\}/g)].map(match => match[1]).filter(name => name !== 'count').sort();
+const placeholders = text => [...text.matchAll(/\{(\w+)\}/g)].map(match => match[1]).filter(name => name !== 'count' && !CURRENCY_WORDS.includes(name)).sort();
 assert.deepEqual([...french.keys()].sort(), [...english.keys()].sort());
 for (const [key, text] of english) assert.deepEqual(placeholders(french.get(key)), placeholders(text), key);
 
@@ -21,8 +23,16 @@ assert.equal(baseLanguage('de'), 'en', 'unsupported languages fall back to Engli
 await loadLanguage('fr');
 const t = translator('fr');
 assert.equal(t('todo.complete'), 'Terminer');
-assert.equal(t('common.points', {count: 1}), '1 point');
-assert.equal(t('common.points', {count: 3}), '3 points');
+assert.equal(t('common.points', {count: 1}), '1 hop');
+assert.equal(t('common.points', {count: 3}), '3 hops');
+// The family's currency names what is earned, with the French agreement.
+setFamilyCurrency('stars');
+assert.equal(t('family.rank_earned', {count: 3}), '3 étoiles gagnées depuis le début');
+assert.equal(t('family.earned', {count: 1}), 'étoile gagnée');
+setFamilyCurrency('carrots');
+assert.equal(translator('en')('common.points', {count: 2}), '2 carrots');
+setFamilyCurrency('unknown');
+assert.equal(t('common.points', {count: 2}), '2 hops', 'an unknown currency gives hops');
 assert.equal(t('missing.key'), 'missing.key');
 
 assert.equal(recurrenceText({frequency_type: 'weekly'}, t), 'Toutes les semaines');
