@@ -11,9 +11,7 @@ from .const import API_TIMEOUT
 from .model import HoplaTask, HoplaMember, HoplaChoreHistory, HoplaReward, HoplaRedemption
 _LOGGER = logging.getLogger(__name__)
 
-# Before Hopla 1.29.0 the family was called a circle; these keep an older
-# server working until it is updated.
-LEGACY_FAMILY_PATH = "/eapi/v1/circle"
+FAMILY_PATH = "/eapi/v1/family"
 
 class HoplaApiClient:
     """API client for Hopla."""
@@ -23,9 +21,6 @@ class HoplaApiClient:
         self._base_url = base_url.rstrip('/')
         self._token = token
         self._session = session
-        # Where the family's routes live; a server older than 1.29.0 has
-        # them under their old name, found on the first members call.
-        self._family_path = "/eapi/v1/family"
 
     @property
     def base_url(self) -> str:
@@ -68,12 +63,13 @@ class HoplaApiClient:
     async def async_get_family_members(self) -> List[HoplaMember]:
         """Get the family's members from Hopla."""
         try:
-            data = await self._get_members(self._family_path)
-            if data is None and self._family_path == "/eapi/v1/family":
-                data = await self._get_members(LEGACY_FAMILY_PATH)
-                if data is not None:
-                    _LOGGER.info("Hopla server older than 1.29.0: using its old family routes")
-                    self._family_path = LEGACY_FAMILY_PATH
+            async with self._session.get(
+                f"{self._base_url}{FAMILY_PATH}/members",
+                headers=self._headers(),
+                timeout=API_TIMEOUT
+            ) as response:
+                response.raise_for_status()
+                data = await response.json()
             if not isinstance(data, list):
                 _LOGGER.error("Unexpected response format from Hopla family members API")
                 return []
@@ -84,19 +80,6 @@ class HoplaApiClient:
         except (KeyError, ValueError, json.JSONDecodeError) as err:
             _LOGGER.error("Error parsing Hopla family members response: %s", err)
             return []
-
-    async def _get_members(self, path: str):
-        """The members at `path`, or None when the server has no such route
-        (a 404, or its web page in place of JSON)."""
-        async with self._session.get(
-            f"{self._base_url}{path}/members",
-            headers=self._headers(),
-            timeout=API_TIMEOUT
-        ) as response:
-            if response.status == 404 or "json" not in response.content_type:
-                return None
-            response.raise_for_status()
-            return await response.json()
 
     async def async_complete_task(self, choreId: int, completed_by: int = None) -> HoplaTask:
         """Complete a task"""
@@ -157,7 +140,7 @@ class HoplaApiClient:
 
     async def async_set_member_away(self, user_id: int, away: bool) -> None:
         """Mark a child away (her tasks wait) or back home."""
-        await self._post_action(f"{self._family_path}/members/{user_id}/away", "change who is home",
+        await self._post_action(f"{FAMILY_PATH}/members/{user_id}/away", "change who is home",
                                 {"away": away}, method="PUT")
 
     async def async_approve_task(self, task_id: int) -> HoplaTask:
@@ -254,7 +237,7 @@ class HoplaApiClient:
         """Get the family's time zone and the server's (home), or None when the
         server does not know it yet."""
         async with self._session.get(
-            f"{self._base_url}{self._family_path}/timezone",
+            f"{self._base_url}{FAMILY_PATH}/timezone",
             headers=self._headers(),
             timeout=API_TIMEOUT,
         ) as response:
@@ -266,7 +249,7 @@ class HoplaApiClient:
 
     async def async_set_family_timezone(self, timezone: str) -> Optional[dict]:
         """Move the family to another time zone; its tasks keep their time of day."""
-        data = await self._post_action(f"{self._family_path}/timezone", "change the family's time zone",
+        data = await self._post_action(f"{FAMILY_PATH}/timezone", "change the family's time zone",
                                        {"timezone": timezone}, method="PUT")
         return data.get("res")
 
@@ -355,9 +338,7 @@ class HoplaApiClient:
                     "chore has been modified by another user, please refresh and try again",
                     "updatedAt is in the future and cannot be used to edit the chore",
                     "Only the chore creator or a family admin/manager can update this chore",
-                    "Only the chore creator or a circle admin/manager can update this chore",
                     "Only the chore creator or a family admin/manager can delete this chore",
-                    "Only the chore creator or a circle admin/manager can delete this chore",
                 ):
                     raise ValueError(f"Hopla denied the {operation} (403): {reason}")
         response.raise_for_status()

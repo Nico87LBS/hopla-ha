@@ -1,5 +1,4 @@
-"""The family's routes: today's names, or the old ones of a server not yet
-updated to Hopla 1.29.0."""
+"""The family's routes, under /eapi/v1/family."""
 import ast
 import json
 import logging
@@ -36,14 +35,14 @@ class FamilyRoutesTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         source = Path(__file__).resolve().parents[1] / "custom_components/hopla/api.py"
         tree = ast.parse(source.read_text(encoding="utf-8"))
-        legacy = next(node for node in tree.body if isinstance(node, ast.Assign)
-                      and node.targets[0].id == "LEGACY_FAMILY_PATH")
+        path = next(node for node in tree.body if isinstance(node, ast.Assign)
+                    and node.targets[0].id == "FAMILY_PATH")
         client = next(node for node in tree.body if isinstance(node, ast.ClassDef))
         client.body = [node for node in client.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-                       and node.name in ("__init__", "_headers", "async_get_family_members", "_get_members",
+                       and node.name in ("__init__", "_headers", "async_get_family_members",
                                          "async_get_family_timezone")]
         future = ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0)
-        module = ast.fix_missing_locations(ast.Module(body=[future, legacy, client], type_ignores=[]))
+        module = ast.fix_missing_locations(ast.Module(body=[future, path, client], type_ignores=[]))
         namespace = {"aiohttp": SimpleNamespace(ClientError=HttpError), "API_TIMEOUT": 10, "Optional": object,
                      "List": list, "json": json, "_LOGGER": logging.getLogger(__name__),
                      "HoplaMember": SimpleNamespace(from_json=lambda data: data["userId"])}
@@ -62,22 +61,17 @@ class FamilyRoutesTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await client.async_get_family_members(), [2])
         self.assertEqual(calls, ["https://hopla.invalid/eapi/v1/family/members"])
 
-    async def test_falls_back_on_an_older_server(self):
+    async def test_reads_the_family_zone(self):
         calls = []
-
-        def answer(url):
-            # An older server answers an unknown route with its web page.
-            if "/family/" in url:
-                return Response("<html>", content_type="text/html")
-            if url.endswith("/timezone"):
-                return Response({"res": {"timezone": "Europe/Paris"}})
-            return Response([{"userId": 3}, {"userId": 4}])
-
-        client = self.client(answer, calls)
-        self.assertEqual(await client.async_get_family_members(), [3, 4])
-        self.assertEqual(calls, ["https://hopla.invalid/eapi/v1/family/members",
-                                 "https://hopla.invalid/eapi/v1/circle/members"])
-        # The other family routes follow.
-        calls.clear()
+        client = self.client(lambda url: Response({"res": {"timezone": "Europe/Paris"}}), calls)
         await client.async_get_family_timezone()
-        self.assertEqual(calls, ["https://hopla.invalid/eapi/v1/circle/timezone"])
+        self.assertEqual(calls, ["https://hopla.invalid/eapi/v1/family/timezone"])
+
+    async def test_a_server_error_reaches_the_caller(self):
+        client = self.client(lambda url: Response({}, status=500), [])
+        with self.assertRaises(HttpError):
+            await client.async_get_family_members()
+
+
+if __name__ == "__main__":
+    unittest.main()
