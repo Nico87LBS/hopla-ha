@@ -63,7 +63,7 @@ class UpdatePermissionTests(unittest.IsolatedAsyncioTestCase):
             "user does not have permission to edit this chore",
             "chore has been modified by another user, please refresh and try again",
             "updatedAt is in the future and cannot be used to edit the chore",
-            "Only the chore creator or a circle admin/manager can update this chore",
+            "Only the chore creator or a family admin/manager can update this chore",
         ):
             with self.assertRaisesRegex(ValueError, reason):
                 await self.update({"error": reason})
@@ -75,7 +75,7 @@ class UpdatePermissionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_delete_permission_reason_reaches_caller(self):
         for reason in ("You can only delete your own chores",
-                       "Only the chore creator or a circle admin/manager can delete this chore"):
+                       "Only the chore creator or a family admin/manager can delete this chore"):
             session = SimpleNamespace(delete=lambda *args, **kwargs: Response({"error": reason}))
             client = self.client_type("https://example.invalid", "test-token", session)
             with self.assertRaisesRegex(ValueError, reason):

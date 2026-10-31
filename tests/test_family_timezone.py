@@ -40,6 +40,7 @@ class FamilyTimezoneApiTests(unittest.IsolatedAsyncioTestCase):
         future = ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0)
         module = ast.fix_missing_locations(ast.Module(body=[future, client], type_ignores=[]))
         namespace = {"aiohttp": SimpleNamespace(ClientError=HttpError), "API_TIMEOUT": 10, "Optional": object,
+                     "FAMILY_PATH": "/eapi/v1/family",
                      "_LOGGER": logging.getLogger(__name__)}
         exec(compile(module, str(source), "exec"), namespace)
         self.client_type = namespace["HoplaApiClient"]

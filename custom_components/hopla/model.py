@@ -52,8 +52,7 @@ class HoplaMember:
         return cls(
             id=data["id"],
             user_id=data["userId"],
-            # circleId: from a server older than 1.29.0.
-            family_id=data["familyId"] if "familyId" in data else data["circleId"],
+            family_id=data["familyId"],
             role=data["role"],
             is_active=data["isActive"],
             username=data["username"],

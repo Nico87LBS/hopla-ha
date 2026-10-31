@@ -47,7 +47,7 @@ class LedgerTests(unittest.TestCase):
         self.assertFalse(last["more"])
 
     def test_presets_keep_their_sign(self):
-        self.assertEqual(games.presets([{"id": 1, "name": "Dispute", "points": -3, "circleId": 1}]),
+        self.assertEqual(games.presets([{"id": 1, "name": "Dispute", "points": -3, "familyId": 1}]),
                          [{"id": 1, "name": "Dispute", "points": -3}])
 
     def test_first_refresh_is_quiet_then_new_rows_fire_oldest_first(self):
