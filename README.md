@@ -1,11 +1,15 @@
 # Hopla pour Home Assistant
 
 Intégration Home Assistant (HACS) pour [Hopla](https://github.com/Nico87LBS/hopla) :
-listes de tâches, capteurs de points et de récompenses, validations, « objets »
-Hopla et cartes de tableau de bord. C'est elle qui envoie les notifications, le
+listes de tâches, capteurs de points et de récompenses, validations, jeux et
+cartes de tableau de bord. C'est elle qui envoie les notifications, le
 serveur Hopla n'en envoie aucune.
 
 ## Installation
+
+Il faut un serveur Hopla 1.29.0 ou plus. Le fonctionnement de Hopla lui-même
+(tâches, jeux, Apprendre, API) est décrit dans
+[sa documentation](https://github.com/Nico87LBS/hopla/tree/main/docs).
 
 ### Avec HACS
 
@@ -19,7 +23,8 @@ serveur Hopla n'en envoie aucune.
 **Paramètres** → **Appareils et services** → **Ajouter une intégration** → **Hopla**.
 
 - **Adresse du serveur Hopla** : par exemple `http://ton-serveur:2021`.
-- **Jeton d'API** : à créer dans les réglages de ton compte Hopla.
+- **Jeton d'API** : à créer dans Hopla, Gérer › Avancé › Jetons d'accès, avec un
+  compte de parent pour pouvoir valider et donner des bonus depuis la tablette.
 - **Nombre de jours de tâches à venir** (7 par défaut, 0 pour toutes).
 - **Liste « Toutes les tâches »** et **une liste par personne**.
 
@@ -98,7 +103,8 @@ L'état est le nom de la tâche.
 | | `routines` | Routines (tâches à faire dans l'ordre) : `id`, `name`, `bonus`, `task_ids` (toutes les tâches de la routine, copies de chaque enfant comprises) et `members`, où en est chaque enfant aujourd'hui : `user_id`, `current` (la tâche de l'étape à faire, ou rien), `step`, `done`, `total`, `finished`. Les cartes ne montrent que l'étape à faire |
 | | `family_currency` | Ce que la famille gagne, choisi dans Hopla : `hops`, `points`, `stars`, `carrots`, `coins` ou `tokens`. Les cartes l'utilisent dans tous leurs textes |
 
-Les jeux se règlent dans Hopla, onglet Jeux de la page Points.
+Les jeux se règlent dans Hopla, menu Gérer : Missions (quêtes, défis, périodes
+bonus) et Rangs et règles (rangs, séries, tâche surprise).
 
 ## Enfant pas là (garde partagée)
 
@@ -127,7 +133,7 @@ mot (« filles » par défaut).
 
 L'intégration garde une connexion ouverte avec le flux d'événements de Hopla,
 avec le même jeton d'API. Chaque changement fait dans Hopla (tâche créée,
-terminée, validée ou modifiée, récompense, objet, membre) arrive dans Home
+terminée, validée ou modifiée, récompense, membre) arrive dans Home
 Assistant en quelques secondes. Il n'y a pas d'intervalle à régler : tant que la
 connexion tient, une mise à jour complète passe quand même toutes les 30 minutes
 par sécurité, et toutes les 5 minutes quand elle est coupée. La connexion revient
@@ -414,8 +420,8 @@ historique des points (tâches, bonus, pénalités, récompenses, jour par jour)
 cas d'égalité, la marche ouvre le premier enfant ; les têtes en haut de la
 fenêtre passent d'un enfant à l'autre. Le rang ouvre toujours son détail.
 
-Le bouton ± de l'historique donne un bonus ou une pénalité : un préréglage de
-Hopla (onglet Jeux de la page Points) ou un autre montant, avec une raison si tu
+Le bouton ± de l'historique donne un bonus ou une pénalité : un bonus préparé de
+Hopla (Gérer › Récompenses › Bonus préparés) ou un autre montant, avec une raison si tu
 veux. Sur la tablette, il demande le code parent. En mode parent, ou pour un
 parent, la carte montre aussi une tuile par enfant avec ses boutons Bonus et
 Pénalité.
