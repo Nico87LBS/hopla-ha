@@ -222,7 +222,7 @@ actions:
 
 L'icône et le logo de l'intégration (clair et sombre) sont fournis dans
 `custom_components/hopla/brand/`.
-Home Assistant l'affiche à partir de la version 2026.3.
+Home Assistant les affiche à partir de la version 2026.3.
 
 ## Sécurité de la tablette
 
