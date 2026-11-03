@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="custom_components/hopla/brand/dark_logo@2x.png"/>
+    <img src="custom_components/hopla/brand/logo@2x.png" alt="Hopla" width="320"/>
+  </picture>
+</p>
+
 # Hopla pour Home Assistant
 
 Intégration Home Assistant (HACS) pour [Hopla](https://github.com/Nico87LBS/hopla) :
@@ -213,7 +220,8 @@ actions:
         (installée : {{ state_attr('update.hopla_update', 'installed_version') }}).
 ```
 
-L'icône de l'intégration est fournie dans `custom_components/hopla/brand/`.
+L'icône et le logo de l'intégration (clair et sombre) sont fournis dans
+`custom_components/hopla/brand/`.
 Home Assistant l'affiche à partir de la version 2026.3.
 
 ## Sécurité de la tablette
