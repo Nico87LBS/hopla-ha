@@ -83,7 +83,8 @@ class TaskFilteringTests(unittest.TestCase):
                                    is_active=active, name='Task', assignee_ids=[], description='',
                                    priority=1, frequency_type='weekly', labels=[], points=10, frequency=6, interval_type=None,
                                    assign_strategy=None, together=False,
-                                   flash={'points': 5, 'endsAt': '2026-10-24T16:20:00Z'} if task_id == 1 else None)
+                                   flash={'points': 5, 'endsAt': '2026-10-24T16:20:00Z'} if task_id == 1 else None,
+                                   deadline=due + timedelta(hours=2) if task_id == 1 and due else None)
         tasks = [task(1, 2, self.near.next_due_date), task(2, None, self.near.next_due_date),
                  task(3, None, self.far.next_due_date), task(4, None, self.near.next_due_date, False),
                  task(5, 3, self.near.next_due_date)]
@@ -101,6 +102,8 @@ class TaskFilteringTests(unittest.TestCase):
         self.assertEqual(attributes['anyone_tasks'][0]['points'], 10)
         self.assertEqual(attributes['tasks'][0]['chrono'], {'points': 5, 'ends_at': '2026-10-24T16:20:00Z', 'live_id': None})
         self.assertIsNone(attributes['anyone_tasks'][0]['chrono'])
+        self.assertEqual(attributes['tasks'][0]['deadline'], (self.near.next_due_date + timedelta(hours=2)).isoformat())
+        self.assertIsNone(attributes['anyone_tasks'][0]['deadline'])
     def test_card_task_attributes_expose_labels(self):
         source = Path(__file__).resolve().parents[1] / "custom_components/hopla/todo.py"
         tree = ast.parse(source.read_text(encoding="utf-8"))
@@ -115,7 +118,8 @@ class TaskFilteringTests(unittest.TestCase):
         task = SimpleNamespace(id=1, name="HVAC", assigned_to=2, assignee_ids=[2],
                                description=None, priority=1, labels=labels,
                                next_due_date=None, frequency_type="yearly", is_active=True,
-                               points=0, frequency=1, interval_type=None, assign_strategy=None, together=False, flash=None)
+                               points=0, frequency=1, interval_type=None, assign_strategy=None, together=False, flash=None,
+                               deadline=None)
         entity = SimpleNamespace(_config_entry=SimpleNamespace(entry_id="entry", data={"url": "http://hopla"}),
                                  coordinator=SimpleNamespace(data=[task]),
                                  _filter_tasks=lambda tasks: tasks, _apply_due_window=lambda tasks: tasks)

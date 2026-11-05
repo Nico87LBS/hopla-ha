@@ -209,6 +209,7 @@ class HoplaTodoListBase(CoordinatorEntity, TodoListEntity):
                  "labels": task.labels or [],
                  "points": task.points,
                  "chrono": chrono_attributes(task.flash),
+                 "deadline": task.deadline.isoformat() if task.deadline else None,
                  "frequency_type": task.frequency_type,
                  "frequency": task.frequency,
                  "interval_type": task.interval_type,

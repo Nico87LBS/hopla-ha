@@ -182,6 +182,7 @@ class HoplaChoreSensor(CoordinatorEntity, SensorEntity):
             "assign_strategy": task.assign_strategy,
             "slots_today": slot_attributes(task.slots_today),
             "chrono": chrono_attributes(task.flash),
+            "deadline": task.deadline.isoformat() if task.deadline else None,
         }
         return attrs
 
