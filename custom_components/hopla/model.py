@@ -1,7 +1,7 @@
 """Hopla models."""
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Optional, List
 from homeassistant.components.todo import (
     TodoItem,
@@ -164,6 +164,8 @@ class HoplaTask:
     assign_strategy: Optional[str] = None
     # The speed bonus open now: {"points", "endsAt", "liveId" when a parent launched it}.
     flash: Optional[dict] = None
+    # Minutes after the due time the task is missed.
+    deadline_minutes: Optional[int] = None
 
     @property
     def together(self) -> bool:
@@ -176,6 +178,15 @@ class HoplaTask:
         if self.together:
             return list(self.assignee_ids or [])
         return [self.assigned_to] if self.assigned_to is not None else []
+
+    @property
+    def deadline(self) -> Optional[datetime]:
+        """Return when the task's current passage is missed, if it has a deadline."""
+        if (not self.next_due_date or not isinstance(self.deadline_minutes, int) or self.deadline_minutes <= 0
+                or self.frequency_type in ("always", "trigger", "adaptive")
+                or (isinstance(self.frequency_metadata, dict) and self.frequency_metadata.get("slots"))):
+            return None
+        return self.next_due_date + timedelta(minutes=self.deadline_minutes)
 
     @property
     def interval_type(self) -> Optional[str]:
@@ -229,6 +240,7 @@ class HoplaTask:
             slots_today=[slot for slot in data.get("slotsToday") or [] if isinstance(slot, dict)],
             assign_strategy=data.get("assignStrategy"),
             flash=data.get("flash") if isinstance(data.get("flash"), dict) else None,
+            deadline_minutes=data.get("deadlineMinutes") if isinstance(data.get("deadlineMinutes"), int) else None,
         )
     
     @classmethod

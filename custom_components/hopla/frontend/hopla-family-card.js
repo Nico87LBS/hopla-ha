@@ -6,7 +6,7 @@
 // Wait before defining classes so they use the final registry and base class.
 await customElements.whenDefined('home-assistant');
 
-const {translator, browserLanguage, reloadIfOutdated, deviceZone, setFamilyZone, familyZoneOf, setFamilyCurrency, familyCurrencyOf, wallClock, fromWallClock} = await import(new URL(`./hopla-i18n.js${new URL(import.meta.url).search}`, import.meta.url));
+const {translator, browserLanguage, reloadIfOutdated, deviceZone, setFamilyZone, familyZoneOf, setFamilyCurrency, familyCurrencyOf, wallClock, fromWallClock, deadlineLabel} = await import(new URL(`./hopla-i18n.js${new URL(import.meta.url).search}`, import.meta.url));
 const KEYS = {allDone: 'all_done', noTasks: 'no_tasks', noMembers: 'no_members'};
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -189,6 +189,13 @@ export function rowChrono(row, now = new Date()) {
   return row.tasks.filter(task => !task.pending).map(task => task.chrono).find(chrono => chrono && chrono.endsAt > now) || null;
 }
 
+// The deadline still ahead on a row: of its first copy not yet done or
+// waiting for a parent, with that copy's due date.
+export function rowDeadline(row, now = new Date()) {
+  const task = row.tasks.find(task => !task.pending && task.deadline && task.deadline > now);
+  return task ? {at: task.deadline, due: task.due} : null;
+}
+
 // A routine chains tasks in order; each child sees the step to do now. The
 // routine and the child's progress when a task is that step for one of its
 // children, else null.
@@ -260,7 +267,8 @@ export function boardData(hass, config, now = new Date()) {
         assignees: a.assignee_ids || [], assignedTo: a.assigned_to_user_id ?? null,
         together: a.assign_strategy === 'together', pending: a.pending_approval === true, slots: a.slots_today || [],
         frequencyType: a.frequency_type,
-        chrono: a.chrono?.ends_at ? {points: Number(a.chrono.points) || 0, endsAt: new Date(a.chrono.ends_at), live: a.chrono.live_id ?? null} : null});
+        chrono: a.chrono?.ends_at ? {points: Number(a.chrono.points) || 0, endsAt: new Date(a.chrono.ends_at), live: a.chrono.live_id ?? null} : null,
+        deadline: a.deadline ? new Date(a.deadline) : null});
     } else if (a.hopla_games) {
       surprise = a.surprise || null;
       period = a.bonus_period || null;
@@ -889,6 +897,14 @@ class HoplaFamilyCard extends HTMLElement {
     }).join('');
     return `<div class="row slotted${surprise ? ' is-surprise' : ''}"><span class="name"><span>${escape(row.name)}</span>${this.mode(row)}${this.routine(row)}<span class="slot-pills">${pills}</span>${this.chrono(row)}</span>${this.points(row.points)}${sparkle}<span class="faces">${right}</span></div>`;
   }
+  // The deadline of a row: when it is, then the time left once late.
+  deadline(row) {
+    const now = new Date();
+    const deadline = rowDeadline(row, now);
+    const label = deadline && deadlineLabel(deadline.at, deadline.due, now, (key, values) => this.t(key, values), this._language || browserLanguage());
+    if (!label) return '';
+    return `<span class="deadline${label.late ? ' late' : ''}" title="${escape(label.title)}">${svg('hourglass', 14)}${escape(label.text)}</span>`;
+  }
   // The speed bonus open on a row, and for a parent the way to start one.
   chrono(row) {
     const now = new Date();
@@ -958,7 +974,7 @@ class HoplaFamilyCard extends HTMLElement {
     const waiting = row.pending ? `<span class="hourglass">${svg('hourglass', 18, this.t('pending'))}</span>` : '';
     const surprise = row.tasks.find(task => task.surprise);
     const sparkle = surprise ? `<span class="surprise" title="${escape(this.t('surprise', {n: surprise.surprise}))}">${svg('sparkle', 14)}+${surprise.surprise}</span>` : '';
-    return `<div class="row${row.pending ? ' is-pending' : ''}${surprise ? ' is-surprise' : ''}"><span class="name"><span>${escape(row.name)}</span>${this.mode(row)}${this.routine(row)}${this.chrono(row)}</span>${this.points(row.points)}${sparkle}${waiting}<span class="faces">${right}</span></div>`;
+    return `<div class="row${row.pending ? ' is-pending' : ''}${surprise ? ' is-surprise' : ''}"><span class="name"><span>${escape(row.name)}</span>${this.mode(row)}${this.routine(row)}${this.chrono(row)}${this.deadline(row)}</span>${this.points(row.points)}${sparkle}${waiting}<span class="faces">${right}</span></div>`;
   }
   renderDone(row) {
     const faces = row.items.map(item => `<span class="slot" title="${escape(item.member.name)}">${this.face(item.member, 40)}${this.badge('done', 'check')}</span>`).join('');
@@ -1257,6 +1273,9 @@ class HoplaFamilyCard extends HTMLElement {
       .chrono { display: inline-flex; align-self: flex-start; align-items: center; gap: 3px; margin-top: 4px; padding: 3px 9px 3px 7px; border-radius: 999px; font-size: 13px; font-weight: 800;
         background: rgba(91,79,224,.13); color: #5b4fe0; white-space: nowrap; }
       button.chrono { touch-action: manipulation; }
+      .deadline { display: inline-flex; align-self: flex-start; align-items: center; gap: 3px; margin-top: 4px; padding: 3px 9px 3px 7px; border-radius: 999px; font-size: 13px; font-weight: 800;
+        background: rgba(127,127,127,.12); color: var(--secondary-text-color); white-space: nowrap; }
+      .deadline.late { background: rgba(255,122,47,.16); color: #b4470f; }
       .routine { display: inline-flex; align-self: flex-start; align-items: center; gap: 4px; max-width: 100%; margin-top: 4px; padding: 3px 9px 3px 7px; border-radius: 999px;
         font-size: 13px; font-weight: 800; line-height: 1.2; color: #1f8a4c; background: rgba(35,147,79,.14); white-space: nowrap; }
       .routine-name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }

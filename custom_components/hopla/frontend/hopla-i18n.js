@@ -140,6 +140,24 @@ export function fromWallClock(date) {
   return new Date(instant);
 }
 
+// A task's deadline, as both cards show it: when it is until the task is
+// due, then the time left, in orange. null without one or once it is over.
+export function deadlineLabel(deadline, due, now, t, language) {
+  if (!(deadline instanceof Date) || isNaN(deadline) || now >= deadline) return null;
+  const clock = date => wallClock(date).toLocaleTimeString(language || undefined, {hour: 'numeric', minute: '2-digit'});
+  const sameDay = wallClock(deadline).toDateString() === wallClock(now).toDateString();
+  const when = sameDay ? clock(deadline)
+    : `${wallClock(deadline).toLocaleDateString(language || undefined, {weekday: 'short', day: 'numeric', month: 'short'})} ${clock(deadline)}`;
+  const title = t('common.deadline_title', {when});
+  if (!(due instanceof Date) || now < due) return {late: false, text: t('common.deadline_before', {when}), title};
+  const minutes = Math.max(1, Math.ceil((deadline - now) / 60000));
+  const days = Math.floor(minutes / 1440), hours = Math.floor(minutes % 1440 / 60), rest = minutes % 60;
+  const left = minutes < 60 ? t('common.duration_minutes', {n: minutes})
+    : minutes < 1440 ? (rest ? t('common.duration_hours_minutes', {h: hours, m: String(rest).padStart(2, '0')}) : t('common.duration_hours', {n: hours}))
+      : hours ? t('common.duration_days_hours', {count: days, h: hours}) : t('common.duration_days', {count: days});
+  return {late: true, text: t('common.deadline_left', {left}), title};
+}
+
 export function browserLanguage() {
   return globalThis.navigator?.language || 'en';
 }

@@ -2,7 +2,7 @@
 // custom-element registry and HTMLElement with its scoped-registry polyfill.
 // Wait before defining classes so they use the final registry and base class.
 await customElements.whenDefined('home-assistant');
-const {translator, browserLanguage, reloadIfOutdated, setFamilyZone, familyZoneOf, setFamilyCurrency, familyCurrencyOf, wallClock, fromWallClock} = await import(new URL(`./hopla-i18n.js${new URL(import.meta.url).search}`, import.meta.url));
+const {translator, browserLanguage, reloadIfOutdated, setFamilyZone, familyZoneOf, setFamilyCurrency, familyCurrencyOf, wallClock, fromWallClock, deadlineLabel} = await import(new URL(`./hopla-i18n.js${new URL(import.meta.url).search}`, import.meta.url));
 const english = translator('en');
 const hassLanguage = hass => hass?.locale?.language || hass?.language || browserLanguage();
 // Each element keeps a translator for its HA language and renders again when
@@ -379,6 +379,9 @@ class HoplaUserTodoCard extends HTMLElement {
       .task-points ha-icon { --mdc-icon-size:12px; }
       .task-chrono { display:inline-flex; align-items:center; gap:3px; flex-shrink:0; padding:0 6px; border-radius:10px; background:rgba(91,79,224,.13); color:#5b4fe0; font-size:11px; font-weight:700; line-height:18px; white-space:nowrap; }
       .task-chrono ha-icon { --mdc-icon-size:12px; }
+      .task-deadline { display:inline-flex; align-items:center; gap:3px; flex-shrink:0; padding:0 6px; border-radius:10px; background:rgba(127,127,127,.12); color:var(--secondary-text-color); font-size:11px; font-weight:700; line-height:18px; white-space:nowrap; }
+      .task-deadline.late { background:rgba(255,122,47,.16); color:#b4470f; }
+      .task-deadline ha-icon { --mdc-icon-size:12px; }
       .task-mode { display:flex; align-items:center; gap:4px; font-size:12px; font-weight:600; line-height:16px; } .task-mode ha-icon { --mdc-icon-size:14px; }
       .task-routine { display:flex; align-items:center; gap:4px; font-size:12px; font-weight:700; line-height:16px; color:#1f8a4c; } .task-routine ha-icon { --mdc-icon-size:14px; }
       .task-mode.each { color:#3b6fd8; } .task-mode.first { color:#e8590c; } .task-mode.one { color:var(--secondary-text-color); }
@@ -471,6 +474,15 @@ class HoplaUserTodoCard extends HTMLElement {
         badge.title = t('todo.chrono_title', {n: task.chrono.points, time});
         const timer = document.createElement('ha-icon'); timer.setAttribute('icon', 'mdi:timer-outline');
         timer.setAttribute('aria-hidden', 'true'); badge.prepend(timer);
+      }
+      // A deadline: when it is, then the time left once late.
+      const deadline = !completed && task.deadline ? deadlineLabel(new Date(task.deadline),
+        task.next_due_date ? new Date(task.next_due_date) : null, new Date(), t, this._hass.locale?.language) : null;
+      if (deadline) {
+        const badge = addText(name, 'span', deadline.text, `task-deadline${deadline.late ? ' late' : ''}`);
+        badge.title = deadline.title;
+        const glass = document.createElement('ha-icon'); glass.setAttribute('icon', 'mdi:timer-sand');
+        glass.setAttribute('aria-hidden', 'true'); badge.prepend(glass);
       }
       if (hasDescription) {
         const indicator = document.createElement('ha-icon'); indicator.className = 'description-indicator';

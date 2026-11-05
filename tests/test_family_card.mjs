@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 globalThis.HTMLElement = class {};
 globalThis.customElements = {define() {}, get() {}, whenDefined() { return Promise.resolve(); }};
 globalThis.window = {};
-const {adjustEffect, boardData, earnedChange, historyDays, historyKind, labelNames, liveSlot, parentAccess, podium, podiumPlace, rewardState, rowChrono, taskRows} = await import('../custom_components/hopla/frontend/hopla-family-card.js');
+const {adjustEffect, boardData, earnedChange, historyDays, historyKind, labelNames, liveSlot, parentAccess, podium, podiumPlace, rewardState, rowChrono, rowDeadline, taskRows} = await import('../custom_components/hopla/frontend/hopla-family-card.js');
+const {deadlineLabel, translator} = await import('../custom_components/hopla/frontend/hopla-i18n.js');
 
 assert.deepEqual(labelNames([{name: 'Enfants '}, 'Maison', {name: ''}, null]), ['enfants', 'maison']);
 assert.deepEqual(labelNames('a, b'), ['a', 'b']);
@@ -331,4 +332,30 @@ console.log('family card hides the tasks of a child who is away');
   assert.equal(of('Bain'), null, 'over');
   assert.equal(of('Linge'), null, 'done, waiting for a parent');
   console.log('family card speed bonus');
+}
+
+{
+  // A deadline shows on its row: when it is until the task is due, then the time left.
+  const late = (id, name, due, deadline, extra = {}) => task(id, name, {next_due_date: due, deadline, assignee_ids: [2], ...extra});
+  const withDeadline = {...hass, states: {
+    'sensor.hopla_points_elena': member(2, 'Elena', 5),
+    'sensor.chambre': late(30, 'Chambre', '2026-10-20T10:00:00Z', '2026-10-20T13:06:00Z'),
+    'sensor.table': late(31, 'Table', '2026-10-20T17:00:00Z', '2026-10-20T19:00:00Z'),
+    'sensor.livre': late(32, 'Livre', '2026-10-20T08:00:00Z', '2026-10-20T09:00:00Z'),
+    'sensor.vaisselle': late(33, 'Vaisselle', '2026-10-20T10:00:00Z', '2026-10-20T13:00:00Z', {pending_approval: true}),
+  }};
+  const at = new Date('2026-10-20T12:00:00Z');
+  const rows = boardData(withDeadline, {due: 'all', members: [2]}, at).rows;
+  const of = name => rowDeadline(rows.find(r => r.name === name), at);
+  assert.deepEqual(of('Chambre'), {at: new Date('2026-10-20T13:06:00Z'), due: new Date('2026-10-20T10:00:00Z')});
+  assert.equal(of('Livre'), null, 'over');
+  assert.equal(of('Vaisselle'), null, 'done, waiting for a parent');
+  const t = translator('en');
+  const chambre = deadlineLabel(of('Chambre').at, of('Chambre').due, at, t, 'fr');
+  assert.deepEqual({late: chambre.late, text: chambre.text}, {late: true, text: '1 h 06 left'});
+  const table = deadlineLabel(of('Table').at, of('Table').due, at, t, 'fr');
+  assert.deepEqual({late: table.late, text: table.text}, {late: false, text: 'Before 21:00'});
+  const days = deadlineLabel(new Date('2026-10-23T14:00:00Z'), new Date('2026-10-20T10:00:00Z'), at, t, 'fr');
+  assert.equal(days.text, '3 d 2 h left');
+  console.log('family card deadline');
 }
