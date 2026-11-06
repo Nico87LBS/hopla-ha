@@ -161,21 +161,39 @@ def _challenge(challenge):
     }
 
 
+def _next_step(item):
+    """The step after the ones to do now, by name, from the child's run of
+    the routine; None without a run or after the last step."""
+    run = item.get("occurrence") or {}
+    now = set(item.get("available") or [])
+    if item.get("current") is not None:
+        now.add(item["current"])
+    for step in sorted(run.get("items") or [], key=lambda step: step.get("position", 0)):
+        if step.get("status") == "pending" and step.get("choreId") not in now:
+            return step.get("choreName") or None
+    return None
+
+
 def _routine(routine):
     """A routine, its tasks (each child's copy included) and where each
-    member stands today."""
+    member stands today: the steps to do now, until when, and what comes
+    next."""
     return {
         "id": routine["id"],
         "name": routine.get("name"),
         "bonus": routine.get("bonus", 0),
         "task_ids": routine.get("taskIds") or [],
+        "chore_ids": routine.get("choreIds") or [],
         "members": [{
             "user_id": item["userId"],
             "current": item.get("current"),
+            "available": item.get("available") or [],
             "step": item.get("step", 0),
             "done": item.get("done", 0),
             "total": item.get("total", 0),
             "finished": item.get("finished", False),
+            "ends_at": (item.get("occurrence") or {}).get("expiresAt"),
+            "next": _next_step(item),
         } for item in routine.get("members") or []],
     }
 

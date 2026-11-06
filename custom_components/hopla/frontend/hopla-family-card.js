@@ -203,8 +203,33 @@ export function routineStep(routines, task) {
   const routine = (routines || []).find(r => (r.task_ids || []).includes(task.id));
   if (!routine) return null;
   const holders = !task.together && task.assignedTo != null ? [task.assignedTo] : task.assignees || [];
-  const progress = (routine.members || []).find(p => p.current === task.id && holders.includes(p.user_id));
+  const progress = (routine.members || []).find(p => (p.current === task.id || (p.available || []).includes(task.id))
+    && holders.includes(p.user_id));
   return progress ? {routine, progress} : null;
+}
+
+// A routine is under way for a child while a step is there to do now.
+const underWay = p => !p.finished && (p.current != null || (p.available || []).length > 0);
+
+// The routines under way for the children shown, each with where every child
+// stands and what comes next, as the web shows them above the list. A child
+// who already finished stays while the others go on.
+export function activeRoutines(routines, members, tasks) {
+  const nameOf = id => tasks.find(task => task.id === id)?.name;
+  const nextOf = (routine, p) => {
+    if (p.next) return p.next;
+    if (p.ends_at) return '';
+    const ids = routine.chore_ids || [];
+    const index = ids.findIndex(id => sameName(nameOf(id)) === sameName(nameOf(p.current)));
+    return index < 0 ? '' : nameOf(ids[index + 1]) || '';
+  };
+  return (routines || []).map(routine => ({routine,
+    children: (routine.members || []).map(p => ({member: members.find(m => m.id === p.user_id && !m.away), progress: p}))
+      .filter(child => child.member)
+      .map(child => ({...child, next: nextOf(routine, child.progress)})),
+    endsAt: (routine.members || []).map(p => p.ends_at).filter(Boolean).map(at => new Date(at))
+      .reduce((last, at) => (!last || at > last ? at : last), null)}))
+    .filter(block => block.children.some(child => underWay(child.progress)));
 }
 
 // A step of a routine due today that is nobody's step to do now waits,
@@ -327,11 +352,19 @@ export function boardData(hass, config, now = new Date()) {
     .filter(task => task.members.length || task.pending)
     .sort((a, b) => (a.due ?? Infinity) - (b.due ?? Infinity) || a.name.localeCompare(b.name));
   const withMode = rows => rows.map(row => ({...row, mode: taskMode(tasks, row.name)}));
+  // The steps to do now of a routine under way leave the list for its block.
+  const blocks = activeRoutines(routines, shown, tasks);
+  const inBlock = task => task.routine && blocks.some(block => block.routine === task.routine.routine);
+  const listed = visible.filter(task => !inBlock(task));
+  const routineBlocks = blocks.map(block => {
+    const steps = visible.filter(task => inBlock(task) && task.routine.routine === block.routine);
+    return {...block, steps, rows: withMode(taskRows(steps, [], shown))};
+  }).filter(block => block.rows.length);
   const done = shown.flatMap(member => member.recent
     .filter(item => item.completed_at && sameDay(new Date(item.completed_at), now) && labelled(item.labels))
     .map(item => ({...item, member})))
     .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
-  return {members: shown, podium: onPodium, tasks: visible, rows: withMode(taskRows(visible, done, shown)), done, doneRows: withMode(doneRows(done)), rewards: rewards || [], requests,
+  return {members: shown, podium: onPodium, tasks: visible, rows: withMode(taskRows(listed, done, shown)), routineBlocks, done, doneRows: withMode(doneRows(done)), rewards: rewards || [], requests,
     presets, presetsEntry, surprise, period, ladder, adjustable,
     // The newest points changes of the members shown, newest first.
     ledger: ledger.filter(entry => shown.some(m => m.id === entry.user_id)),
@@ -923,7 +956,7 @@ class HoplaFamilyCard extends HTMLElement {
     const chrono = this._chrono;
     const task = chrono && data.tasks.find(t => t.id === chrono.task);
     if (!task) return '';
-    const row = data.rows.find(r => r.tasks.some(t => t.id === task.id));
+    const row = [...data.rows, ...data.routineBlocks.flatMap(block => block.rows)].find(r => r.tasks.some(t => t.id === task.id));
     const running = row && rowChrono(row);
     const live = running?.live ? running : null;
     const busy = this._busy.has(`chrono-${task.id}`) ? 'disabled' : '';
@@ -948,6 +981,53 @@ class HoplaFamilyCard extends HTMLElement {
     if (!step) return '';
     const count = row.tasks.length === 1 ? `<span>${escape(this.t('routine_step', {step: step.progress.step, total: step.progress.total}))}</span>` : '';
     return `<span class="routine" title="${escape(this.t('routine_title', {name: step.routine.name, step: step.progress.step, total: step.progress.total}))}">${svg('steps', 14)}<span class="routine-name">${escape(step.routine.name)}</span>${count}</span>`;
+  }
+  // A routine under way, above the list: each child's progress, then the
+  // steps to do now, the same rows as the list.
+  renderRoutineBlock(block) {
+    const until = block.endsAt ? `<span class="rb-until">${escape(this.t('routine_until', {time: this.clock(block.endsAt)}))}</span>` : '';
+    const canApprove = this._config.show_approval && this._access.parent;
+    // A step's face, on the right, to touch: the same ring as on the tasks.
+    const stepFace = (task, member) => {
+      const busy = this._busy.has(task.id);
+      if (task.pending) {
+        const approval = canApprove ? `<button class="icon-btn ok" data-action="approve" data-task="${task.id}" ${busy ? 'disabled' : ''} aria-label="${escape(this.t('approve'))}">${svg('check', 18)}</button>
+          <button class="icon-btn no" data-action="reject" data-task="${task.id}" ${busy ? 'disabled' : ''} aria-label="${escape(this.t('reject'))}">${svg('cross', 16)}</button>` : '';
+        return `<span class="slot waiting" title="${escape(member.name)}">${this.face(member, 48)}${this.badge('wait', 'clock')}</span>${approval}`;
+      }
+      return `<button class="slot tap${busy && this._busy.get(task.id) === member.id ? ' busy' : ''}" data-action="complete" data-task="${task.id}" data-member="${member.id}"
+        ${busy ? 'disabled' : ''} aria-label="${escape(this.t('common.on_task', {action: member.name, task: task.name}))}">${this.face(member, 48)}</button>`;
+    };
+    const child = ({member, progress, next}) => {
+      const behind = Math.max(progress.done, (progress.step || 1) - 1);
+      const share = progress.finished ? 100 : progress.total ? Math.round(behind * 100 / progress.total) : 0;
+      const status = progress.finished
+        ? `<span class="rb-finished">${svg('check', 14)}${escape(this.t('routine_finished'))}</span>`
+        : `<span class="rb-count">${escape(this.t('routine_at', {step: progress.step || progress.done + 1, total: progress.total}))}</span>`;
+      const head = `<div class="rb-line"><span class="rb-name">${escape(member.name)}</span>${status}</div>`;
+      const bar = `<div class="rb-bar"><i style="width:${share}%"></i></div>`;
+      const steps = block.steps.filter(task => task.routine.progress.user_id === member.id);
+      // A step done several times a day keeps its row with its ring of slots.
+      const plain = steps.filter(task => !task.slots.length);
+      const slotted = steps.filter(task => task.slots.length);
+      const rest = slotted.length ? `<div class="rb-steps">${taskRows(slotted, [], [member]).map(row => this.renderTask({...row, mode: ''})).join('')}</div>` : '';
+      if (plain.length === 1 && !slotted.length) {
+        return `<div class="rb-child${progress.finished ? ' finished' : ''}"><div class="rb-main">${head}
+          <div class="rb-step">${escape(plain[0].name)}</div>${bar}
+          ${!progress.finished && next ? `<div class="rb-next">${escape(this.t('routine_next', {name: next}))}</div>` : ''}</div>
+          <span class="faces">${stepFace(plain[0], member)}</span></div>`;
+      }
+      if (!steps.length) {
+        return `<div class="rb-child${progress.finished ? ' finished' : ''}"><div class="rb-main">${head}
+          ${progress.finished ? '' : `<div class="rb-next">${escape(this.t('routine_waiting'))}</div>`}${bar}</div>
+          <span class="rb-spacer"></span></div>`;
+      }
+      return `<div class="rb-child several"><div class="rb-main">${head}${bar}
+        ${plain.map(task => `<div class="rb-stepline"><span class="rb-step">${escape(task.name)}</span><span class="faces">${stepFace(task, member)}</span></div>`).join('')}${rest}</div></div>`;
+    };
+    return `<div class="routine-block" role="group" aria-label="${escape(this.t('routine_label', {name: block.routine.name}))}">
+      <div class="rb-head">${svg('steps', 20)}<span class="rb-title">${escape(block.routine.name)}</span>${until}</div>
+      ${block.children.map(child).join('')}</div>`;
   }
   mode(row) {
     if (!row.mode) return '';
@@ -1280,6 +1360,26 @@ class HoplaFamilyCard extends HTMLElement {
       .routine { display: inline-flex; align-self: flex-start; align-items: center; gap: 4px; max-width: 100%; margin-top: 4px; padding: 3px 9px 3px 7px; border-radius: 999px;
         font-size: 13px; font-weight: 800; line-height: 1.2; color: #1f8a4c; background: rgba(35,147,79,.14); white-space: nowrap; }
       .routine-name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+      .routine-block { display: flex; flex-direction: column; gap: 10px; margin: 6px 0 14px; padding: 12px 12px 4px; border: 2px solid #23934f; border-radius: 18px;
+        background: linear-gradient(rgba(35,147,79,.14), transparent 140px); }
+      .rb-head { display: flex; align-items: center; gap: 6px; color: #1f8a4c; }
+      .rb-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 18px; font-weight: 800; }
+      .rb-until { font-size: 13px; font-weight: 700; white-space: nowrap; }
+      .rb-child { display: flex; align-items: center; gap: 10px; }
+      .rb-child.several { display: block; }
+      .rb-child.finished .rb-name { opacity: .6; }
+      .rb-step { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; font-weight: 600; }
+      .rb-stepline { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+      .rb-spacer { flex: none; width: 52px; }
+      .rb-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+      .rb-line { display: flex; align-items: baseline; gap: 8px; }
+      .rb-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+      .rb-count { font-size: 13px; font-weight: 700; color: var(--secondary-text-color); }
+      .rb-finished { display: inline-flex; align-items: center; gap: 3px; font-size: 13px; font-weight: 800; color: #1f8a4c; }
+      .rb-bar { height: 8px; border-radius: 8px; background: rgba(127,127,127,.15); overflow: hidden; }
+      .rb-bar i { display: block; height: 100%; border-radius: 8px; background: #23934f; }
+      .rb-next { font-size: 12px; color: var(--secondary-text-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .rb-steps { margin-top: 2px; } .rb-steps .row { background: transparent; }
       .chrono-add { align-self: flex-start; display: inline-flex; align-items: center; margin-top: 4px; padding: 3px 7px; border-radius: 999px; color: rgba(91,79,224,.6); background: rgba(91,79,224,.07); }
       .chrono-icon { width: 40px; height: 40px; flex: none; border-radius: 12px; display: grid; place-items: center; background: rgba(91,79,224,.13); color: #5b4fe0; }
       .chrono-help { margin: 12px 2px 0; font-size: 14px; color: var(--secondary-text-color); }
@@ -1523,8 +1623,11 @@ class HoplaFamilyCard extends HTMLElement {
       ${this._config.show_points && data.podium.length ? this.renderPodium(data.podium) : ''}
       ${this.renderZoneBanner()}${this.renderPeriod(data.period)}
       ${this._config.show_goals ? this.renderChallenges(data.challenges, data.members) : ''}
-      ${this._config.show_todo ? this.section('todo', this.header('todo', 'todo', title, data.rows.length, 'todo'),
-        data.rows.length ? data.rows.map(row => this.renderTask(row)).join('') : `<div class="empty-text">${escape(empty)}</div>`) : ''}
+      ${this._config.show_todo ? this.section('todo', this.header('todo', 'todo', title,
+        data.rows.length + data.routineBlocks.reduce((count, block) => count + block.rows.length, 0), 'todo'),
+        data.routineBlocks.map(block => this.renderRoutineBlock(block)).join('')
+        + (data.rows.length ? data.rows.map(row => this.renderTask(row)).join('')
+          : data.routineBlocks.length ? '' : `<div class="empty-text">${escape(empty)}</div>`)) : ''}
       ${this._config.show_goals ? this.renderQuests(data.members) : ''}
       ${done.length ? this.section('done', this.header('check', 'done', this.t('done'), done.length, 'done'), done.map(item => this.renderDone(item)).join('')) : ''}
       ${this._config.show_history && data.adjustable && data.members.length ? this.section('history', this.header('history', 'hist', this.t('history_title'),
