@@ -30,28 +30,30 @@ card.setConfig({show_points: false});
 card.hass = hass;
 document.body.append(card);
 const root = card.shadowRoot;
-const names = [...root.querySelectorAll('.row .name > span:first-child')].map(el => el.textContent);
-assert.deepEqual(names.sort(), ['Chambre', 'Dents', "S'habiller"], 'only the steps to do now, and other tasks');
-const chips = [...root.querySelectorAll('.routine')].map(el => el.textContent);
-assert.deepEqual(chips.sort(), ['Matin2/3', 'Matin1/3'].sort(), 'each child’s own step and progress');
-// The routine under way stands out in its own block, above the list: each
-// child's progress, then the steps to do now, which leave the list.
+// The steps to do now, in the block, and the other tasks in the list: nothing twice, and steps waiting their turn stay hidden.
+const shown = [...root.querySelectorAll('.rb-step, .row .name > span:first-child')].map(el => el.textContent);
+assert.deepEqual(shown.sort(), ['Chambre', 'Dents', "S'habiller"], 'only the steps to do now, and other tasks');
+// The routine under way stands out in its own block, above the list: one line
+// per child with the step to do now, their face on the right to tick it, and
+// the steps leave the list.
 const blocks = root.querySelectorAll('.routine-block');
 assert.equal(blocks.length, 1, 'one block for the morning routine');
 assert.match(blocks[0].querySelector('.rb-title').textContent, /Matin/);
 assert.deepEqual([...blocks[0].querySelectorAll('.rb-name')].map(el => el.textContent), ['Elena', 'Anna']);
 assert.deepEqual([...blocks[0].querySelectorAll('.rb-count')].map(el => el.textContent.replace(/^\D+/, '')), ['2/3', '1/3'],
-  'the step each child is at, as on the step');
+  'the step each child is at');
+assert.deepEqual([...blocks[0].querySelectorAll('.rb-step')].map(el => el.textContent), ['Dents', "S'habiller"], 'the step to do now, one line per child');
 assert.deepEqual([...blocks[0].querySelectorAll('.rb-next')].map(el => el.textContent.replace(/^(Ensuite : |Next: )/, '')),
   ['Cartable', 'Dents'], 'the next step by name, from the order of the routine');
-assert.deepEqual([...blocks[0].querySelectorAll('.row .name > span:first-child')].map(el => el.textContent).sort(), ['Dents', "S'habiller"]);
+const ticks = [...blocks[0].querySelectorAll('button.slot.tap')];
+assert.deepEqual(ticks.map(el => [el.dataset.task, el.dataset.member]), [['3', '2'], ['2', '3']], 'each child’s face ticks their step');
 const listed = [...root.querySelectorAll('.row')].filter(row => !row.closest('.routine-block'))
   .map(row => row.querySelector('.name > span:first-child').textContent);
 assert.deepEqual(listed, ['Chambre'], 'the steps show once, in the block');
 card.remove();
 
-// A step that can be done in any order shows with the current one, and the
-// end of the run shows in the block.
+// Steps that can be done in any order: one line per open step under the child,
+// and the end of the run shows in the block.
 const anyOrder = [{id: 1, name: 'Soir', task_ids: [2, 4, 6], chore_ids: [2, 4, 6],
   members: [{user_id: 3, current: 2, available: [2, 4], step: 1, done: 0, total: 3, finished: false,
     ends_at: soon(90), next: 'Cartable'}]}];
@@ -60,9 +62,10 @@ card2.setConfig({show_points: false});
 card2.hass = {...hass, states: {...states, 'sensor.hopla_games': {state: '', attributes: {hopla_games: true, routines: anyOrder}}}};
 document.body.append(card2);
 const block = card2.shadowRoot.querySelector('.routine-block');
-assert.deepEqual([...block.querySelectorAll('.row .name > span:first-child')].map(el => el.textContent).sort(), ['Dents', "S'habiller"]);
+assert.deepEqual([...block.querySelectorAll('.rb-step')].map(el => el.textContent).sort(), ['Dents', "S'habiller"]);
+assert.equal(block.querySelectorAll('button.slot.tap').length, 2, 'a face per open step');
+assert.equal(block.querySelectorAll('.rb-name').length, 1, 'the child is named once');
 assert.match(block.querySelector('.rb-until').textContent, /^(jusqu’à|until) /);
-assert.match(block.querySelector('.rb-next').textContent, /Cartable$/);
 card2.remove();
 
 // Once every child finished, the block goes.

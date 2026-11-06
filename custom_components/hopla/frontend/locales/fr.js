@@ -150,6 +150,7 @@ export default {
     routine_step: '{step}/{total}',
     routine_title: 'Routine « {name} » : étape {step} sur {total}',
     routine_at: 'Étape {step}/{total}',
+    routine_waiting: 'En attente de l’étape précédente',
     routine_until: 'jusqu’à {time}',
     routine_next: 'Ensuite : {name}',
     routine_finished: 'Finie',
