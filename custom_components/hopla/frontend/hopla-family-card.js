@@ -325,9 +325,9 @@ export function boardData(hass, config, now = new Date()) {
   const endOfDay = fromWallClock(new Date(wall.getFullYear(), wall.getMonth(), wall.getDate(), 23, 59, 59, 999));
   // Once its last slot of the day is ticked, a task is due tomorrow, but it
   // stays on today's board while one of its slots, or one of another child's
-  // copy, is still to come or waits for a parent. A slot missed earlier no
-  // longer keeps it: the day is over for that task.
-  const busy = new Set(tasks.filter(task => todaySlots(task.slots, now).some(slot => ['upcoming', 'open', 'pending'].includes(slot.state)))
+  // copy, is still to come, waits for a parent or was missed: a parent can
+  // catch a missed slot up until midnight.
+  const busy = new Set(tasks.filter(task => todaySlots(task.slots, now).some(slot => ['upcoming', 'open', 'pending', 'missed'].includes(slot.state)))
     .map(task => sameName(task.name)));
   const slottedToday = task => todaySlots(task.slots, now).length > 0 && busy.has(sameName(task.name));
   // A task started from outside (Home Assistant) waits, hidden, until it is
