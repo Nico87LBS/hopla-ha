@@ -892,7 +892,9 @@ class HoplaFamilyCard extends HTMLElement {
     const surprise = row.tasks.find(task => task.surprise);
     const sparkle = surprise ? `<span class="surprise" title="${escape(this.t('surprise', {n: surprise.surprise}))}">${svg('sparkle', 14)}+${surprise.surprise}</span>` : '';
     const parent = this._config.show_approval && this._access.parent;
-    if (parent && (pendingCount || missedCount)) {
+    // The grid is for a parent with slots to approve; a slot missed alone is
+    // caught up with a touch on the child's face.
+    if (parent && pendingCount) {
       const head = row.columns.map(c => `<span class="gh${slotNow(c, now) ? ' now' : ''}">${escape(c.name || this.slotTime(c.time))}${c.name ? `<small>${escape(this.slotTime(c.time))}</small>` : ''}</span>`).join('');
       const lines = row.slots.map(({member: m, task, slots}) => {
         const cells = row.columns.map(column => {
@@ -923,10 +925,16 @@ class HoplaFamilyCard extends HTMLElement {
     const right = flash ? `<span class="flash">${escape(flash)}</span>` : row.slots.map(({member: m, task, slots}) => {
       const open = slots.find(slot => slot.state === 'open');
       const waiting = slots.some(slot => slot.state === 'pending');
+      // Nothing to do now or to approve but a slot missed: a parent catches it
+      // up with a touch, and the face says so with a turning arrow.
+      const missed = !open && !waiting ? slots.find(slot => slot.state === 'missed') : null;
+      const catchUp = missed && parent;
       const states = slots.map(slot => `${this.slotLabel(slot)} ${this.t(`slot_state.${slot.state}`)}`).join(', ');
-      const label = open ? `${this.t('common.on_task', {action: m.name, task: this.t('slot_tick_named', {slot: open.name || this.slotTime(open.time)})})} · ${states}` : `${m.name} · ${states}`;
-      return `<button class="ringbtn${busy && this._busy.get(busy.id) === m.id ? ' busy' : ''}" data-action="complete" data-task="${task.id}" data-member="${m.id}"
-        ${open && !busy ? '' : 'disabled'} aria-label="${escape(label)}" title="${escape(label)}">${this.ring(slots)}<span class="ring-face">${this.face(m, 48)}</span>${waiting ? this.badge('amber', 'hourglass') : ''}</button>`;
+      const label = open ? `${this.t('common.on_task', {action: m.name, task: this.t('slot_tick_named', {slot: open.name || this.slotTime(open.time)})})} · ${states}`
+        : catchUp ? this.t('common.on_task', {action: this.t('catch_up'), task: `${m.name} · ${this.slotLabel(missed)}`}) : `${m.name} · ${states}`;
+      const action = catchUp ? `data-action="slot-catchup" data-slot="${missed.index}"` : 'data-action="complete"';
+      return `<button class="ringbtn${busy && this._busy.get(busy.id) === m.id ? ' busy' : ''}" ${action} data-task="${task.id}" data-member="${m.id}"
+        ${(open || catchUp) && !busy ? '' : 'disabled'} aria-label="${escape(label)}" title="${escape(label)}">${this.ring(slots)}<span class="ring-face">${this.face(m, 48)}</span>${waiting ? this.badge('amber', 'hourglass') : missed ? this.badge('orange', 'replay') : ''}</button>`;
     }).join('');
     return `<div class="row slotted${surprise ? ' is-surprise' : ''}"><span class="name"><span>${escape(row.name)}</span>${this.mode(row)}${this.routine(row)}<span class="slot-pills">${pills}</span>${this.chrono(row)}</span>${this.points(row.points)}${sparkle}<span class="faces">${right}</span></div>`;
   }
@@ -1464,7 +1472,7 @@ class HoplaFamilyCard extends HTMLElement {
       .ring { position: absolute; inset: 0; }
       .ring-face { position: absolute; inset: 8px; line-height: 0; }
       .ringbtn .badge { right: 0; bottom: 0; width: 22px; height: 22px; }
-      .badge.amber { background: #F59E0B; }
+      .badge.amber { background: #F59E0B; } .badge.orange { background: #E07A2E; }
       .row.open-grid { display: block; padding: 12px 12px 10px 16px; border-color: #a5b4fc; box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
       .grid-top { display: flex; align-items: center; gap: 10px; }
       .grid { display: grid; gap: 8px 10px; align-items: center; margin-top: 12px; }
