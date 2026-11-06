@@ -110,8 +110,22 @@ class GamesTodayTests(unittest.TestCase):
                                                  "taskIds": [1, 2, 4],
                                                  "members": [{"userId": 2, "current": 2, "step": 2, "done": 1,
                                                               "total": 2, "finished": False}]}]})
-        self.assertEqual(today["routines"], [{"id": 3, "name": "Matin", "bonus": 5, "task_ids": [1, 2, 4], "members": [
-            {"user_id": 2, "current": 2, "step": 2, "done": 1, "total": 2, "finished": False}]}])
+        self.assertEqual(today["routines"], [{"id": 3, "name": "Matin", "bonus": 5, "task_ids": [1, 2, 4],
+                                              "chore_ids": [1, 2], "members": [
+            {"user_id": 2, "current": 2, "available": [], "step": 2, "done": 1, "total": 2, "finished": False,
+             "ends_at": None, "next": None}]}])
+
+    def test_routines_carry_the_steps_to_do_now_the_end_and_the_next_step(self):
+        today = games.games_today({"routines": [{"id": 3, "name": "Matin", "taskIds": [1, 2, 3], "members": [{
+            "userId": 2, "current": 1, "available": [1, 2], "step": 1, "done": 0, "total": 3,
+            "occurrence": {"expiresAt": "2026-11-06T07:30:00Z", "items": [
+                {"position": 2, "choreId": 3, "choreName": "Cartable", "status": "pending"},
+                {"position": 0, "choreId": 1, "choreName": "Habiller", "status": "pending"},
+                {"position": 1, "choreId": 2, "choreName": "Dents", "status": "pending"}]}}]}]})
+        member = today["routines"][0]["members"][0]
+        self.assertEqual(member["available"], [1, 2])
+        self.assertEqual(member["ends_at"], "2026-11-06T07:30:00Z")
+        self.assertEqual(member["next"], "Cartable")
 
     def test_events_for_a_new_surprise_and_periods_starting_and_ending(self):
         fired = []
