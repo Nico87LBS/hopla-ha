@@ -235,8 +235,13 @@ assert.deepEqual(data.rows.find(r => r.key === 'dents').slots.map(e => `${e.memb
 const firstDone = {states: {...hass.states,
   'sensor.dents': dueOn({...first.states['sensor.dents'], attributes: {...first.states['sensor.dents'].attributes,
     slots_today: [slot(0, 'Matin', 6, 10, 'missed'), slot(1, 'Soir', 11, 23, 'done', {completed_by: 3})]}}, tomorrow)}};
-assert.equal(boardData(firstDone, {due: 'today', members: [2, 3]}, now).rows.some(r => r.key === 'dents'), false,
-  'last slot done, the one before missed: gone for today');
+assert.equal(boardData(firstDone, {due: 'today', members: [2, 3]}, now).rows.some(r => r.key === 'dents'), true,
+  'last slot done, the one before missed: stays until midnight, a parent can catch it up');
+const onlyMissed = {states: {...hass.states,
+  'sensor.dents': dueOn(slotted(12, 2, [slot(0, 'Matin', 6, 10, 'missed')]), tomorrow),
+  'sensor.dents_anna': dueOn(slotted(17, 3, [slot(0, 'Matin', 6, 10, 'done', {completed_by: 3})]), tomorrow)}};
+assert.equal(boardData(onlyMissed, {due: 'today', members: [2, 3]}, now).rows.some(r => r.key === 'dents'), true,
+  'the only slot of the day missed: stays among today’s until midnight');
 console.log('family card slot tests passed');
 
 // A task started from outside waits, hidden, until it is given a date; a
