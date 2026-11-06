@@ -1048,8 +1048,23 @@ class HoplaFamilyCard extends HTMLElement {
       return `<span class="rb-moment ${tone}">${escape(text)}</span>`;
     };
     // A step's face, on the right, to touch: the same ring as on the tasks.
-    const stepFace = (task, member) => {
+    // A task of several moments says it in its moments: the one open now is
+    // ticked, one waiting for a parent shows the clock and is approved by a
+    // parent, a later one is pale.
+    const stepFace = (task, member, item) => {
       const busy = this._busy.has(task.id);
+      const slots = task.slots.length ? memberSlots(task, member).filter(slot => !item?.slot_id || slot.slot_id === item.slot_id) : [];
+      if (slots.length && !slots.some(slot => slot.state === 'open')) {
+        const waiting = slots.find(slot => slot.state === 'pending');
+        if (waiting) {
+          const data = `data-task="${task.id}" data-slot="${waiting.index}" data-member="${member.id}" ${busy ? 'disabled' : ''}`;
+          const approval = canApprove ? `<button class="icon-btn ok" data-action="slot-approve" ${data} aria-label="${escape(this.t('approve'))}">${svg('check', 18)}</button>
+            <button class="icon-btn no" data-action="slot-reject" ${data} aria-label="${escape(this.t('reject'))}">${svg('cross', 16)}</button>` : '';
+          return `<span class="slot waiting" title="${escape(member.name)}">${this.face(member, 48)}${this.badge('wait', 'clock')}</span>${approval}`;
+        }
+        if (slots.some(slot => slot.state === 'upcoming')) return `<span class="slot" style="opacity:.4" title="${escape(member.name)}">${this.face(member, 48)}</span>`;
+        if (slots.every(slot => ['done', 'taken'].includes(slot.state))) return `<span class="slot" title="${escape(member.name)}">${this.face(member, 48)}${this.badge('done', 'check')}</span>`;
+      }
       if (task.pending) {
         const approval = canApprove ? `<button class="icon-btn ok" data-action="approve" data-task="${task.id}" ${busy ? 'disabled' : ''} aria-label="${escape(this.t('approve'))}">${svg('check', 18)}</button>
           <button class="icon-btn no" data-action="reject" data-task="${task.id}" ${busy ? 'disabled' : ''} aria-label="${escape(this.t('reject'))}">${svg('cross', 16)}</button>` : '';
@@ -1092,7 +1107,7 @@ class HoplaFamilyCard extends HTMLElement {
         return `<div class="rb-child${progress.finished ? ' finished' : ''}"><div class="rb-main">${head}
           <div class="rb-stepname"><span class="rb-step">${escape(only.name)}</span>${pill(only, item(only), false)}</div>${bar}
           ${!progress.finished && next ? `<div class="rb-next">${escape(this.t('routine_next', {name: next}))}</div>` : ''}</div>
-          <span class="faces">${stepFace(only, member)}</span></div>`;
+          <span class="faces">${stepFace(only, member, item(only))}</span></div>`;
       }
       if (!steps.length && !missed.length) {
         return `<div class="rb-child${progress.finished ? ' finished' : ''}"><div class="rb-main">${head}
@@ -1100,7 +1115,7 @@ class HoplaFamilyCard extends HTMLElement {
           <span class="rb-spacer"></span></div>`;
       }
       return `<div class="rb-child several"><div class="rb-main">${head}${bar}
-        ${steps.map(task => `<div class="rb-stepline"><span class="rb-stepname"><span class="rb-step">${escape(task.name)}</span>${pill(task, item(task), false)}</span><span class="faces">${stepFace(task, member)}</span></div>`).join('')}${missedLines}</div></div>`;
+        ${steps.map(task => `<div class="rb-stepline"><span class="rb-stepname"><span class="rb-step">${escape(task.name)}</span>${pill(task, item(task), false)}</span><span class="faces">${stepFace(task, member, item(task))}</span></div>`).join('')}${missedLines}</div></div>`;
     };
     const kind = comingNow ? ' coming' : over ? ' over' : '';
     return `<div class="routine-block${kind}" role="group" aria-label="${escape(this.t(comingNow ? 'routine_label_coming' : 'routine_label', {name: block.routine.name}))}">
