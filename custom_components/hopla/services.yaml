@@ -344,9 +344,7 @@ get_points_history:
     before:
       required: false
       selector:
-        number:
-          min: 1
-          mode: box
+        text:
     config_entry_id:
       required: false
       selector:

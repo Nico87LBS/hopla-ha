@@ -49,6 +49,14 @@ def history_page(rows, members, limit, tasks=(), rewards=()):
     return {"entries": entries, "more": len(rows or []) > limit}
 
 
+def journal_page(page, members, tasks=(), rewards=()):
+    """One page of a member's journal for the cards, newest first: the ledger
+    plus the tasks done for nothing and the tasks missed. `page` is what the
+    server gave: its rows and the cursor `next` of the older ones, if any."""
+    names = history_page(page.get("rows"), members, len(page.get("rows") or []), tasks, rewards)["entries"]
+    return {"entries": names, "more": bool(page.get("next")), "next": page.get("next")}
+
+
 def presets(rows):
     """Ready-made bonuses (points > 0) and penalties (points < 0)."""
     return [{"id": row["id"], "name": row["name"], "points": row["points"]} for row in rows or []]

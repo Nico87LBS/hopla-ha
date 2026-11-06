@@ -17,7 +17,7 @@ from .api import HoplaApiClient
 from .frontend import async_setup_frontend
 from .completion_history import async_completed_occurrences
 from .approval import ApprovalTracker, STATUS_PENDING_APPROVAL, pending_approvals, member_name
-from .games import GamesTracker, NextChangeRefresh, PointsLedgerTracker, games_today, history_page, presets as points_presets
+from .games import GamesTracker, NextChangeRefresh, PointsLedgerTracker, games_today, history_page, journal_page, presets as points_presets
 from .realtime import RealtimeListener
 from .reminders import ReminderScheduler
 from .chrono import ChronoTracker
@@ -711,11 +711,11 @@ async def async_get_points_history_service(hass: HomeAssistant, call: ServiceCal
     coordinator = config["coordinator"]
     limit = call.data.get("limit", 20)
     try:
-        rows = await config["client"].async_get_points_history(
-            limit + 1, call.data["user_id"], call.data.get("before"))
+        page = await config["client"].async_get_points_journal(
+            limit, call.data["user_id"], call.data.get("before"))
     except Exception as err:
         raise HomeAssistantError(str(err)) from err
-    return history_page(rows, config["family_members"], limit,
+    return journal_page(page, config["family_members"],
                         getattr(coordinator, "all_tasks", None), getattr(coordinator, "rewards", None))
 
 
