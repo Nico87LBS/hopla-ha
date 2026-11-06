@@ -227,7 +227,8 @@ export function routineStepOf(routines, task) {
   const routine = (routines || []).find(r => (r.task_ids || []).includes(task.task_id));
   if (!routine) return null;
   const holders = !together(task) && task.assigned_to != null ? [task.assigned_to] : task.assignee_ids || [];
-  const progress = (routine.members || []).find(p => p.current === task.task_id && holders.includes(p.user_id));
+  const progress = (routine.members || []).find(p => (p.current === task.task_id || (p.available || []).includes(task.task_id))
+    && holders.includes(p.user_id));
   return progress ? {routine, progress} : null;
 }
 // A step due today that is nobody's step to do now waits, hidden, for the
