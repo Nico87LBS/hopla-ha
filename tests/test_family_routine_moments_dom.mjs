@@ -82,12 +82,19 @@ assert.equal(block.querySelector('.rb-next').textContent, 'Première étape : De
 assert.equal(block.querySelectorAll('button').length, 0, 'nothing to tick before it opens');
 card.remove();
 
-// Over: an orange block with what was left, for a parent to catch up.
+// Over: nothing left to tick, so one red line; a touch opens the block with
+// what was left, for a parent to catch up.
 card = await mount([{id: 1, name: 'Matin', task_ids: [3, 5], chore_ids: [3, 5], window: 'over', closes_at: at(-10),
   members: [{user_id: 2, current: null, available: [], step: 0, done: 1, total: 2, finished: false, missed: [5],
     steps: [step(), {chore_id: 5, slot_id: '', name: 'Cartable', position: 1, missed: true}]}]}]);
 block = card.shadowRoot.querySelector('.routine-block');
-assert.ok(block.classList.contains('over'));
+assert.ok(block.classList.contains('settled') && block.classList.contains('red'));
+assert.equal(block.querySelector('.rb-until').textContent, '1 manquée');
+assert.equal(card.shadowRoot.querySelectorAll('.rb-stepline').length, 0, 'collapsed: no steps shown');
+block.click();
+await new Promise(resolve => setTimeout(resolve, 10));
+block = card.shadowRoot.querySelector('.routine-block');
+assert.ok(block.classList.contains('red') && !block.classList.contains('settled'));
 assert.match(block.querySelector('.rb-until').textContent, /^finie à /);
 assert.equal(block.querySelector('.rb-count').textContent, '1 manquée');
 const late = block.querySelector('.rb-stepline.missed button.slot.missed');
@@ -101,10 +108,22 @@ card = await mount([{id: 1, name: 'Matin', task_ids: [3, 5], chore_ids: [3, 5], 
   members: [{user_id: 2, current: 3, available: [3], step: 1, done: 0, total: 2, finished: false, missed: [], steps: [step(), {chore_id: 5, slot_id: '', position: 1}]}]}],
   {'sensor.dents': teeth([waitingMorning, evening])});
 block = card.shadowRoot.querySelector('.routine-block');
+// Only a step to approve is left: one orange line, opened by a touch.
+assert.ok(block.classList.contains('settled') && block.classList.contains('orange'));
+assert.equal(block.querySelector('.rb-until').textContent, '1 à valider');
+block.click();
+await new Promise(resolve => setTimeout(resolve, 10));
+block = card.shadowRoot.querySelector('.routine-block');
 assert.ok(block.querySelector('.slot.waiting'), 'the face shows the step waits for a parent');
 assert.equal(block.querySelectorAll('button.slot.tap[data-task="3"]').length, 0, 'it cannot be ticked again');
 const approve = block.querySelector('button[data-action="slot-approve"]');
 assert.equal(approve.dataset.slot, '0');
 assert.equal(approve.dataset.task, '3');
 card.remove();
+// A step still to tick keeps the block open; the helper decides.
+const {settledRoutine} = await import('../custom_components/hopla/frontend/hopla-family-card.js');
+assert.equal(settledRoutine([{finished: false, missed: 0, states: ['todo']}]), null);
+assert.equal(settledRoutine([{finished: false, missed: 0, states: []}]), null);
+assert.deepEqual(settledRoutine([{finished: true, missed: 0, states: []}]), {tone: 'green', pending: 0, missed: 0});
+assert.equal(settledRoutine([{finished: false, missed: 1, states: ['pending']}]).tone, 'red');
 console.log('ok');
