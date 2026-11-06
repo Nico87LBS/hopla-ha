@@ -254,6 +254,26 @@ export function activeRoutines(routines, members, tasks) {
     .filter(block => block.children.some(child => underWay(child.progress) || coming(block.routine, child.progress)));
 }
 
+// A routine with nothing left for a child to tick: each child is finished, or
+// has only steps waiting for a parent's approval, or missed ones to catch up.
+// It then shows as one line, green (all done), orange (steps to approve) or
+// red (steps missed); null while a child still has something to do or wait
+// for. `children` is [{finished, missed, states}], `states` the face of each
+// open step ('pending' when it waits for approval).
+export function settledRoutine(children) {
+  if (!children?.length) return null;
+  let pending = 0;
+  let missed = 0;
+  for (const child of children) {
+    const states = child.states || [];
+    const waiting = !child.finished && !states.length && !child.missed;
+    if (waiting || states.some(state => state !== 'pending')) return null;
+    pending += states.length;
+    missed += child.missed || 0;
+  }
+  return {tone: missed ? 'red' : pending ? 'orange' : 'green', pending, missed};
+}
+
 // A step of a routine due today that is nobody's step to do now waits,
 // hidden, for the steps before it. Steps due another day show as usual. A
 // step about one moment of a task leaves the task's other moments in the
@@ -502,6 +522,7 @@ class HoplaFamilyCard extends HTMLElement {
     this._afterPin = null;    // the window to open once the parent code is typed
     this._history = new Map(); // member id -> the points history loaded for the window
     this._open = {};          // section -> folded open or not, once touched
+    this._routineOpen = new Set(); // routines settled, opened by a touch
     this.shadowRoot.addEventListener('click', event => this.onClick(event));
     this.shadowRoot.addEventListener('input', event => {
       if (event.target.dataset?.field === 'reason' && this._sheet) this._sheet.reason = event.target.value;
@@ -566,6 +587,7 @@ class HoplaFamilyCard extends HTMLElement {
     if (!button || button.disabled) return;
     const {action, task, member, reward, request, digit, preset, slot, tasks} = button.dataset;
     if (action.startsWith('chrono-')) { await this.onChrono(action, button.dataset); return; }
+    if (action === 'routine-fold') { const id = Number(button.dataset.routine); if (this._routineOpen.has(id)) this._routineOpen.delete(id); else this._routineOpen.add(id); this.render(); return; }
     if (action === 'fold') { const {section} = button.dataset; this._open[section] = !this.isOpen(section); this.render(); return; }
     if (action === 'games-open') { await this.onGames(Number(member)); return; }
     if (action === 'adjust-open') { await this.openAdjust(Number(member), button.dataset.tab || 'bonus'); return; }
@@ -1117,9 +1139,31 @@ class HoplaFamilyCard extends HTMLElement {
       return `<div class="rb-child several"><div class="rb-main">${head}${bar}
         ${steps.map(task => `<div class="rb-stepline"><span class="rb-stepname"><span class="rb-step">${escape(task.name)}</span>${pill(task, item(task), false)}</span><span class="faces">${stepFace(task, member, item(task))}</span></div>`).join('')}${missedLines}</div></div>`;
     };
-    const kind = comingNow ? ' coming' : over ? ' over' : '';
+    // Nothing left to tick: one line, its colour saying how it stands. A touch
+    // opens it, to approve or catch steps up.
+    const stateOf = (task, member, item) => {
+      const slots = task.slots.length ? memberSlots(task, member).filter(slot => !item?.slot_id || slot.slot_id === item.slot_id) : [];
+      if (slots.length) return !slots.some(slot => slot.state === 'open') && slots.some(slot => slot.state === 'pending') ? 'pending' : 'todo';
+      return task.pending ? 'pending' : 'todo';
+    };
+    const settled = comingNow ? null : settledRoutine(block.children.map(({member, progress}) => ({
+      finished: progress.finished,
+      missed: block.missed.filter(entry => entry.member.id === member.id).length,
+      states: block.steps.filter(task => task.routine.progress.user_id === member.id).map(task => stateOf(task, member, routineItem(progress, task.id)))})));
+    const opened = this._routineOpen.has(block.routine.id);
+    const name = escape(block.routine.name);
+    if (settled && !opened) {
+      const summary = [settled.missed && this.t('routine_missed_count', {count: settled.missed}),
+        settled.pending && this.t('routine_to_approve', {count: settled.pending})].filter(Boolean).join(' · ') || this.t('routine_finished');
+      return `<button class="routine-block settled ${settled.tone}" data-action="routine-fold" data-routine="${block.routine.id}" aria-expanded="false"
+        aria-label="${escape(this.t('routine_label_settled', {name: block.routine.name}))}">${svg('steps', 20)}<span class="rb-title">${name}</span>
+        <span class="rb-until">${escape(summary)}</span>${svg('chevron', 18)}</button>`;
+    }
+    const fold = settled ? `<button class="rb-fold" data-action="routine-fold" data-routine="${block.routine.id}" aria-expanded="true"
+      aria-label="${escape(this.t('routine_collapse', {name: block.routine.name}))}">${svg('chevron', 18)}</button>` : '';
+    const kind = comingNow ? ' coming' : settled ? ` ${settled.tone}` : over ? ' over' : '';
     return `<div class="routine-block${kind}" role="group" aria-label="${escape(this.t(comingNow ? 'routine_label_coming' : 'routine_label', {name: block.routine.name}))}">
-      <div class="rb-head">${svg('steps', 20)}<span class="rb-title">${escape(block.routine.name)}</span>${until}</div>
+      <div class="rb-head">${svg('steps', 20)}<span class="rb-title">${name}</span>${until}${fold}</div>
       ${block.children.map(child).join('')}</div>`;
   }
   mode(row) {
@@ -1475,6 +1519,15 @@ class HoplaFamilyCard extends HTMLElement {
       .rb-steps { margin-top: 2px; } .rb-steps .row { background: transparent; }
       .routine-block.coming { border-style: dashed; border-color: rgba(127,127,127,.45); background: rgba(127,127,127,.05); }
       .routine-block.coming .rb-head { color: var(--secondary-text-color); }
+      .routine-block.settled { display: flex; flex-direction: row; align-items: center; gap: 6px; width: 100%; box-sizing: border-box; padding: 8px 12px; margin: 6px 0 14px; font: inherit; text-align: left; cursor: pointer; }
+      .routine-block.settled .rb-title { color: inherit; }
+      .routine-block.settled svg:last-child { transform: rotate(90deg); }
+      .rb-fold { background: none; border: 0; color: inherit; cursor: pointer; padding: 0; display: flex; }
+      .rb-fold svg { transform: rotate(-90deg); }
+      .routine-block.green { border-color: #23934f; color: #1d6b3b; background: #e3f6ea; }
+      .routine-block.orange { border-color: #e07a2e; color: #b4470f; background: #fff1e6; }
+      .routine-block.red { border-color: #b42318; color: #b42318; background: #fdecec; }
+      .routine-block.settled.green .rb-until, .routine-block.settled.orange .rb-until, .routine-block.settled.red .rb-until { color: inherit; }
       .routine-block.over { border-color: #e07a2e; background: linear-gradient(rgba(224,122,46,.12), transparent 140px); }
       .routine-block.over .rb-head, .rb-count.over { color: #b4470f; }
       .routine-block.over .rb-bar i { background: #e07a2e; }
