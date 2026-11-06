@@ -94,4 +94,17 @@ const late = block.querySelector('.rb-stepline.missed button.slot.missed');
 assert.equal(late.dataset.action, 'complete', 'a step that is the whole task is caught up by doing it');
 assert.equal(late.dataset.task, '5');
 card.remove();
+// A moment ticked and waiting for a parent: the clock on the face, and the
+// parent approves that moment, not the task.
+const waitingMorning = {...morning, state: 'pending', completed_by: 2};
+card = await mount([{id: 1, name: 'Matin', task_ids: [3, 5], chore_ids: [3, 5], window: 'open', closes_at: at(60),
+  members: [{user_id: 2, current: 3, available: [3], step: 1, done: 0, total: 2, finished: false, missed: [], steps: [step(), {chore_id: 5, slot_id: '', position: 1}]}]}],
+  {'sensor.dents': teeth([waitingMorning, evening])});
+block = card.shadowRoot.querySelector('.routine-block');
+assert.ok(block.querySelector('.slot.waiting'), 'the face shows the step waits for a parent');
+assert.equal(block.querySelectorAll('button.slot.tap[data-task="3"]').length, 0, 'it cannot be ticked again');
+const approve = block.querySelector('button[data-action="slot-approve"]');
+assert.equal(approve.dataset.slot, '0');
+assert.equal(approve.dataset.task, '3');
+card.remove();
 console.log('ok');
