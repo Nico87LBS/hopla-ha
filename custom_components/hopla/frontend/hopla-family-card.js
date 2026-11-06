@@ -396,7 +396,10 @@ export function boardData(hass, config, now = new Date()) {
       // Every child's copy of the surprise task, same name, is worth the bonus.
       const isSurprise = surprise && (surprise.task_id === task.id || (surprise.task_ids || []).includes(task.id)
         || sameName(surprise.task_name) === sameName(task.name));
-      const slots = todaySlots(task.slots, now);
+      // Every moment of today done, for each child's copy: the task is due
+      // again on a later day and its ring waits, grey, for that next time.
+      const later = task.due && task.due > endOfDay && !busy.has(sameName(task.name));
+      const slots = todaySlots(task.slots, now).map(slot => (later ? {...slot, state: 'upcoming'} : slot));
       return {...task, slots, members: candidates, surprise: isSurprise ? surprise.points : 0, routine: routineStep(routines, task),
         completedBy: task.pending && !slots.length ? shown.find(m => m.id === completers.get(task.id)) || null : null};
     })

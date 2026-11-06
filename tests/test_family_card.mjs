@@ -223,6 +223,9 @@ const allDone = {states: {...hass.states,
   'sensor.dents': dueOn(slotted(12, 2, [slot(0, 'Matin', 6, 10, 'done', {completed_by: 2})]), tomorrow),
   'sensor.dents_anna': dueOn(slotted(17, 3, [slot(0, 'Matin', 6, 10, 'done', {completed_by: 3})]), tomorrow)}};
 assert.equal(boardData(allDone, {due: 'today', members: [2, 3]}, now).rows.some(r => r.key === 'dents'), false, 'done by all for today: gone');
+assert.deepEqual(boardData(allDone, {due: 'all', members: [2, 3]}, now).rows.find(r => r.key === 'dents').slots
+  .map(e => `${e.member.name}:${e.slots.map(s => s.state).join(',')}`), ['Elena:upcoming', 'Anna:upcoming'],
+'done by all for today, shown with every task: the rings wait for tomorrow, not done');
 
 // The first one to do it does it for all: one set of slots for both children,
 // and a slot ticked by one is not the other's.
