@@ -169,21 +169,38 @@ def _next_step(item):
     if item.get("current") is not None:
         now.add(item["current"])
     for step in sorted(run.get("items") or [], key=lambda step: step.get("position", 0)):
-        if step.get("status") == "pending" and step.get("choreId") not in now:
+        if step.get("status") == "pending" and not step.get("missed") and step.get("choreId") not in now:
             return step.get("choreName") or None
     return None
 
 
+def _steps(item):
+    """The steps of the child's run of the routine: which moment of its task
+    each one is about, and whether it was missed."""
+    run = item.get("occurrence") or {}
+    return [{
+        "chore_id": step.get("choreId"),
+        "slot_id": step.get("slotId") or "",
+        "name": step.get("choreName") or "",
+        "position": step.get("position", 0),
+        "missed": bool(step.get("missed")),
+    } for step in sorted(run.get("items") or [], key=lambda step: step.get("position", 0))]
+
+
 def _routine(routine):
     """A routine, its tasks (each child's copy included) and where each
-    member stands today: the steps to do now, until when, and what comes
-    next."""
+    member stands today: the steps to do now, until when, what comes next,
+    and the steps missed. A routine with hours says where it stands today
+    (window: upcoming, open, over) and its hours."""
     return {
         "id": routine["id"],
         "name": routine.get("name"),
         "bonus": routine.get("bonus", 0),
         "task_ids": routine.get("taskIds") or [],
         "chore_ids": routine.get("choreIds") or [],
+        "window": routine.get("window") or "",
+        "opens_at": routine.get("opensAt"),
+        "closes_at": routine.get("closesAt"),
         "members": [{
             "user_id": item["userId"],
             "current": item.get("current"),
@@ -194,6 +211,8 @@ def _routine(routine):
             "finished": item.get("finished", False),
             "ends_at": (item.get("occurrence") or {}).get("expiresAt"),
             "next": _next_step(item),
+            "missed": item.get("missed") or [],
+            "steps": _steps(item),
         } for item in routine.get("members") or []],
     }
 

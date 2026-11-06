@@ -208,8 +208,28 @@ export function routineStep(routines, task) {
   return progress ? {routine, progress} : null;
 }
 
-// A routine is under way for a child while a step is there to do now.
-const underWay = p => !p.finished && (p.current != null || (p.available || []).length > 0);
+// A routine is under way for a child while a step is there to do now, or a
+// step missed is still there for a parent to catch up, until midnight.
+const underWay = p => !p.finished && (p.current != null || (p.available || []).length > 0 || (p.missed || []).length > 0);
+// A routine with hours shows, in the hour before it opens, as coming.
+const coming = (routine, p) => routine.window === 'upcoming' && p.total > 0;
+
+// The step of a child's run for one of their tasks: the moment of the task it
+// is about, and whether it was missed.
+export const routineItem = (progress, taskId) => (progress?.steps || []).find(step => step.chore_id === taskId) || null;
+
+// The moment of a task a step is about today, and how it stands: 'late' once
+// its time is past, 'missed' once it closed, 'neutral' before. A step that is
+// the whole task stands for the moment open now. Null without moments.
+export function stepMoment(item, slots, now = new Date()) {
+  if (!slots?.length) return null;
+  const slot = item?.slot_id ? slots.find(entry => entry.slot_id === item.slot_id)
+    : slots.find(entry => entry.state === 'open') || slots.find(entry => entry.state === 'upcoming');
+  if (!slot) return null;
+  const tone = item?.missed || slot.state === 'missed' ? 'missed'
+    : slot.state === 'open' && slot.at && new Date(slot.at) <= now ? 'late' : 'neutral';
+  return {slot, tone};
+}
 
 // The routines under way for the children shown, each with where every child
 // stands and what comes next, as the web shows them above the list. A child
@@ -226,18 +246,29 @@ export function activeRoutines(routines, members, tasks) {
   return (routines || []).map(routine => ({routine,
     children: (routine.members || []).map(p => ({member: members.find(m => m.id === p.user_id && !m.away), progress: p}))
       .filter(child => child.member)
-      .map(child => ({...child, next: nextOf(routine, child.progress)})),
-    endsAt: (routine.members || []).map(p => p.ends_at).filter(Boolean).map(at => new Date(at))
+      .map(child => ({...child, next: routine.window === 'upcoming' ? nameOf((routine.chore_ids || [])[0]) || '' : nextOf(routine, child.progress)})),
+    window: routine.window || '',
+    opensAt: routine.opens_at ? new Date(routine.opens_at) : null,
+    endsAt: routine.closes_at ? new Date(routine.closes_at) : (routine.members || []).map(p => p.ends_at).filter(Boolean).map(at => new Date(at))
       .reduce((last, at) => (!last || at > last ? at : last), null)}))
-    .filter(block => block.children.some(child => underWay(child.progress)));
+    .filter(block => block.children.some(child => underWay(child.progress) || coming(block.routine, child.progress)));
 }
 
 // A step of a routine due today that is nobody's step to do now waits,
-// hidden, for the steps before it. Steps due another day show as usual.
-export function waitsInRoutine(routines, task, endOfDay) {
-  if (!(routines || []).some(r => (r.task_ids || []).includes(task.id))) return false;
+// hidden, for the steps before it. Steps due another day show as usual. A
+// step about one moment of a task leaves the task's other moments in the
+// list once that moment is done or missed.
+export function waitsInRoutine(routines, task, endOfDay, now = new Date()) {
+  const routine = (routines || []).find(r => (r.task_ids || []).includes(task.id));
+  if (!routine) return false;
   if (!task.due || task.due > endOfDay) return false;
-  return !routineStep(routines, task);
+  if (routineStep(routines, task)) return false;
+  const item = (routine.members || []).map(p => routineItem(p, task.id)).find(Boolean);
+  if (item?.slot_id) {
+    const slot = todaySlots(task.slots, now).find(entry => entry.slot_id === item.slot_id);
+    if (slot && !['upcoming', 'open'].includes(slot.state)) return false;
+  }
+  return true;
 }
 
 // Who may approve and spend points here. Without parents chosen in the
@@ -335,7 +366,7 @@ export function boardData(hass, config, now = new Date()) {
   const visible = tasks.filter(task => labelled(task.labels)
     && !(task.frequencyType === 'trigger' && !task.due)
     && (config.due !== 'today' || !task.due || task.due <= endOfDay || slottedToday(task))
-    && !waitsInRoutine(routines, task, endOfDay))
+    && !waitsInRoutine(routines, task, endOfDay, now))
     .map(task => {
       // The heads of who has the task now: its assignee, or all of them for a
       // task for everyone together (or anyone's, with nobody chosen).
@@ -358,8 +389,14 @@ export function boardData(hass, config, now = new Date()) {
   const listed = visible.filter(task => !inBlock(task));
   const routineBlocks = blocks.map(block => {
     const steps = visible.filter(task => inBlock(task) && task.routine.routine === block.routine);
-    return {...block, steps, rows: withMode(taskRows(steps, [], shown))};
-  }).filter(block => block.rows.length);
+    // The steps missed, for a parent to catch up: the child's task, with its
+    // moments of today.
+    const missed = block.children.flatMap(({member, progress}) => (progress.steps || []).filter(step => step.missed)
+      .map(step => ({member, step, task: tasks.find(task => task.id === step.chore_id)}))
+      .filter(entry => entry.task)
+      .map(entry => ({...entry, task: {...entry.task, slots: todaySlots(entry.task.slots, now)}})));
+    return {...block, steps, missed, rows: withMode(taskRows(steps, [], shown))};
+  }).filter(block => block.rows.length || block.missed.length || block.window === 'upcoming');
   const done = shown.flatMap(member => member.recent
     .filter(item => item.completed_at && sameDay(new Date(item.completed_at), now) && labelled(item.labels))
     .map(item => ({...item, member})))
@@ -993,8 +1030,23 @@ class HoplaFamilyCard extends HTMLElement {
   // A routine under way, above the list: each child's progress, then the
   // steps to do now, the same rows as the list.
   renderRoutineBlock(block) {
-    const until = block.endsAt ? `<span class="rb-until">${escape(this.t('routine_until', {time: this.clock(block.endsAt)}))}</span>` : '';
+    const now = new Date();
+    const comingNow = block.window === 'upcoming';
+    const over = block.window === 'over' && block.children.some(({progress}) => !progress.finished);
+    const right = comingNow ? (block.opensAt ? this.t('routine_starts_at', {time: this.clock(block.opensAt)}) : '')
+      : !block.endsAt ? '' : this.t(over ? 'routine_ended_at' : 'routine_until', {time: this.clock(block.endsAt)});
+    const until = right ? `<span class="rb-until">${escape(right)}</span>` : '';
     const canApprove = this._config.show_approval && this._access.parent;
+    // The moment a step is about, only that one: orange once its time is past.
+    const pill = (task, item, missed) => {
+      const moment = stepMoment(item, task.slots, now);
+      if (!moment && !missed) return '';
+      const tone = missed ? 'missed' : moment.tone;
+      const name = moment ? moment.slot.name || this.slotTime(moment.slot.time) : '';
+      const text = tone === 'missed' ? (name ? this.t('routine_moment_missed', {name}) : this.t('routine_missed'))
+        : tone === 'late' ? this.t('routine_moment_late', {name}) : name;
+      return `<span class="rb-moment ${tone}">${escape(text)}</span>`;
+    };
     // A step's face, on the right, to touch: the same ring as on the tasks.
     const stepFace = (task, member) => {
       const busy = this._busy.has(task.id);
@@ -1006,34 +1058,52 @@ class HoplaFamilyCard extends HTMLElement {
       return `<button class="slot tap${busy && this._busy.get(task.id) === member.id ? ' busy' : ''}" data-action="complete" data-task="${task.id}" data-member="${member.id}"
         ${busy ? 'disabled' : ''} aria-label="${escape(this.t('common.on_task', {action: member.name, task: task.name}))}">${this.face(member, 48)}</button>`;
     };
+    // A missed step: greyed, a turning arrow on the face that only a parent
+    // can touch, until midnight: its moment, or the whole task.
+    const missedFace = (task, item, member) => {
+      const busy = this._busy.has(task.id);
+      const moment = stepMoment(item, task.slots, now);
+      const action = moment ? `data-action="slot-catchup" data-slot="${moment.slot.index}"` : 'data-action="complete"';
+      const label = this.t('common.on_task', {action: this.t('catch_up'), task: `${member.name} · ${task.name}`});
+      return `<button class="slot tap missed" ${action} data-task="${task.id}" data-member="${member.id}" ${canApprove && !busy ? '' : 'disabled'}
+        aria-label="${escape(label)}" title="${escape(label)}">${this.face(member, 48)}${this.badge('orange', 'replay')}</button>`;
+    };
     const child = ({member, progress, next}) => {
+      if (comingNow) {
+        if (!progress.total) return '';
+        return `<div class="rb-child"><div class="rb-main"><div class="rb-line"><span class="rb-name">${escape(member.name)}</span>
+          <span class="rb-count">${escape(this.t('routine_steps', {count: progress.total}))}</span></div>
+          ${next ? `<div class="rb-next">${escape(this.t('routine_first', {name: next}))}</div>` : ''}</div></div>`;
+      }
+      const missed = block.missed.filter(entry => entry.member.id === member.id);
       const behind = Math.max(progress.done, (progress.step || 1) - 1);
-      const share = progress.finished ? 100 : progress.total ? Math.round(behind * 100 / progress.total) : 0;
+      const share = progress.finished ? 100 : progress.total ? Math.round((over ? progress.done : behind) * 100 / progress.total) : 0;
       const status = progress.finished
         ? `<span class="rb-finished">${svg('check', 14)}${escape(this.t('routine_finished'))}</span>`
-        : `<span class="rb-count">${escape(this.t('routine_at', {step: progress.step || progress.done + 1, total: progress.total}))}</span>`;
+        : over ? `<span class="rb-count over">${escape(this.t('routine_missed_count', {count: missed.length}))}</span>`
+          : `<span class="rb-count">${escape(this.t('routine_at', {step: progress.step || progress.done + 1, total: progress.total}))}</span>`;
       const head = `<div class="rb-line"><span class="rb-name">${escape(member.name)}</span>${status}</div>`;
       const bar = `<div class="rb-bar"><i style="width:${share}%"></i></div>`;
       const steps = block.steps.filter(task => task.routine.progress.user_id === member.id);
-      // A step done several times a day keeps its row with its ring of slots.
-      const plain = steps.filter(task => !task.slots.length);
-      const slotted = steps.filter(task => task.slots.length);
-      const rest = slotted.length ? `<div class="rb-steps">${taskRows(slotted, [], [member]).map(row => this.renderTask({...row, mode: ''})).join('')}</div>` : '';
-      if (plain.length === 1 && !slotted.length) {
+      const item = task => routineItem(progress, task.id);
+      const missedLines = missed.map(({task, step}) => `<div class="rb-stepline missed"><span class="rb-stepname"><span class="rb-step">${escape(task.name)}</span>${pill(task, step, true)}</span><span class="faces">${missedFace(task, step, member)}</span></div>`).join('');
+      if (steps.length === 1 && !missed.length) {
+        const only = steps[0];
         return `<div class="rb-child${progress.finished ? ' finished' : ''}"><div class="rb-main">${head}
-          <div class="rb-step">${escape(plain[0].name)}</div>${bar}
+          <div class="rb-stepname"><span class="rb-step">${escape(only.name)}</span>${pill(only, item(only), false)}</div>${bar}
           ${!progress.finished && next ? `<div class="rb-next">${escape(this.t('routine_next', {name: next}))}</div>` : ''}</div>
-          <span class="faces">${stepFace(plain[0], member)}</span></div>`;
+          <span class="faces">${stepFace(only, member)}</span></div>`;
       }
-      if (!steps.length) {
+      if (!steps.length && !missed.length) {
         return `<div class="rb-child${progress.finished ? ' finished' : ''}"><div class="rb-main">${head}
           ${progress.finished ? '' : `<div class="rb-next">${escape(this.t('routine_waiting'))}</div>`}${bar}</div>
           <span class="rb-spacer"></span></div>`;
       }
       return `<div class="rb-child several"><div class="rb-main">${head}${bar}
-        ${plain.map(task => `<div class="rb-stepline"><span class="rb-step">${escape(task.name)}</span><span class="faces">${stepFace(task, member)}</span></div>`).join('')}${rest}</div></div>`;
+        ${steps.map(task => `<div class="rb-stepline"><span class="rb-stepname"><span class="rb-step">${escape(task.name)}</span>${pill(task, item(task), false)}</span><span class="faces">${stepFace(task, member)}</span></div>`).join('')}${missedLines}</div></div>`;
     };
-    return `<div class="routine-block" role="group" aria-label="${escape(this.t('routine_label', {name: block.routine.name}))}">
+    const kind = comingNow ? ' coming' : over ? ' over' : '';
+    return `<div class="routine-block${kind}" role="group" aria-label="${escape(this.t(comingNow ? 'routine_label_coming' : 'routine_label', {name: block.routine.name}))}">
       <div class="rb-head">${svg('steps', 20)}<span class="rb-title">${escape(block.routine.name)}</span>${until}</div>
       ${block.children.map(child).join('')}</div>`;
   }
@@ -1388,6 +1458,19 @@ class HoplaFamilyCard extends HTMLElement {
       .rb-bar i { display: block; height: 100%; border-radius: 8px; background: #23934f; }
       .rb-next { font-size: 12px; color: var(--secondary-text-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .rb-steps { margin-top: 2px; } .rb-steps .row { background: transparent; }
+      .routine-block.coming { border-style: dashed; border-color: rgba(127,127,127,.45); background: rgba(127,127,127,.05); }
+      .routine-block.coming .rb-head { color: var(--secondary-text-color); }
+      .routine-block.over { border-color: #e07a2e; background: linear-gradient(rgba(224,122,46,.12), transparent 140px); }
+      .routine-block.over .rb-head, .rb-count.over { color: #b4470f; }
+      .routine-block.over .rb-bar i { background: #e07a2e; }
+      .rb-stepname { display: flex; align-items: center; gap: 6px; min-width: 0; }
+      .rb-stepname .rb-step { flex: 0 1 auto; }
+      .rb-moment { flex: none; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 1px 8px; background: rgba(127,127,127,.12); color: var(--secondary-text-color); white-space: nowrap; }
+      .rb-moment.late { background: #fff1e6; color: #b4470f; }
+      .rb-moment.missed { background: #fdecec; color: #b42318; }
+      .rb-stepline.missed .rb-step { color: var(--secondary-text-color); }
+      .rb-stepline .rb-stepname { flex: 1; }
+      .slot.tap.missed .face { box-shadow: none; opacity: .5; filter: grayscale(.7); }
       .chrono-add { align-self: flex-start; display: inline-flex; align-items: center; margin-top: 4px; padding: 3px 7px; border-radius: 999px; color: rgba(91,79,224,.6); background: rgba(91,79,224,.07); }
       .chrono-icon { width: 40px; height: 40px; flex: none; border-radius: 12px; display: grid; place-items: center; background: rgba(91,79,224,.13); color: #5b4fe0; }
       .chrono-help { margin: 12px 2px 0; font-size: 14px; color: var(--secondary-text-color); }

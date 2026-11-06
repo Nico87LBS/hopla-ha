@@ -111,9 +111,25 @@ class GamesTodayTests(unittest.TestCase):
                                                  "members": [{"userId": 2, "current": 2, "step": 2, "done": 1,
                                                               "total": 2, "finished": False}]}]})
         self.assertEqual(today["routines"], [{"id": 3, "name": "Matin", "bonus": 5, "task_ids": [1, 2, 4],
-                                              "chore_ids": [1, 2], "members": [
+                                              "chore_ids": [1, 2], "window": "", "opens_at": None, "closes_at": None,
+                                              "members": [
             {"user_id": 2, "current": 2, "available": [], "step": 2, "done": 1, "total": 2, "finished": False,
-             "ends_at": None, "next": None}]}])
+             "ends_at": None, "next": None, "missed": [], "steps": []}]}])
+
+    def test_routines_carry_their_hours_and_the_steps_missed(self):
+        today = games.games_today({"routines": [{"id": 3, "name": "Matin", "taskIds": [1, 2], "window": "over",
+                                                 "opensAt": "2026-11-06T06:00:00Z", "closesAt": "2026-11-06T07:30:00Z",
+                                                 "members": [{"userId": 2, "missed": [1], "occurrence": {"items": [
+                                                     {"position": 1, "choreId": 2, "choreName": "Cartable", "status": "pending"},
+                                                     {"position": 0, "choreId": 1, "choreName": "Dents", "slotId": "matin",
+                                                      "status": "pending", "missed": True}]}}]}]})
+        routine = today["routines"][0]
+        self.assertEqual((routine["window"], routine["opens_at"], routine["closes_at"]),
+                         ("over", "2026-11-06T06:00:00Z", "2026-11-06T07:30:00Z"))
+        member = routine["members"][0]
+        self.assertEqual(member["missed"], [1])
+        self.assertEqual(member["steps"][0], {"chore_id": 1, "slot_id": "matin", "name": "Dents", "position": 0, "missed": True})
+        self.assertEqual(member["next"], "Cartable", "a missed step is not the next one")
 
     def test_routines_carry_the_steps_to_do_now_the_end_and_the_next_step(self):
         today = games.games_today({"routines": [{"id": 3, "name": "Matin", "taskIds": [1, 2, 3], "members": [{

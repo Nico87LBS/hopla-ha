@@ -19,6 +19,7 @@ def slot_attributes(slots):
     """Today's slots of a task done several times a day, for its attributes."""
     return [{
         "index": slot.get("index"),
+        "slot_id": slot.get("slotId") or "",
         "name": slot.get("name") or "",
         "time": slot.get("time"),
         "at": slot.get("at"),
