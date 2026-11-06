@@ -233,6 +233,26 @@ class HoplaApiClient:
             response.raise_for_status()
             return (await response.json()).get("res") or []
 
+    async def async_get_points_journal(self, limit: int = 20, user_id: int | None = None,
+                                       before: str | None = None) -> dict:
+        """Get a page of the family journal, newest first: the points ledger plus
+        the tasks done that earned nothing and the tasks missed. `before` is the
+        `next` of the previous page."""
+        params = {"limit": limit}
+        if user_id:
+            params["userId"] = user_id
+        if before:
+            params["before"] = before
+        async with self._session.get(
+            f"{self._base_url}/eapi/v1/points/journal",
+            headers=self._headers(),
+            params=params,
+            timeout=API_TIMEOUT,
+        ) as response:
+            response.raise_for_status()
+            body = await response.json()
+            return {"rows": body.get("res") or [], "next": body.get("next")}
+
     async def async_get_family_timezone(self) -> Optional[dict]:
         """Get the family's time zone and the server's (home), or None when the
         server does not know it yet."""

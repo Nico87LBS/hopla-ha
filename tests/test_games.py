@@ -46,6 +46,16 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(last["entries"][0]["name"], "")
         self.assertFalse(last["more"])
 
+    def test_a_journal_page_keeps_missed_tasks_and_the_cursor(self):
+        rows = [row(9, action="missed", reason="Ranger sa chambre"), row(8, reason="Aide spontanée")]
+        page = games.journal_page({"rows": rows, "next": "2026-11-05T10:00:00Z"}, MEMBERS)
+        self.assertEqual([e["action"] for e in page["entries"]], ["missed", "bonus"])
+        self.assertEqual(page["entries"][0]["name"], "Ranger sa chambre")
+        self.assertTrue(page["more"])
+        self.assertEqual(page["next"], "2026-11-05T10:00:00Z")
+        last = games.journal_page({"rows": [], "next": None}, MEMBERS)
+        self.assertFalse(last["more"])
+
     def test_presets_keep_their_sign(self):
         self.assertEqual(games.presets([{"id": 1, "name": "Dispute", "points": -3, "familyId": 1}]),
                          [{"id": 1, "name": "Dispute", "points": -3}])

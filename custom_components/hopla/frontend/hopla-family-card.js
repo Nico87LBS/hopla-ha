@@ -138,7 +138,7 @@ export function taskMode(tasks, name) {
 // A points history row: which filter it falls under, and how it moved the
 // points earned (the podium and the rank). Spending on a reward only moves
 // the balance left to spend.
-const HISTORY_KIND = {task: 'task', undo: 'task', game: 'game', bonus: 'bonus', penalty: 'bonus', redeem: 'reward', reset: 'reset'};
+const HISTORY_KIND = {task: 'task', missed: 'task', undo: 'task', game: 'game', bonus: 'bonus', penalty: 'bonus', redeem: 'reward', reset: 'reset'};
 export const historyKind = entry => HISTORY_KIND[entry.action] || 'reset';
 export function earnedChange(entry) {
   const points = Math.abs(Number(entry.points) || 0);
@@ -664,7 +664,7 @@ class HoplaFamilyCard extends HTMLElement {
     const loaded = this._history.get(memberId) || {entries: [], more: false};
     if (loaded.loading) return;
     const member = this._data?.members.find(m => m.id === memberId);
-    const before = older ? loaded.entries.at(-1)?.id : undefined;
+    const before = older ? loaded.next : undefined;
     this._history.set(memberId, {...loaded, loading: true, error: '', seen: member ? `${member.earned}/${member.points}` : loaded.seen});
     this.render();
     let next;
@@ -672,7 +672,7 @@ class HoplaFamilyCard extends HTMLElement {
       const result = await this._hass.callService('hopla', 'get_points_history', {user_id: memberId, limit: 20,
         ...(before ? {before} : {}), ...(this._data?.presetsEntry ? {config_entry_id: this._data.presetsEntry} : {})}, undefined, false, true);
       const page = result?.response ?? {};
-      next = {entries: [...(older ? loaded.entries : []), ...(page.entries || [])], more: page.more === true, loaded: true};
+      next = {entries: [...(older ? loaded.entries : []), ...(page.entries || [])], more: page.more === true, next: page.next || null, loaded: true};
     } catch (err) {
       next = {...loaded, error: err?.message || String(err)};
     }
@@ -1039,6 +1039,7 @@ class HoplaFamilyCard extends HTMLElement {
       bonus: {icon: 'plus', cls: 'plus', text: `+${points}`},
       penalty: {icon: 'minus', cls: 'minus', text: `−${points}`},
       redeem: {icon: 'gift', cls: 'gift', text: `−${points}`},
+      missed: {icon: 'cross', cls: 'missed', text: ''},
     }[entry.action] || {icon: 'replay', cls: 'undo', text: `−${points}`};
   }
   historyName(entry) {
@@ -1417,7 +1418,7 @@ class HoplaFamilyCard extends HTMLElement {
       .when { font-size: 12px; color: var(--secondary-text-color); min-width: 40px; text-align: right; }
       .badge.kind { width: 18px; min-width: 18px; height: 18px; padding: 0; }
       .badge.kind.task { background: var(--dt-blue); } .badge.kind.plus { background: var(--dt-green); } .badge.kind.minus { background: #d93025; }
-      .badge.kind.gift { background: #d99a00; } .badge.kind.undo { background: #80868b; }
+      .badge.kind.gift { background: #d99a00; } .badge.kind.undo { background: #80868b; } .badge.kind.missed { background: #c5221f; }
       .amount { font-size: 15px; font-weight: 800; white-space: nowrap; text-align: right; min-width: 44px; }
       .amount small { display: block; font-size: 11px; font-weight: 500; color: var(--secondary-text-color); }
       .amount.task { color: #4f46e5; } .amount.plus { color: #1e7a37; } .amount.minus { color: #c5221f; } .amount.gift { color: #8a5a00; } .amount.game { color: #b4470f; } .amount.undo { color: var(--secondary-text-color); }
@@ -1461,7 +1462,7 @@ class HoplaFamilyCard extends HTMLElement {
       .hrow { display: flex; align-items: center; gap: 12px; padding: 9px 2px; border-bottom: 1px solid var(--dt-line); }
       .hic { width: 36px; height: 36px; flex: none; border-radius: 11px; display: grid; place-items: center; }
       .hic.task { background: rgba(59,111,216,.12); color: var(--dt-blue); } .hic.plus { background: rgba(30,142,62,.12); color: var(--dt-green); }
-      .hic.minus { background: rgba(217,48,37,.1); color: #c5221f; } .hic.gift { background: rgba(245,180,0,.18); color: #a87300; } .hic.game { background: rgba(255,122,47,.14); color: #b4470f; } .hic.undo { background: rgba(127,127,127,.12); color: var(--secondary-text-color); }
+      .hic.minus { background: rgba(217,48,37,.1); color: #c5221f; } .hic.gift { background: rgba(245,180,0,.18); color: #a87300; } .hic.game { background: rgba(255,122,47,.14); color: #b4470f; } .hic.missed { background: rgba(217,48,37,.1); color: #c5221f; } .hic.undo { background: rgba(127,127,127,.12); color: var(--secondary-text-color); }
       .more { width: 100%; margin-top: 12px; padding: 11px; border-radius: 12px; background: rgba(99,102,241,.08); color: #4f46e5; font-size: 14px; font-weight: 700; }
       .hero { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 12px 14px; border-radius: 14px; background: var(--secondary-background-color, rgba(127,127,127,.08)); }
       .hero svg { color: var(--dt-gold); } .hero b { font-size: 26px; font-weight: 800; line-height: 1; } .hero span { font-size: 15px; font-weight: 700; }

@@ -88,7 +88,7 @@ export default {
     history_earned: '{units} earned, for the podium and the rank',
     history_spend: 'to spend on rewards',
     history_by: 'by {name}',
-    history_kind: {task: 'Task', undo: 'Task undone', game: 'Game', bonus: 'Bonus', penalty: 'Penalty', redeem: 'Reward', reset: 'Reset'},
+    history_kind: {missed: 'Missed', task: 'Task', undo: 'Task undone', game: 'Game', bonus: 'Bonus', penalty: 'Penalty', redeem: 'Reward', reset: 'Reset'},
     history_more: 'Show older',
     history_loading: 'Loading…',
     history_empty: 'Nothing yet',
