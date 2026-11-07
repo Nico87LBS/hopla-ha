@@ -217,6 +217,27 @@ def _routine(routine):
     }
 
 
+def _project(project):
+    """A project under way: how far it got, its deadline, and each task with
+    whether it is done or still waits for others."""
+    return {
+        "id": project["id"],
+        "name": project.get("name"),
+        "bonus": project.get("bonus", 0),
+        "due_on": project.get("dueOn") or None,
+        "late": bool(project.get("late")),
+        "done": project.get("done", 0),
+        "total": project.get("total", 0),
+        "tasks": [{
+            "chore_id": task.get("choreId"),
+            "name": task.get("name") or "",
+            "assignee_ids": task.get("assigneeIds") or [],
+            "done": bool(task.get("done")),
+            "locked": bool(task.get("locked")),
+        } for task in project.get("tasks") or []],
+    }
+
+
 def games_today(data):
     """Today's games from Hopla, in the shape the sensors and events use."""
     if not data:
@@ -266,6 +287,8 @@ def games_today(data):
         "next_change_at": data.get("nextChangeAt"),
         # Tasks chained in order: each child sees the step to do now.
         "routines": [_routine(r) for r in data.get("routines") or []],
+        # One-time tasks over several days, some waiting for others.
+        "projects": [_project(p) for p in data.get("projects") or []],
     }
 
 
