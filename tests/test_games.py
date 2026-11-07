@@ -105,6 +105,20 @@ class GamesTodayTests(unittest.TestCase):
         self.assertEqual(quiet["streaks"], {})
         self.assertEqual(quiet["routines"], [])
 
+    def test_projects_carry_their_tasks_and_what_waits(self):
+        today = games.games_today({"projects": [{"id": 4, "name": "Cabane", "bonus": 10, "dueOn": "2026-11-20",
+                                                 "late": False, "done": 1, "total": 3, "tasks": [
+            {"choreId": 1, "name": "Poncer", "assigneeIds": [2], "done": True, "locked": False},
+            {"choreId": 2, "name": "Peindre", "assigneeIds": [2, 3], "done": False, "locked": False},
+            {"choreId": 3, "name": "Toit", "done": False, "locked": True}]}]})
+        project = today["projects"][0]
+        self.assertEqual((project["name"], project["due_on"], project["done"], project["total"]),
+                         ("Cabane", "2026-11-20", 1, 3))
+        self.assertEqual([(t["name"], t["done"], t["locked"]) for t in project["tasks"]],
+                         [("Poncer", True, False), ("Peindre", False, False), ("Toit", False, True)])
+        self.assertEqual(project["tasks"][2]["assignee_ids"], [])
+        self.assertEqual(games.games_today({"surprise": None})["projects"], [])
+
     def test_routines_carry_each_child_step(self):
         today = games.games_today({"routines": [{"id": 3, "name": "Matin", "bonus": 5, "choreIds": [1, 2],
                                                  "taskIds": [1, 2, 4],

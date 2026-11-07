@@ -231,6 +231,17 @@ export function stepMoment(item, slots, now = new Date()) {
   return {slot, tone};
 }
 
+// The projects under way that have a task for the children shown, each with
+// its tasks to do now: not done and no longer waiting for another.
+export function projectBlocks(projects, members) {
+  const ids = new Set((members || []).map(m => m.id));
+  return (projects || []).map(project => ({project,
+    open: (project.tasks || []).filter(task => !task.done && !task.locked)
+      .map(task => ({...task, members: (members || []).filter(m => (task.assignee_ids || []).includes(m.id))}))}))
+    .filter(({project}) => (project.tasks || []).some(task => !task.done
+      && (!(task.assignee_ids || []).length || task.assignee_ids.some(id => ids.has(id)))));
+}
+
 // The routines under way for the children shown, each with where every child
 // stands and what comes next, as the web shows them above the list. A child
 // who already finished stays while the others go on.
@@ -324,6 +335,7 @@ export function boardData(hass, config, now = new Date()) {
   let ladder = [];
   let parentsOnPodium = false;
   let routines = [];
+  let projects = [];
   for (const [id, state] of Object.entries(hass.states)) {
     if (!id.startsWith('sensor.') || !isHopla(hass, id)) continue;
     const a = state.attributes;
@@ -351,6 +363,7 @@ export function boardData(hass, config, now = new Date()) {
       challenges = Array.isArray(a.challenges) ? a.challenges : [];
       parentsOnPodium = a.parents_on_podium === true;
       routines = Array.isArray(a.routines) ? a.routines : [];
+      projects = Array.isArray(a.projects) ? a.projects : [];
       ladder = Array.isArray(a.ranks) ? a.ranks.map(r => ({name: r.name || '', icon: r.icon || '', image: rankImage(r.image), points: Number(r.min_points) || 0})) : [];
     } else if (Array.isArray(a.points_presets)) {
       presets = a.points_presets;
@@ -424,7 +437,7 @@ export function boardData(hass, config, now = new Date()) {
     .filter(item => item.completed_at && sameDay(new Date(item.completed_at), now) && labelled(item.labels))
     .map(item => ({...item, member})))
     .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
-  return {members: shown, podium: onPodium, tasks: visible, rows: withMode(taskRows(listed, done, shown)), routineBlocks, done, doneRows: withMode(doneRows(done)), rewards: rewards || [], requests,
+  return {members: shown, podium: onPodium, tasks: visible, rows: withMode(taskRows(listed, done, shown)), routineBlocks, projectBlocks: projectBlocks(projects, shown), done, doneRows: withMode(doneRows(done)), rewards: rewards || [], requests,
     presets, presetsEntry, surprise, period, ladder, adjustable,
     // The newest points changes of the members shown, newest first.
     ledger: ledger.filter(entry => shown.some(m => m.id === entry.user_id)),
@@ -1169,6 +1182,21 @@ class HoplaFamilyCard extends HTMLElement {
       <div class="rb-head">${svg('steps', 20)}<span class="rb-title">${name}</span>${until}${fold}</div>
       ${block.children.map(child).join('')}</div>`;
   }
+  // A project under way: how far it got, its deadline, and the tasks to do
+  // now with the faces of who they are for. They are ticked in the list.
+  renderProjectBlock({project, open}) {
+    const share = project.total ? Math.round(project.done * 100 / project.total) : 0;
+    const date = project.due_on ? new Date(`${project.due_on}T12:00:00`).toLocaleDateString(this._language || browserLanguage(), {weekday: 'long', day: 'numeric', month: 'long'}) : '';
+    const due = date ? `<div class="rb-next">${escape(this.t(project.late ? 'project_late' : 'project_due', {date}))}</div>` : '';
+    const bonus = project.bonus > 0 ? `<span class="rb-until">+${project.bonus}</span>` : '';
+    const lines = open.length ? open.map(task => `<div class="rb-stepline"><span class="rb-step">${escape(task.name)}</span>
+      <span class="faces">${task.members.map(m => this.face(m, 32)).join('')}</span></div>`).join('')
+      : `<div class="rb-next">${escape(this.t('project_waiting'))}</div>`;
+    return `<div class="routine-block project${project.late ? ' over' : ''}" role="group" aria-label="${escape(this.t('project_label', {name: project.name}))}">
+      <div class="rb-head">${svg('steps', 20)}<span class="rb-title">${escape(project.name)}</span>${bonus}
+      <span class="rb-count">${escape(this.t('project_progress', {done: project.done, total: project.total}))}</span></div>
+      <div class="rb-bar"><i style="width:${share}%"></i></div>${due}<div class="rb-main">${lines}</div></div>`;
+  }
   mode(row) {
     if (!row.mode) return '';
     const symbol = {each: 'people', first: 'bolt', one: 'person'}[row.mode];
@@ -1788,8 +1816,9 @@ class HoplaFamilyCard extends HTMLElement {
       ${this._config.show_todo ? this.section('todo', this.header('todo', 'todo', title,
         data.rows.length + data.routineBlocks.reduce((count, block) => count + block.rows.length, 0), 'todo'),
         data.routineBlocks.map(block => this.renderRoutineBlock(block)).join('')
+        + data.projectBlocks.map(block => this.renderProjectBlock(block)).join('')
         + (data.rows.length ? data.rows.map(row => this.renderTask(row)).join('')
-          : data.routineBlocks.length ? '' : `<div class="empty-text">${escape(empty)}</div>`)) : ''}
+          : data.routineBlocks.length || data.projectBlocks.length ? '' : `<div class="empty-text">${escape(empty)}</div>`)) : ''}
       ${this._config.show_goals ? this.renderQuests(data.members) : ''}
       ${done.length ? this.section('done', this.header('check', 'done', this.t('done'), done.length, 'done'), done.map(item => this.renderDone(item)).join('')) : ''}
       ${this._config.show_history && data.adjustable && data.members.length ? this.section('history', this.header('history', 'hist', this.t('history_title'),

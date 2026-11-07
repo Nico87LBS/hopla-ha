@@ -316,5 +316,6 @@ class HoplaGamesSensor(_FamilySensor):
             # The cards name what the family earns with it.
             "family_currency": today.get("currency", "hops"),
             "routines": today.get("routines", []),
+            "projects": today.get("projects", []),
             "config_entry_id": self._config_entry.entry_id,
         }
