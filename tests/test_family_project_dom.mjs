@@ -34,10 +34,33 @@ assert.equal(blocks[0].querySelector('.rb-count').textContent, '1/3', 'how far i
 assert.equal(blocks[0].querySelector('.rb-bar i').style.width, '33%');
 assert.match(blocks[0].querySelector('.rb-next').textContent, /À finir avant|Finish by/);
 assert.deepEqual([...blocks[0].querySelectorAll('.rb-step')].map(el => el.textContent), ['Peindre'], 'only the task to do now');
-assert.equal(blocks[0].querySelectorAll('.faces img, .faces .face, .faces > *').length > 0, true, 'with the faces of who it is for');
-const listed = [...root.querySelectorAll('.row')].map(row => row.querySelector('.name > span:first-child').textContent);
-assert.deepEqual(listed, ['Peindre'], 'the task is ticked in the list, as any other');
+const taps = [...blocks[0].querySelectorAll('.faces button.slot.tap[data-action="complete"]')];
+assert.deepEqual(taps.map(tap => [tap.dataset.task, tap.dataset.member]), [['2', '2'], ['2', '3']],
+  'a face to touch for each of who it is for');
+assert.equal(root.querySelectorAll('.row').length, 0, 'the task leaves the list meanwhile, as a routine step');
 card.remove();
+
+// Waiting for a parent: the clock on the face, and the buttons to approve for a parent.
+const pendingStates = {...states, 'sensor.peindre': {...states['sensor.peindre'],
+  attributes: {...states['sensor.peindre'].attributes, pending_approval: true}}};
+const parentCard = document.createElement('hopla-family-card');
+parentCard.setConfig({show_points: false, show_approval: true});
+parentCard.hass = {...hass, user: {id: 'parent', is_admin: true}, states: pendingStates};
+document.body.append(parentCard);
+const pendingBlock = parentCard.shadowRoot.querySelector('.routine-block.project');
+assert.equal(pendingBlock.querySelectorAll('.faces .slot.waiting').length, 1, 'the clock on the face');
+assert.equal(pendingBlock.querySelectorAll('.faces button.slot.tap').length, 0, 'nothing to tick while it waits');
+parentCard.remove();
+
+// A task filtered out of the list keeps its line, its faces to look at only.
+const filtered = document.createElement('hopla-family-card');
+filtered.setConfig({show_points: false, labels: ['Jardin']});
+filtered.hass = hass;
+document.body.append(filtered);
+const filteredBlock = filtered.shadowRoot.querySelector('.routine-block.project');
+assert.deepEqual([...filteredBlock.querySelectorAll('.rb-step')].map(el => el.textContent), ['Peindre']);
+assert.equal(filteredBlock.querySelectorAll('.faces button').length, 0, 'no face to touch');
+filtered.remove();
 
 // A project late shows orange; one with nothing for the children shown stays out.
 assert.equal(projectBlocks([{...projects[0], late: true}], [{id: 2}]).length, 1);
