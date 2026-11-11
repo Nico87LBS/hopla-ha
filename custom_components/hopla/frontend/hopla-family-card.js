@@ -422,7 +422,12 @@ export function boardData(hass, config, now = new Date()) {
   // The steps to do now of a routine under way leave the list for its block.
   const blocks = activeRoutines(routines, shown, tasks);
   const inBlock = task => task.routine && blocks.some(block => block.routine === task.routine.routine);
-  const listed = visible.filter(task => !inBlock(task));
+  // The tasks to do now of a project under way leave the list too: they are
+  // ticked in the project's block, as the routine steps.
+  const projectList = projectBlocks(projects, shown);
+  const projectIds = new Set(projectList.flatMap(block => block.open.map(task => task.chore_id)));
+  const inProject = task => projectIds.has(task.id) && !task.slots.length && !inBlock(task);
+  const listed = visible.filter(task => !inBlock(task) && !inProject(task));
   const routineBlocks = blocks.map(block => {
     const steps = visible.filter(task => inBlock(task) && task.routine.routine === block.routine);
     // The steps missed, for a parent to catch up: the child's task, with its
@@ -437,7 +442,8 @@ export function boardData(hass, config, now = new Date()) {
     .filter(item => item.completed_at && sameDay(new Date(item.completed_at), now) && labelled(item.labels))
     .map(item => ({...item, member})))
     .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
-  return {members: shown, podium: onPodium, tasks: visible, rows: withMode(taskRows(listed, done, shown)), routineBlocks, projectBlocks: projectBlocks(projects, shown), done, doneRows: withMode(doneRows(done)), rewards: rewards || [], requests,
+  return {members: shown, podium: onPodium, tasks: visible, rows: withMode(taskRows(listed, done, shown)), routineBlocks, projectBlocks: projectList.map(block => ({...block, tasks: visible.filter(task => inProject(task)
+    && block.open.some(open => open.chore_id === task.id))})), done, doneRows: withMode(doneRows(done)), rewards: rewards || [], requests,
     presets, presetsEntry, surprise, period, ladder, adjustable,
     // The newest points changes of the members shown, newest first.
     ledger: ledger.filter(entry => shown.some(m => m.id === entry.user_id)),
@@ -1183,14 +1189,30 @@ class HoplaFamilyCard extends HTMLElement {
       ${block.children.map(child).join('')}</div>`;
   }
   // A project under way: how far it got, its deadline, and the tasks to do
-  // now with the faces of who they are for. They are ticked in the list.
-  renderProjectBlock({project, open}) {
+  // now with the faces of who they are for, to touch to tick them.
+  renderProjectBlock({project, open, tasks}) {
     const share = project.total ? Math.round(project.done * 100 / project.total) : 0;
     const date = project.due_on ? new Date(`${project.due_on}T12:00:00`).toLocaleDateString(this._language || browserLanguage(), {weekday: 'long', day: 'numeric', month: 'long'}) : '';
     const due = date ? `<div class="rb-next">${escape(this.t(project.late ? 'project_late' : 'project_due', {date}))}</div>` : '';
     const bonus = project.bonus > 0 ? `<span class="rb-until">+${project.bonus}</span>` : '';
+    const canApprove = this._config.show_approval && this._access.parent;
+    // A task of the list, on the right the faces to touch, as a routine step:
+    // one waiting for a parent shows the clock. A task filtered out of the
+    // list keeps its line, with its faces to look at only.
+    const faces = (row, task) => {
+      if (!row) return task.members.map(m => this.face(m, 32)).join('');
+      const busy = this._busy.has(row.id);
+      if (row.pending) {
+        const member = row.completedBy || row.members[0];
+        const approval = canApprove ? `<button class="icon-btn ok" data-action="approve" data-task="${row.id}" ${busy ? 'disabled' : ''} aria-label="${escape(this.t('approve'))}">${svg('check', 18)}</button>
+          <button class="icon-btn no" data-action="reject" data-task="${row.id}" ${busy ? 'disabled' : ''} aria-label="${escape(this.t('reject'))}">${svg('cross', 16)}</button>` : '';
+        return member ? `<span class="slot waiting" title="${escape(member.name)}">${this.face(member, 48)}${this.badge('wait', 'clock')}</span>${approval}` : approval;
+      }
+      return row.members.map(member => `<button class="slot tap${busy && this._busy.get(row.id) === member.id ? ' busy' : ''}" data-action="complete" data-task="${row.id}" data-member="${member.id}"
+        ${busy ? 'disabled' : ''} aria-label="${escape(this.t('common.on_task', {action: member.name, task: row.name}))}">${this.face(member, 48)}</button>`).join('');
+    };
     const lines = open.length ? open.map(task => `<div class="rb-stepline"><span class="rb-step">${escape(task.name)}</span>
-      <span class="faces">${task.members.map(m => this.face(m, 32)).join('')}</span></div>`).join('')
+      <span class="faces">${faces(tasks.find(row => row.id === task.chore_id), task)}</span></div>`).join('')
       : `<div class="rb-next">${escape(this.t('project_waiting'))}</div>`;
     return `<div class="routine-block project${project.late ? ' over' : ''}" role="group" aria-label="${escape(this.t('project_label', {name: project.name}))}">
       <div class="rb-head">${svg('steps', 20)}<span class="rb-title">${escape(project.name)}</span>${bonus}
@@ -1814,7 +1836,8 @@ class HoplaFamilyCard extends HTMLElement {
       ${this.renderZoneBanner()}${this.renderPeriod(data.period)}
       ${this._config.show_goals ? this.renderChallenges(data.challenges, data.members) : ''}
       ${this._config.show_todo ? this.section('todo', this.header('todo', 'todo', title,
-        data.rows.length + data.routineBlocks.reduce((count, block) => count + block.rows.length, 0), 'todo'),
+        data.rows.length + data.routineBlocks.reduce((count, block) => count + block.rows.length, 0)
+          + data.projectBlocks.reduce((count, block) => count + block.tasks.length, 0), 'todo'),
         data.routineBlocks.map(block => this.renderRoutineBlock(block)).join('')
         + data.projectBlocks.map(block => this.renderProjectBlock(block)).join('')
         + (data.rows.length ? data.rows.map(row => this.renderTask(row)).join('')
