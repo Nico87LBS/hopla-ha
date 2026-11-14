@@ -6,6 +6,13 @@ dépôt GitHub miroir, la branche de la PR est poussée sur GitLab sous le nom
 github/pr-N, puis une merge request est ouverte (ou mise à jour) vers la
 branche cible. La CI GitLab tourne dessus comme sur toute merge request.
 
+PR empilées : quand une PR vise la branche d'une autre PR ouverte (et non
+main), cette branche n'existe pas sur GitLab. La merge request vise alors
+github/pr-M, la branche rapatriée de la PR parente. Les PR sont traitées dans
+l'ordre croissant, donc la parente est poussée avant. Quand la parente est
+fusionnée, la cible n'existe plus nulle part : la merge request vise la
+branche par défaut.
+
 Le résultat du pipeline GitLab de chaque merge request est ensuite écrit en
 commentaire sur la PR GitHub (un seul commentaire, mis à jour), avec la fin
 du journal des jobs en échec, pour que l'auteur de la PR puisse corriger.
@@ -14,7 +21,8 @@ Variables (à définir dans les variables CI/CD du groupe ou du projet) :
   GITHUB_DEPOT      dépôt GitHub, par exemple Nico87LBS/hopla
   GITHUB_TOKEN_PR   jeton GitHub : Contents en lecture, Pull requests en écriture
   GITLAB_TOKEN_PR   jeton d'accès GitLab (api, write_repository)
-Fournies par GitLab : CI_SERVER_URL, CI_API_V4_URL, CI_PROJECT_ID, CI_PROJECT_PATH.
+Fournies par GitLab : CI_SERVER_URL, CI_API_V4_URL, CI_PROJECT_ID, CI_PROJECT_PATH,
+CI_DEFAULT_BRANCH.
 """
 import base64
 import json
@@ -44,6 +52,7 @@ API_GL = env("CI_API_V4_URL")
 PROJET = env("CI_PROJECT_ID")
 URL_GL = env("CI_SERVER_URL").rstrip("/") + "/" + env("CI_PROJECT_PATH") + ".git"
 URL_GH = f"https://github.com/{DEPOT}.git"
+BRANCHE_DEFAUT = os.environ.get("CI_DEFAULT_BRANCH", "").strip() or "main"
 
 
 class ErreurAPI(Exception):
@@ -170,11 +179,32 @@ def titre(pr):
     return ("Draft: " if pr.get("draft") else "") + pr["title"]
 
 
-def suivre_titre(pr, mr):
-    """Recopie sur la merge request le titre et l'état brouillon de la PR."""
+def suivre_titre(pr, mr, cible):
+    """Recopie sur la merge request le titre, l'état brouillon et la cible de la PR."""
+    changements = {}
     if mr["title"] != titre(pr):
-        gitlab(f"merge_requests/{mr['iid']}", "PUT", {"title": titre(pr)})
-        print(f"PR #{pr['number']} : titre ou brouillon mis à jour sur !{mr['iid']}.")
+        changements["title"] = titre(pr)
+    if mr["target_branch"] != cible:
+        changements["target_branch"] = cible
+    if changements:
+        gitlab(f"merge_requests/{mr['iid']}", "PUT", changements)
+        print(f"PR #{pr['number']} : {', '.join(changements)} mis à jour sur !{mr['iid']}.")
+
+
+def cible_gitlab(pr, parentes):
+    """Branche GitLab que doit viser la merge request de la PR.
+
+    parentes associe la branche de chaque PR ouverte à son numéro. Une PR
+    empilée sur une autre vise github/pr-M ; si sa cible n'existe pas sur
+    GitLab (parente déjà fusionnée), elle vise la branche par défaut.
+    """
+    base = pr["base"]["ref"]
+    if sha_gitlab(base):
+        return base
+    if base in parentes:
+        return f"{PREFIXE}{parentes[base]}"
+    print(f"PR #{pr['number']} : la branche {base} n'existe pas sur GitLab, cible {BRANCHE_DEFAUT}.")
+    return BRANCHE_DEFAUT
 
 
 def ouvrir_mr(pr, branche, cible):
@@ -209,18 +239,18 @@ def relancer_si_sans_pipeline(pr, mr):
         print(f"PR #{pr['number']} : pipeline pas encore lançable sur !{mr['iid']} ({err.code}).")
 
 
-def traiter(pr):
+def traiter(pr, parentes):
     n = pr["number"]
     branche = f"{PREFIXE}{n}"
     tete = pr["head"]["sha"]
-    cible = pr["base"]["ref"]
+    cible = cible_gitlab(pr, parentes)
     existantes = gitlab(f"merge_requests?source_branch={urllib.parse.quote(branche, safe='')}&state=all&per_page=100")
     ouverte = next((m for m in existantes if m["state"] == "opened"), None)
     if not ouverte and any(m["sha"] == tete and m["state"] in ("merged", "closed") for m in existantes):
         print(f"PR #{n} : déjà fusionnée ou fermée dans GitLab à ce commit, rien à faire.")
         return
     if ouverte:
-        suivre_titre(pr, ouverte)
+        suivre_titre(pr, ouverte, cible)
     if sha_gitlab(branche) == tete and ouverte:
         print(f"PR #{n} : à jour (!{ouverte['iid']}).")
         relancer_si_sans_pipeline(pr, ouverte)
@@ -248,12 +278,15 @@ def traiter(pr):
 def main():
     git("init", "--quiet", "/tmp/rapatriement")
     os.chdir("/tmp/rapatriement")
-    prs = github(f"repos/{DEPOT}/pulls?state=open&per_page=100")
+    # Ordre croissant : une PR parente est poussée avant les PR empilées dessus.
+    prs = sorted(github(f"repos/{DEPOT}/pulls?state=open&per_page=100"), key=lambda pr: pr["number"])
     print(f"{len(prs)} PR ouverte(s) sur {DEPOT}.")
+    parentes = {pr["head"]["ref"]: pr["number"] for pr in prs
+                if (pr["head"].get("repo") or {}).get("full_name") == DEPOT}
     erreurs = 0
     for pr in prs:
         try:
-            traiter(pr)
+            traiter(pr, parentes)
         except Exception as err:  # une PR en échec ne bloque pas les autres
             erreurs += 1
             print(f"PR #{pr['number']} : échec : {err}")
