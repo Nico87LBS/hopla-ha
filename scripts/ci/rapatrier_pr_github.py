@@ -6,15 +6,20 @@ dépôt GitHub miroir, la branche de la PR est poussée sur GitLab sous le nom
 github/pr-N, puis une merge request est ouverte (ou mise à jour) vers la
 branche cible. La CI GitLab tourne dessus comme sur toute merge request.
 
+Le résultat du pipeline GitLab de chaque merge request est ensuite écrit en
+commentaire sur la PR GitHub (un seul commentaire, mis à jour), avec la fin
+du journal des jobs en échec, pour que l'auteur de la PR puisse corriger.
+
 Variables (à définir dans les variables CI/CD du groupe ou du projet) :
   GITHUB_DEPOT      dépôt GitHub, par exemple Nico87LBS/hopla
-  GITHUB_TOKEN_PR   jeton GitHub en lecture (Contents et Pull requests)
+  GITHUB_TOKEN_PR   jeton GitHub : Contents en lecture, Pull requests en écriture
   GITLAB_TOKEN_PR   jeton d'accès GitLab (api, write_repository)
 Fournies par GitLab : CI_SERVER_URL, CI_API_V4_URL, CI_PROJECT_ID, CI_PROJECT_PATH.
 """
 import base64
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.error
@@ -52,12 +57,12 @@ def appel(url, jeton_entete, methode="GET", donnees=None):
         return json.loads(texte) if texte else None
 
 
-def github(chemin):
+def github(chemin, methode="GET", donnees=None):
     return appel(f"https://api.github.com/{chemin}", {
         "Authorization": f"Bearer {JETON_GH}",
         "Accept": "application/vnd.github+json",
         "User-Agent": "hopla-rapatriement-pr",
-    })
+    }, methode, donnees)
 
 
 def gitlab(chemin, methode="GET", donnees=None):
@@ -96,6 +101,56 @@ def description(pr):
     return entete + (corps or "_Pas de description._")
 
 
+MARQUE = "<!-- rapatriement-gitlab -->"
+ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\r")
+
+
+def journal(job_id, lignes=40):
+    req = urllib.request.Request(f"{API_GL}/projects/{PROJET}/jobs/{job_id}/trace")
+    req.add_header("PRIVATE-TOKEN", JETON_GL)
+    with urllib.request.urlopen(req, timeout=30) as rep:
+        texte = ANSI.sub("", rep.read().decode(errors="replace"))
+    utiles = [l for l in texte.splitlines() if l.strip() and not l.startswith(("section_start", "section_end"))]
+    return "\n".join(utiles[-lignes:])
+
+
+def rapporter(pr, mr):
+    """Écrit (ou met à jour) un commentaire sur la PR GitHub avec le résultat du pipeline GitLab."""
+    pipeline = gitlab(f"merge_requests/{mr['iid']}").get("head_pipeline")
+    if not pipeline:
+        return
+    statut, sha = pipeline["status"], pipeline["sha"]
+    if statut not in ("success", "failed", "canceled"):
+        return
+    entete = f"{MARQUE}\n<!-- sha={sha} statut={statut} -->\n"
+    commentaires = github(f"repos/{DEPOT}/issues/{pr['number']}/comments?per_page=100")
+    existant = next((c for c in commentaires if MARQUE in (c.get("body") or "")), None)
+    if existant and entete in existant["body"]:
+        return  # déjà signalé pour ce commit
+    if statut == "success":
+        corps = (f"✅ **CI GitLab verte** pour `{sha[:8]}` (merge request !{mr['iid']}). "
+                 "La PR peut être relue puis fusionnée sur GitLab.")
+    else:
+        jobs = gitlab(f"pipelines/{pipeline['id']}/jobs?per_page=100")
+        echecs = [j for j in jobs if j["status"] == "failed"]
+        parties = [f"❌ **CI GitLab en échec** pour `{sha[:8]}` (merge request !{mr['iid']}).",
+                   "Corrige les erreurs ci-dessous et pousse sur cette PR : la CI repassera au prochain rapatriement "
+                   "(15 minutes au plus). Les règles sont dans `AGENTS.md`."]
+        for job in echecs:
+            try:
+                extrait = journal(job["id"])
+            except Exception as err:  # le résumé reste utile sans l'extrait
+                extrait = f"(journal indisponible : {err})"
+            parties.append(f"<details><summary>Job <code>{job['name']}</code> en échec</summary>\n\n```\n{extrait[-6000:]}\n```\n</details>")
+        corps = "\n\n".join(parties)
+    texte = entete + corps
+    if existant:
+        github(f"repos/{DEPOT}/issues/comments/{existant['id']}", "PATCH", {"body": texte})
+    else:
+        github(f"repos/{DEPOT}/issues/{pr['number']}/comments", "POST", {"body": texte})
+    print(f"PR #{pr['number']} : résultat {statut} signalé sur GitHub.")
+
+
 def traiter(pr):
     n = pr["number"]
     branche = f"{PREFIXE}{n}"
@@ -108,6 +163,7 @@ def traiter(pr):
         return
     if sha_gitlab(branche) == tete and ouverte:
         print(f"PR #{n} : à jour (!{ouverte['iid']}).")
+        rapporter(pr, ouverte)
         return
     git("fetch", "--quiet", URL_GH, f"+refs/pull/{n}/head:refs/rapatriement/pr-{n}", jeton=JETON_GH)
     git("fetch", "--quiet", URL_GL, f"+refs/heads/{cible}:refs/rapatriement/cible", jeton=JETON_GL, utilisateur="oauth2")
