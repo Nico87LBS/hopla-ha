@@ -1,0 +1,16 @@
+# hopla-ha sur GitLab : les vérifications et les versions restent sur GitHub
+# (dépôt public, Actions gratuites, nécessaires à HACS). GitLab ne fait que
+# rapatrier les PR GitHub en merge requests, toutes les 15 minutes.
+# Variables CI/CD : GITHUB_DEPOT, GITHUB_TOKEN_PR, GITLAB_TOKEN_PR.
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+rapatrier-pr-github:
+  tags: [docker]
+  image: python:3.12
+  variables:
+    GIT_DEPTH: 1
+  script:
+    - python3 scripts/ci/rapatrier_pr_github.py
