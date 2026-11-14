@@ -151,6 +151,18 @@ def rapporter(pr, mr):
     print(f"PR #{pr['number']} : résultat {statut} signalé sur GitHub.")
 
 
+def titre(pr):
+    """Titre de la merge request : une PR GitHub en brouillon reste en brouillon."""
+    return ("Draft: " if pr.get("draft") else "") + pr["title"]
+
+
+def suivre_titre(pr, mr):
+    """Recopie sur la merge request le titre et l'état brouillon de la PR."""
+    if mr["title"] != titre(pr):
+        gitlab(f"merge_requests/{mr['iid']}", "PUT", {"title": titre(pr)})
+        print(f"PR #{pr['number']} : titre ou brouillon mis à jour sur !{mr['iid']}.")
+
+
 def traiter(pr):
     n = pr["number"]
     branche = f"{PREFIXE}{n}"
@@ -161,6 +173,8 @@ def traiter(pr):
     if not ouverte and any(m["sha"] == tete and m["state"] in ("merged", "closed") for m in existantes):
         print(f"PR #{n} : déjà fusionnée ou fermée dans GitLab à ce commit, rien à faire.")
         return
+    if ouverte:
+        suivre_titre(pr, ouverte)
     if sha_gitlab(branche) == tete and ouverte:
         print(f"PR #{n} : à jour (!{ouverte['iid']}).")
         rapporter(pr, ouverte)
@@ -180,7 +194,7 @@ def traiter(pr):
     mr = gitlab("merge_requests", "POST", {
         "source_branch": branche,
         "target_branch": cible,
-        "title": pr["title"],
+        "title": titre(pr),
         "description": description(pr),
         "labels": "github",
         "remove_source_branch": True,
