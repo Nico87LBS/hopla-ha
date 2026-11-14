@@ -22,6 +22,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -45,6 +46,15 @@ URL_GL = env("CI_SERVER_URL").rstrip("/") + "/" + env("CI_PROJECT_PATH") + ".git
 URL_GH = f"https://github.com/{DEPOT}.git"
 
 
+class ErreurAPI(Exception):
+    """Erreur HTTP d'une API, avec la réponse du serveur pour le journal."""
+
+    def __init__(self, methode, url, code, reponse):
+        self.code = code
+        chemin = url.split("?")[0].split("/projects/")[-1].split("api.github.com/")[-1]
+        super().__init__(f"{methode} {chemin} : HTTP {code} {reponse[:300]}")
+
+
 def appel(url, jeton_entete, methode="GET", donnees=None):
     corps = json.dumps(donnees).encode() if donnees is not None else None
     req = urllib.request.Request(url, data=corps, method=methode)
@@ -52,9 +62,13 @@ def appel(url, jeton_entete, methode="GET", donnees=None):
         req.add_header(cle, valeur)
     if corps is not None:
         req.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(req, timeout=30) as rep:
-        texte = rep.read().decode()
-        return json.loads(texte) if texte else None
+    try:
+        with urllib.request.urlopen(req, timeout=30) as rep:
+            texte = rep.read().decode()
+            return json.loads(texte) if texte else None
+    except urllib.error.HTTPError as err:
+        # Le message du serveur (jamais le jeton) explique l'échec dans le journal.
+        raise ErreurAPI(methode, url, err.code, err.read().decode(errors="replace").strip()) from None
 
 
 def github(chemin, methode="GET", donnees=None):
@@ -85,7 +99,7 @@ def git(*args, jeton=None, utilisateur="x-access-token"):
 def sha_gitlab(branche):
     try:
         return gitlab(f"repository/branches/{urllib.parse.quote(branche, safe='')}")["commit"]["id"]
-    except urllib.error.HTTPError as err:
+    except ErreurAPI as err:
         if err.code == 404:
             return None
         raise
@@ -163,6 +177,38 @@ def suivre_titre(pr, mr):
         print(f"PR #{pr['number']} : titre ou brouillon mis à jour sur !{mr['iid']}.")
 
 
+def ouvrir_mr(pr, branche, cible):
+    """Ouvre la merge request. Juste après le push, GitLab peut ne pas encore
+    connaître la branche (HTTP 400) : on réessaie quelques secondes plus tard."""
+    for essai in range(6):
+        try:
+            return gitlab("merge_requests", "POST", {
+                "source_branch": branche,
+                "target_branch": cible,
+                "title": titre(pr),
+                "description": description(pr),
+                "labels": "github",
+                "remove_source_branch": True,
+            })
+        except ErreurAPI as err:
+            if err.code != 400 or essai == 5:
+                raise
+            time.sleep(5)
+
+
+def relancer_si_sans_pipeline(pr, mr):
+    """Filet de sécurité : GitLab lance lui-même le pipeline d'une nouvelle
+    merge request, mais s'il manque, on le demande au passage suivant."""
+    if gitlab(f"merge_requests/{mr['iid']}").get("head_pipeline"):
+        return
+    try:
+        gitlab(f"merge_requests/{mr['iid']}/pipelines", "POST")
+        print(f"PR #{pr['number']} : pipeline lancé sur !{mr['iid']}.")
+    except ErreurAPI as err:
+        # 405 tant que GitLab prépare la merge request : on réessaiera.
+        print(f"PR #{pr['number']} : pipeline pas encore lançable sur !{mr['iid']} ({err.code}).")
+
+
 def traiter(pr):
     n = pr["number"]
     branche = f"{PREFIXE}{n}"
@@ -177,6 +223,7 @@ def traiter(pr):
         suivre_titre(pr, ouverte)
     if sha_gitlab(branche) == tete and ouverte:
         print(f"PR #{n} : à jour (!{ouverte['iid']}).")
+        relancer_si_sans_pipeline(pr, ouverte)
         rapporter(pr, ouverte)
         return
     git("fetch", "--quiet", URL_GH, f"+refs/pull/{n}/head:refs/rapatriement/pr-{n}", jeton=JETON_GH)
@@ -191,16 +238,10 @@ def traiter(pr):
     if ouverte:
         print(f"PR #{n} : nouveaux commits poussés sur !{ouverte['iid']}.")
         return
-    mr = gitlab("merge_requests", "POST", {
-        "source_branch": branche,
-        "target_branch": cible,
-        "title": titre(pr),
-        "description": description(pr),
-        "labels": "github",
-        "remove_source_branch": True,
-    })
-    # La branche existait avant la MR : on lance son premier pipeline à la main.
-    gitlab(f"merge_requests/{mr['iid']}/pipelines", "POST")
+    mr = ouvrir_mr(pr, branche, cible)
+    # Pas d'appel à merge_requests/:iid/pipelines ici : GitLab lance déjà le
+    # pipeline de la nouvelle merge request, et l'appel répondait 405 tant que
+    # la merge request était en préparation, ce qui faisait échouer le job.
     print(f"PR #{n} : merge request !{mr['iid']} ouverte ({mr['web_url']}).")
 
 
