@@ -110,6 +110,11 @@ def traiter(pr):
         print(f"PR #{n} : à jour (!{ouverte['iid']}).")
         return
     git("fetch", "--quiet", URL_GH, f"+refs/pull/{n}/head:refs/rapatriement/pr-{n}", jeton=JETON_GH)
+    git("fetch", "--quiet", URL_GL, f"+refs/heads/{cible}:refs/rapatriement/cible", jeton=JETON_GL, utilisateur="oauth2")
+    deja = subprocess.run(["git", "merge-base", "--is-ancestor", tete, "refs/rapatriement/cible"])
+    if deja.returncode == 0 and not ouverte:
+        print(f"PR #{n} : ses commits sont déjà dans {cible} sur GitLab, rien à faire.")
+        return
     # Seules les branches github/pr-* sont réécrites : elles appartiennent au rapatriement.
     git("push", "--quiet", "--force", URL_GL, f"refs/rapatriement/pr-{n}:refs/heads/{branche}",
         jeton=JETON_GL, utilisateur="oauth2")
