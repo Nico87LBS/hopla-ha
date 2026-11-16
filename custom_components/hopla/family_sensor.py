@@ -311,6 +311,7 @@ class HoplaGamesSensor(_FamilySensor):
             "streak_every": today.get("streak_every", 0),
             "streak_bonus": today.get("streak_bonus", 0),
             "challenges": today.get("challenges", []),
+            "rated_challenges": getattr(self.coordinator, "challenge_board", None) or [],
             "ranks": today.get("rank_ladder", []),
             "parents_on_podium": today.get("parents_on_podium", False),
             # The cards name what the family earns with it.

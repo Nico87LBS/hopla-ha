@@ -289,6 +289,39 @@ class HoplaApiClient:
             response.raise_for_status()
             return (await response.json()).get("res")
 
+    async def async_get_challenge_board(self) -> Optional[dict]:
+        """Get the rated challenges and the results waiting for a parent.
+
+        None when the server does not have the board yet.
+        """
+        async with self._session.get(
+            f"{self._base_url}/eapi/v1/games/challenges/board",
+            headers=self._headers(),
+            timeout=API_TIMEOUT,
+        ) as response:
+            if response.status in (403, 404):
+                _LOGGER.debug("Hopla challenge board unavailable: HTTP %s", response.status)
+                return None
+            response.raise_for_status()
+            return (await response.json()).get("res")
+
+    async def async_submit_challenge_result(self, occurrence_id: int, goal_id: int, user_id: int,
+                                            level_key: str | None = None, value: float | None = None) -> None:
+        """Give the result of a member in a rated challenge: a level or a number."""
+        await self._post_action("/eapi/v1/games/challenges/results", "save the result", {
+            "occurrenceId": occurrence_id,
+            "goalId": goal_id,
+            "userId": user_id,
+            "levelKey": level_key or "",
+            "value": value,
+            "observedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        })
+
+    async def async_review_challenge_result(self, result_id: int, approved: bool) -> None:
+        """Approve or reject a result waiting for a parent."""
+        await self._post_action(f"/eapi/v1/games/challenges/results/{result_id}/review",
+                                "validate the result", {"approved": approved})
+
     async def async_adjust_points(self, user_id: int, points: int | None = None, preset_id: int | None = None,
                                   reason: str | None = None) -> dict:
         """Give a bonus (points > 0) or a penalty (points < 0), or apply a preset."""

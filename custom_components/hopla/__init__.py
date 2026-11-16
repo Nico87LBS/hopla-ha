@@ -17,7 +17,8 @@ from .api import HoplaApiClient
 from .frontend import async_setup_frontend
 from .completion_history import async_completed_occurrences
 from .approval import ApprovalTracker, STATUS_PENDING_APPROVAL, pending_approvals, member_name
-from .games import GamesTracker, NextChangeRefresh, PointsLedgerTracker, games_today, history_page, journal_page, presets as points_presets
+from .games import (ChallengeResultTracker, GamesTracker, NextChangeRefresh, PointsLedgerTracker, games_today,
+                    pending_results, rated_challenges, history_page, journal_page, presets as points_presets)
 from .realtime import RealtimeListener
 from .reminders import ReminderScheduler
 from .chrono import ChronoTracker
@@ -51,12 +52,16 @@ SERVICE_SET_FAMILY_TIMEZONE = "set_family_timezone"
 SERVICE_START_CHRONO = "start_chrono"
 SERVICE_STOP_CHRONO = "stop_chrono"
 SERVICE_OPEN_GAMES = "open_games"
+SERVICE_SUBMIT_CHALLENGE_RESULT = "submit_challenge_result"
+SERVICE_APPROVE_CHALLENGE_RESULT = "approve_challenge_result"
+SERVICE_REJECT_CHALLENGE_RESULT = "reject_challenge_result"
 SERVICES = [SERVICE_COMPLETE_TASK, SERVICE_CREATE_TASK, SERVICE_UPDATE_TASK, SERVICE_DELETE_TASK, SERVICE_SKIP_TASK,
             SERVICE_COMPLETE_ASSIGNED_TASK, SERVICE_POSTPONE_TASK, SERVICE_APPROVE_TASK, SERVICE_REJECT_TASK,
             SERVICE_REDEEM_REWARD, SERVICE_APPROVE_REWARD, SERVICE_REJECT_REWARD,
             SERVICE_UNLOCK_PARENT_MODE, SERVICE_LOCK_PARENT_MODE, SERVICE_ADJUST_POINTS, SERVICE_CATCH_UP_SLOT,
             SERVICE_GET_POINTS_HISTORY, SERVICE_SET_FAMILY_TIMEZONE, SERVICE_START_CHRONO, SERVICE_STOP_CHRONO,
-            SERVICE_OPEN_GAMES]
+            SERVICE_OPEN_GAMES, SERVICE_SUBMIT_CHALLENGE_RESULT, SERVICE_APPROVE_CHALLENGE_RESULT,
+            SERVICE_REJECT_CHALLENGE_RESULT]
 
 COMPLETE_TASK_SCHEMA = vol.Schema({
     vol.Required("task_id"): vol.Coerce(int),
@@ -122,6 +127,20 @@ REJECT_TASK_SCHEMA = APPROVE_TASK_SCHEMA.extend({
 REDEEM_REWARD_SCHEMA = vol.Schema({
     vol.Required("reward_id"): vol.All(vol.Coerce(int), vol.Range(min=1)),
     vol.Optional("user_id"): vol.All(vol.Coerce(int), vol.Range(min=1)),
+    vol.Optional("config_entry_id"): cv.string,
+})
+
+SUBMIT_CHALLENGE_RESULT_SCHEMA = vol.Schema({
+    vol.Required("challenge_id"): vol.All(vol.Coerce(int), vol.Range(min=1)),
+    vol.Required("user_id"): vol.All(vol.Coerce(int), vol.Range(min=1)),
+    # A level of the scale, or a number: exactly one of the two.
+    vol.Optional("level_key"): cv.string,
+    vol.Optional("value"): vol.Coerce(float),
+    vol.Optional("config_entry_id"): cv.string,
+})
+
+CHALLENGE_RESULT_SCHEMA = vol.Schema({
+    vol.Required("result_id"): vol.All(vol.Coerce(int), vol.Range(min=1)),
     vol.Optional("config_entry_id"): cv.string,
 })
 
@@ -224,6 +243,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Updated in place so entities holding this list see points and photos change.
     family_members = []
     approvals = ApprovalTracker(hass.bus.async_fire)
+    challenge_results = ChallengeResultTracker(hass.bus.async_fire)
     reminders = ReminderScheduler(
         lambda when, action: async_track_point_in_utc_time(hass, callback(action), when),
         hass.bus.async_fire,
@@ -300,6 +320,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             next_change.update(coordinator.games_today)
         except Exception as err:
             _LOGGER.debug("Failed to refresh today's games: %s", err)
+        try:
+            board = await client.async_get_challenge_board()
+            coordinator.challenge_board = rated_challenges(board)
+            coordinator.pending_challenge_results = pending_results(board, family_members)
+            challenge_results.update(coordinator.pending_challenge_results, entry.entry_id)
+        except Exception as err:
+            _LOGGER.debug("Failed to refresh the rated challenges: %s", err)
         # What she did before leaving can still be approved.
         coordinator.pending_approvals = pending_approvals(all_tasks, history, family_members)
         approvals.update(coordinator.pending_approvals, entry.entry_id)
@@ -320,6 +347,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator.points_presets = None
     coordinator.points_history = []
     coordinator.games_today = None
+    coordinator.challenge_board = []
+    coordinator.pending_challenge_results = []
     coordinator.family_timezone = None
     coordinator.all_tasks = []
     await coordinator.async_config_entry_first_refresh()
@@ -445,6 +474,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def reject_reward_handler(call: ServiceCall) -> None:
         await async_resolve_reward_service(hass, call, approve=False)
+
+    async def submit_challenge_result_handler(call: ServiceCall) -> None:
+        await async_submit_challenge_result_service(hass, call)
+
+    async def approve_challenge_result_handler(call: ServiceCall) -> None:
+        await async_review_challenge_result_service(hass, call, approve=True)
+
+    async def reject_challenge_result_handler(call: ServiceCall) -> None:
+        await async_review_challenge_result_service(hass, call, approve=False)
+
+    hass.services.async_register(DOMAIN, SERVICE_SUBMIT_CHALLENGE_RESULT, submit_challenge_result_handler,
+                                 schema=SUBMIT_CHALLENGE_RESULT_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_APPROVE_CHALLENGE_RESULT, approve_challenge_result_handler,
+                                 schema=CHALLENGE_RESULT_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_REJECT_CHALLENGE_RESULT, reject_challenge_result_handler,
+                                 schema=CHALLENGE_RESULT_SCHEMA)
 
     async def unlock_handler(call: ServiceCall) -> ServiceResponse:
         return await async_unlock_parent_mode_service(hass, call)
@@ -635,6 +680,46 @@ async def async_resolve_reward_service(hass: HomeAssistant, call: ServiceCall, *
     require_parent(config, call)
     try:
         await config["client"].async_resolve_redemption(call.data["redemption_id"], approve)
+    except Exception as err:
+        raise HomeAssistantError(str(err)) from err
+    finally:
+        await config["coordinator"].async_refresh()
+
+
+async def async_submit_challenge_result_service(hass: HomeAssistant, call: ServiceCall) -> None:
+    """Give a member's result in a rated challenge: a level of its scale or a number.
+
+    Anyone may give it, such as a child on the family tablet: a parent then
+    validates it, in Hopla or from the notification.
+    """
+    config = await _get_config(hass, call)
+    level_key = call.data.get("level_key")
+    value = call.data.get("value")
+    if bool(level_key) == (value is not None):
+        raise HomeAssistantError("Give either a level or a number")
+    challenge = next((c for c in config["coordinator"].challenge_board
+                      if c["id"] == call.data["challenge_id"]), None)
+    if challenge is None:
+        raise HomeAssistantError("This challenge is not running")
+    if challenge["kind"] == "levels" and not level_key:
+        raise HomeAssistantError("This challenge expects a level")
+    if challenge["kind"] == "value" and value is None:
+        raise HomeAssistantError("This challenge expects a number")
+    try:
+        await config["client"].async_submit_challenge_result(
+            challenge["occurrence_id"], challenge["goal_id"], call.data["user_id"], level_key, value)
+    except Exception as err:
+        raise HomeAssistantError(str(err)) from err
+    finally:
+        await config["coordinator"].async_refresh()
+
+
+async def async_review_challenge_result_service(hass: HomeAssistant, call: ServiceCall, *, approve: bool) -> None:
+    """Validate or refuse a result waiting for a parent."""
+    config = await _get_config(hass, call)
+    require_parent(config, call)
+    try:
+        await config["client"].async_review_challenge_result(call.data["result_id"], approve)
     except Exception as err:
         raise HomeAssistantError(str(err)) from err
     finally:

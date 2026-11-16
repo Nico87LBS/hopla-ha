@@ -2,6 +2,8 @@
 from datetime import datetime, timedelta
 
 EVENT_POINTS_CHANGED = "hopla_points_changed"
+EVENT_CHALLENGE_RESULT_PENDING = "hopla_challenge_result_pending"
+EVENT_CHALLENGE_RESULT_RESOLVED = "hopla_challenge_result_resolved"
 
 # How many ledger rows the sensor shows, newest first.
 RECENT_LIMIT = 10
@@ -403,3 +405,117 @@ class GamesTracker:
         self._quests |= quests
         self._wins |= wins
         self._goals |= goals
+
+
+def _result_text(challenge, result):
+    """What a result says: the name of its level, or its number with the unit."""
+    goal = challenge.get("goal") or {}
+    if goal.get("type") == "levels":
+        for level in challenge.get("levels") or []:
+            if level.get("key") == result.get("levelKey"):
+                return level.get("name") or result.get("levelKey")
+        return result.get("levelKey") or ""
+    value = result.get("value")
+    if value is None:
+        return ""
+    number = int(value) if float(value).is_integer() else value
+    return " ".join(str(part) for part in (number, goal.get("unit")) if part)
+
+
+def _rated_member(challenge, member):
+    """Where a member stands in a rated challenge: the level or number reached,
+    and whether they wait for a parent (pending) or reached the goal (done)."""
+    results = member.get("results") or []
+    levels = challenge.get("levels") or []
+    position = {level["key"]: level["position"] for level in levels}
+    approved = [r for r in results if r.get("status") == "approved"]
+    pending = next((r for r in results if r.get("status") == "pending"), None)
+    milestones = challenge.get("milestones") or []
+    awarded = set(member.get("awardedMilestoneIds") or [])
+    if milestones and milestones[-1].get("id") in awarded:
+        state = "done"
+    elif pending:
+        state = "pending"
+    else:
+        state = "todo"
+    if (challenge.get("goal") or {}).get("type") == "levels":
+        best = max((position.get(r.get("levelKey"), -1) for r in approved), default=-1)
+    else:
+        values = [r["value"] for r in approved if r.get("value") is not None]
+        best = max(values) if values else None
+    return {
+        "id": member["userId"],
+        "state": state,
+        "best": best,
+        "hops": member.get("hops", 0),
+        "result_id": pending["id"] if pending else None,
+        "result_text": _result_text(challenge, pending) if pending else None,
+    }
+
+
+def rated_challenges(board):
+    """The rated challenges running now, as the sensors and the card use them."""
+    challenges = []
+    for challenge in (board or {}).get("challenges") or []:
+        if challenge.get("status") != "running" or not challenge.get("occurrence"):
+            continue
+        goal = challenge.get("goal") or {}
+        challenges.append({
+            "id": challenge["id"],
+            "name": challenge["name"],
+            "kind": "levels" if goal.get("type") == "levels" else "value",
+            "unit": goal.get("unit") or "",
+            "target": goal.get("targetValue"),
+            "goal_id": goal.get("id"),
+            "occurrence_id": challenge["occurrence"]["id"],
+            "ends_at": challenge.get("endsAt"),
+            "levels": [{"key": level["key"], "name": level["name"], "color": level.get("color"),
+                        "position": level["position"]} for level in challenge.get("levels") or []],
+            "members": [_rated_member(challenge, member) for member in challenge.get("members") or []],
+        })
+    return challenges
+
+
+def pending_results(board, members):
+    """The results a parent has to look at, with the child's name and what they said."""
+    by_id = {c["id"]: c for c in (board or {}).get("challenges") or []}
+    pending = []
+    for result in (board or {}).get("pending") or []:
+        challenge = by_id.get(result.get("challengeId")) or {}
+        pending.append({
+            "result_id": result["id"],
+            "challenge_id": result.get("challengeId"),
+            "challenge_name": result.get("challengeName"),
+            "user_id": result["userId"],
+            "user_name": member_name(members, result["userId"]),
+            "text": _result_text(challenge, result),
+        })
+    return pending
+
+
+class ChallengeResultTracker:
+    """Fire an event when a result starts waiting for a parent and one when it is answered.
+
+    The first refresh only records what already waits, so a restart does not
+    notify again.
+    """
+
+    def __init__(self, fire):
+        self._fire = fire
+        self._known = None
+
+    def update(self, pending, entry_id):
+        current = {item["result_id"]: item for item in pending}
+        if self._known is not None:
+            for key, item in current.items():
+                if key not in self._known:
+                    self._fire(EVENT_CHALLENGE_RESULT_PENDING, {**item, "config_entry_id": entry_id})
+            for key, item in self._known.items():
+                if key not in current:
+                    self._fire(EVENT_CHALLENGE_RESULT_RESOLVED, {
+                        "result_id": key,
+                        "challenge_name": item["challenge_name"],
+                        "user_id": item["user_id"],
+                        "config_entry_id": entry_id,
+                    })
+        self._known = current

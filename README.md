@@ -107,6 +107,7 @@ L'état est le nom de la tâche.
 | | `bonus_period` | Période bonus en cours : `name`, `multiplier`, `starts_at`, `ends_at` |
 | | `streak_every`, `streak_bonus` | Le bonus de série : tous les combien de jours, et combien de points |
 | | `challenges` | Défis en cours : `name`, `shared` (défi en famille), `members`, `progress` par membre, `total`, `target`, `reward`, `reward_text`, `done`, `winners`, `ends_at` |
+| | `rated_challenges` | Défis notés en cours : `id`, `name`, `kind` (`levels` ou `value`), `unit`, `ends_at`, `levels` (`key`, `name`, `color`, `position`) et `members` : `id`, `state` (`todo`, `pending` quand un résultat attend un parent, `done` objectif atteint), `best` (position du niveau atteint, ou meilleur nombre), `result_id` et `result_text` du résultat en attente |
 | | `routines` | Routines (tâches à faire dans l'ordre) : `id`, `name`, `bonus`, `task_ids` (toutes les tâches de la routine, copies de chaque enfant comprises) et `members`, où en est chaque enfant aujourd'hui : `user_id`, `current` (la tâche de l'étape à faire, ou rien), `step`, `done`, `total`, `finished`. Les cartes ne montrent que l'étape à faire |
 | | `family_currency` | Ce que la famille gagne, choisi dans Hopla : `hops`, `points`, `stars`, `carrots`, `coins` ou `tokens`. Les cartes l'utilisent dans tous leurs textes |
 
@@ -161,6 +162,7 @@ toute seule, en attendant un peu plus après chaque échec (jusqu'à 5 minutes).
 | `hopla_rank_up` | Un membre passe au rang suivant, ou gagne une étoile ⭐ et repart au premier rang | `user_id`, `user_name`, `name`, `icon`, `level`, `next_name`, `stars`, `new_star` |
 | `hopla_quest_completed` | Un membre réussit une quête | `user_id`, `user_name`, `name`, `reward` |
 | `hopla_challenge_won` | Un membre gagne un défi chacun pour soi | `user_id`, `user_name`, `name`, `reward`, `reward_text` |
+| `hopla_challenge_result_pending` / `hopla_challenge_result_resolved` | Un enfant donne le résultat d'un défi noté et il attend un parent ; puis un parent le valide ou le refuse (dans Hopla, sur la carte ou depuis la notification) | `result_id`, `challenge_name`, `user_id`, `user_name`, `text` (le niveau ou le nombre) |
 | `hopla_goal_reached` | La famille atteint un défi commun | `name`, `total`, `target`, `reward_text`, `member_names` |
 | `hopla_task_reminder` | À chaque rappel réglé sur une tâche dans Hopla | voir ci-dessous |
 | `hopla_chrono_started` | Un bonus chrono commence : un parent le lance, ou l'heure prévue d'une tâche qui a le sien arrive | `task_id`, `task_name`, `points` (en plus), `task_points`, `ends_at`, `minutes_left`, `launched` (lancé par un parent), `assigned_to_name`, `assignee_ids`, `assignee_names` |
@@ -187,7 +189,8 @@ Pour importer un blueprint : **Paramètres** → **Automatisations et scènes** 
   une annonce sur une enceinte.
 - [`approval_notification.yaml`](blueprints/automation/hopla/approval_notification.yaml) :
   sur le téléphone d'un parent, une notification avec les boutons Valider et
-  Refuser pour chaque tâche à valider et chaque demande de récompense. Elle
+  Refuser pour chaque tâche à valider, chaque demande de récompense et chaque
+  résultat de défi donné par un enfant. Elle
   disparaît dès que la demande est traitée, où que ce soit.
 - [`custody_calendar.yaml`](blueprints/automation/hopla/custody_calendar.yaml) :
   met les tâches des enfants en pause hors des événements d'un agenda (par
@@ -268,6 +271,8 @@ proposition tant que la tablette et la famille restent sur ces deux fuseaux.
 | `hopla.approve_task` / `hopla.reject_task` | Valider ou refuser une tâche en attente. Pour une tâche à créneaux, `slot` (0 pour le premier) vise un seul créneau du jour ; sans `slot`, la validation couvre tous ceux en attente | ✓ |
 | `hopla.catch_up_slot` | Cocher pour un enfant (`completed_by`) un créneau du jour (`slot`) : celui en cours, ou un créneau oublié jusqu'à minuit | ✓ |
 | `hopla.approve_reward` / `hopla.reject_reward` | Valider ou refuser une demande de récompense (`redemption_id`) | ✓ |
+| `hopla.submit_challenge_result` | Donner le résultat d'un membre (`user_id`) dans un défi noté en cours (`challenge_id`) : un niveau de l'échelle (`level_key`) ou un nombre (`value`). Un parent le valide ensuite. Une touche sur une tête sur la carte appelle ce service | |
+| `hopla.approve_challenge_result` / `hopla.reject_challenge_result` | Valider ou refuser un résultat de défi en attente (`result_id`) | ✓ |
 | `hopla.create_task`, `hopla.update_task`, `hopla.delete_task` | Créer, modifier, supprimer une tâche | ✓ |
 | `hopla.skip_task`, `hopla.postpone_task` | Passer une tâche à sa prochaine occurrence | ✓ |
 | `hopla.adjust_points` | Donner un bonus ou une pénalité à un membre (`user_id`), avec `points` (négatif pour une pénalité) ou un préréglage (`preset_id`), et une raison (`reason`) si tu veux. Une pénalité baisse les points gagnés, donc le rang et le podium, sans jamais faire passer le solde sous zéro | ✓ |

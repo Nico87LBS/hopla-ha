@@ -494,6 +494,60 @@
           "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
         }
       }
+    },
+    "submit_challenge_result": {
+      "name": "Donner un résultat de défi",
+      "description": "Donne le résultat d'un membre dans un défi noté en cours : un niveau de son échelle, ou un nombre. Un parent le valide ensuite.",
+      "fields": {
+        "challenge_id": {
+          "name": "ID du défi",
+          "description": "Le défi (voir les défis notés du capteur des jeux)"
+        },
+        "user_id": {
+          "name": "ID du membre",
+          "description": "Le membre concerné"
+        },
+        "level_key": {
+          "name": "Niveau",
+          "description": "La clé d'un niveau de l'échelle (défi par niveaux)"
+        },
+        "value": {
+          "name": "Nombre",
+          "description": "Le nombre obtenu (défi chiffré)"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
+    },
+    "approve_challenge_result": {
+      "name": "Valider un résultat de défi",
+      "description": "Valide un résultat : ses paliers sont payés. Réservé aux parents.",
+      "fields": {
+        "result_id": {
+          "name": "ID du résultat",
+          "description": "L'ID du résultat qui attend un parent (voir les défis notés et les notifications)"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
+    },
+    "reject_challenge_result": {
+      "name": "Refuser un résultat de défi",
+      "description": "Refuse un résultat : le membre peut le redonner. Réservé aux parents.",
+      "fields": {
+        "result_id": {
+          "name": "ID du résultat",
+          "description": "L'ID du résultat qui attend un parent (voir les défis notés et les notifications)"
+        },
+        "config_entry_id": {
+          "name": "Intégration Hopla",
+          "description": "L'intégration Hopla à utiliser (facultatif, la première par défaut)"
+        }
+      }
     }
   }
 }

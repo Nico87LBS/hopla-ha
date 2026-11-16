@@ -372,3 +372,39 @@ open_games:
       required: false
       selector:
         text:
+submit_challenge_result:
+  fields:
+    challenge_id:
+      required: true
+      selector: *id001
+    user_id:
+      required: true
+      selector: *id001
+    level_key:
+      required: false
+      selector: *id002
+    value:
+      required: false
+      selector:
+        number:
+          mode: box
+          step: any
+    config_entry_id:
+      required: false
+      selector: *id002
+approve_challenge_result:
+  fields:
+    result_id:
+      required: true
+      selector: *id001
+    config_entry_id:
+      required: false
+      selector: *id002
+reject_challenge_result:
+  fields:
+    result_id:
+      required: true
+      selector: *id001
+    config_entry_id:
+      required: false
+      selector: *id002
