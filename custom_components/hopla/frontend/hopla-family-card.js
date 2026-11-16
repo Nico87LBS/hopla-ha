@@ -332,6 +332,7 @@ export function boardData(hass, config, now = new Date()) {
   let surprise = null;
   let period = null;
   let challenges = [];
+  let rated = [];
   let ladder = [];
   let parentsOnPodium = false;
   let routines = [];
@@ -361,6 +362,7 @@ export function boardData(hass, config, now = new Date()) {
       surprise = a.surprise || null;
       period = a.bonus_period || null;
       challenges = Array.isArray(a.challenges) ? a.challenges : [];
+      rated = Array.isArray(a.rated_challenges) ? a.rated_challenges : [];
       parentsOnPodium = a.parents_on_podium === true;
       routines = Array.isArray(a.routines) ? a.routines : [];
       projects = Array.isArray(a.projects) ? a.projects : [];
@@ -448,7 +450,9 @@ export function boardData(hass, config, now = new Date()) {
     // The newest points changes of the members shown, newest first.
     ledger: ledger.filter(entry => shown.some(m => m.id === entry.user_id)),
     // Running challenges, and finished ones until their end date, for the members shown.
-    challenges: challenges.filter(c => new Date(c.ends_at) > now && c.members.some(id => shown.some(m => m.id === id)))};
+    challenges: challenges.filter(c => new Date(c.ends_at) > now && c.members.some(id => shown.some(m => m.id === id))),
+    // Rated challenges under way: a level of a scale or a number, given by the child, validated by a parent.
+    rated: rated.filter(c => (!c.ends_at || new Date(c.ends_at) > now) && c.members.some(p => shown.some(m => m.id === p.id)))};
 }
 
 const icon = {
@@ -548,6 +552,12 @@ class HoplaFamilyCard extends HTMLElement {
     this.shadowRoot.addEventListener('click', event => this.onClick(event));
     this.shadowRoot.addEventListener('input', event => {
       if (event.target.dataset?.field === 'reason' && this._sheet) this._sheet.reason = event.target.value;
+      if (event.target.dataset?.field === 'result-value' && this._result) {
+        this._result.value = event.target.value;
+        const send = this.shadowRoot.querySelector('[data-action="result-send"]');
+        const number = event.target.value.replace(',', '.');
+        if (send) send.disabled = number === '' || !Number.isFinite(Number(number));
+      }
     });
   }
   connectedCallback() {
@@ -604,10 +614,11 @@ class HoplaFamilyCard extends HTMLElement {
   }
   async onClick(event) {
     if (event.target.classList?.contains('rank-scrim')) { this._rankFor = null; this.render(); return; }
-    if (event.target.classList?.contains('sheet-scrim')) { this._sheet = null; this._chrono = null; this.render(); return; }
+    if (event.target.classList?.contains('sheet-scrim')) { this._sheet = null; this._chrono = null; this._result = null; this.render(); return; }
     const button = event.target.closest('button[data-action]');
     if (!button || button.disabled) return;
     const {action, task, member, reward, request, digit, preset, slot, tasks} = button.dataset;
+    if (action.startsWith('result-')) { await this.onResult(action, button.dataset); return; }
     if (action.startsWith('chrono-')) { await this.onChrono(action, button.dataset); return; }
     if (action === 'routine-fold') { const id = Number(button.dataset.routine); if (this._routineOpen.has(id)) this._routineOpen.delete(id); else this._routineOpen.add(id); this.render(); return; }
     if (action === 'fold') { const {section} = button.dataset; this._open[section] = !this.isOpen(section); this.render(); return; }
@@ -913,16 +924,97 @@ class HoplaFamilyCard extends HTMLElement {
     const pct = done ? 100 : Math.min(100, Math.round(100 * value / Math.max(1, target)));
     return `<span class="gauge${done ? ' full' : ''}"><i style="width:${pct}%"></i></span><span class="gauge-n">${Math.min(value, target)}/${target}</span>`;
   }
-  renderChallenges(challenges, members) {
+  renderChallenges(challenges, members, rated = []) {
     const byId = new Map(members.map(m => [m.id, m]));
-    return challenges.map(c => {
+    return this.renderRated(rated, members) + challenges.map(c => {
       const reward = c.reward_text ? `<div class="goal-reward">${svg('gift', 14)}${escape(this.t(c.done ? 'goal_won' : 'goal_to_win', {reward: c.reward_text}))}</div>` : '';
       const end = c.done ? '' : `<span class="period-end">${escape(this.t('period_left', {time: this.duration(new Date(c.ends_at))}))}</span>`;
       const lines = c.shared
-        ? `<div class="goal-line"><span class="goal-faces">${c.members.map(id => byId.get(id)).filter(Boolean).map(m => this.face(m, 26)).join('')}</span>${this.gauge(c.total, c.target, c.done)}</div>`
-        : c.members.map(id => byId.get(id)).filter(Boolean).map(m => `<div class="goal-line">${this.face(m, 26)}${this.awayDays(c.days_away?.[m.id])}${this.gauge(c.progress[m.id] || 0, c.targets?.[m.id] ?? c.target, c.winners.includes(m.id))}</div>`).join('');
+        ? `<div class="goal-line">${this.gauge(c.total, c.target, c.done)}<span class="goal-faces">${c.members.map(id => byId.get(id)).filter(Boolean).map(m => this.face(m, 32)).join('')}</span></div>`
+        : c.members.map(id => byId.get(id)).filter(Boolean).map(m => `<div class="goal-line">${this.gauge(c.progress[m.id] || 0, c.targets?.[m.id] ?? c.target, c.winners.includes(m.id))}${this.awayDays(c.days_away?.[m.id])}${this.face(m, 32)}</div>`).join('');
       return `<div class="goal${c.done ? ' done' : ''}"><div class="goal-head">${svg('trophy', 18)}<b>${escape(c.name)}</b>${c.shared ? `<span class="goal-tag">${escape(this.t('goal_family'))}</span>` : ''}${end}</div>${lines}${reward}</div>`;
     }).join('');
+  }
+  // A rated challenge: the scale with the level reached (or the number), and
+  // the face on the right. A touch on the face gives the result; once it is
+  // given the face waits for a parent, who touches it to validate.
+  renderRated(rated, members) {
+    const byId = new Map(members.map(m => [m.id, m]));
+    return rated.map(c => {
+      const end = c.ends_at ? `<span class="period-end">${escape(this.t('period_left', {time: this.duration(new Date(c.ends_at))}))}</span>` : '';
+      const lines = c.members.map(p => ({p, m: byId.get(p.id)})).filter(({m}) => m).map(({p, m}) => {
+        const reached = c.kind === 'levels'
+          ? `<span class="scale" aria-hidden="true">${c.levels.map(l => `<i class="${l.position === p.best ? 'now' : ''}" style="--c:${escape(l.color || '#9aa0a6')};${l.position > p.best ? 'opacity:.3' : ''}"></i>`).join('')}</span>`
+          : `<span class="scale-n">${escape(p.best === null || p.best === undefined ? '—' : [p.best, c.unit].filter(Boolean).join(' '))}</span>`;
+        return `<div class="goal-line">${reached}${this.ratedFace(c, p, m)}</div>`;
+      }).join('');
+      return `<div class="goal"><div class="goal-head">${svg('trophy', 18)}<b>${escape(c.name)}</b>${end}</div>${lines}</div>`;
+    }).join('');
+  }
+  ratedFace(challenge, progress, member) {
+    const data = `data-action="result-open" data-challenge="${challenge.id}" data-member="${member.id}"`;
+    if (progress.state === 'done') return `<span class="slot" title="${escape(member.name)}">${this.face(member, 40)}${this.badge('done', 'check')}</span>`;
+    if (progress.state === 'pending') {
+      const label = this.t('result_check', {name: member.name});
+      return this._access.parent
+        ? `<button class="slot tap waiting" ${data} aria-label="${escape(label)}" title="${escape(label)}">${this.face(member, 40)}${this.badge('wait', 'clock')}</button>`
+        : `<span class="slot waiting" title="${escape(member.name)}">${this.face(member, 40)}${this.badge('wait', 'clock')}</span>`;
+    }
+    const label = this.t('result_give', {name: member.name});
+    return `<button class="slot tap" ${data} aria-label="${escape(label)}" title="${escape(label)}">${this.face(member, 40)}</button>`;
+  }
+  // The small dialog opened by a face: the levels of the scale, a number, or
+  // for a parent the result to validate.
+  renderResultSheet(data) {
+    const open = this._result;
+    const challenge = open && data.rated.find(c => c.id === open.challenge);
+    const progress = challenge?.members.find(p => p.id === open.member);
+    const member = data.members.find(m => m.id === open?.member);
+    if (!challenge || !progress || !member) return '';
+    const busy = this._busy.has(`result-${challenge.id}-${member.id}`) ? 'disabled' : '';
+    let body;
+    if (progress.state === 'pending') {
+      body = `<h4>${escape(progress.result_text || '')}</h4>
+        <div class="result-pair"><button class="go ok" data-action="result-approve" data-result="${progress.result_id}" ${busy}>${svg('check', 18)}${escape(this.t('approve'))}</button>
+        <button class="go no" data-action="result-reject" data-result="${progress.result_id}" ${busy}>${svg('cross', 16)}${escape(this.t('reject'))}</button></div>`;
+    } else if (challenge.kind === 'levels') {
+      body = `<h4>${escape(this.t('result_how'))}</h4>${challenge.levels.map(l =>
+        `<button class="level-btn" data-action="result-level" data-key="${escape(l.key)}" style="background:${escape(l.color || '#6b6880')}" ${busy}>${escape(l.name)}</button>`).join('')}`;
+    } else {
+      const number = String(open.value ?? '').replace(',', '.');
+      body = `<h4>${escape(this.t('result_how'))}</h4>
+        <label class="field">${escape(challenge.unit || this.t('result_number'))}<input type="text" inputmode="decimal" data-field="result-value" value="${escape(open.value || '')}"></label>
+        <button class="go chrono-go" data-action="result-send" ${busy || (number !== '' && Number.isFinite(Number(number)) ? '' : 'disabled')}>${escape(this.t('result_send'))}</button>`;
+    }
+    return `<div class="sheet-scrim"><div class="sheet" role="dialog" aria-label="${escape(challenge.name)}">
+      <div class="sheet-head">${this.face(member, 36)}<span class="sheet-for">${escape(challenge.name)}</span>
+        <button class="round" data-action="result-close" aria-label="${escape(this.t('close'))}">${svg('cross', 16)}</button></div>
+      ${body}${this._error ? `<div class="error">${escape(this._error)}</div>` : ''}</div></div>`;
+  }
+  async onResult(action, data) {
+    if (action === 'result-open') {
+      this._result = {challenge: Number(data.challenge), member: Number(data.member), value: ''};
+      this._error = ''; this.render();
+      return;
+    }
+    const open = this._result;
+    if (!open) return;
+    if (action === 'result-close') { this._result = null; this.render(); return; }
+    let service, payload;
+    if (action === 'result-level') {
+      service = 'submit_challenge_result';
+      payload = {challenge_id: open.challenge, user_id: open.member, level_key: data.key};
+    } else if (action === 'result-send') {
+      const value = Number(String(open.value ?? '').replace(',', '.'));
+      if (open.value === '' || !Number.isFinite(value)) return;
+      service = 'submit_challenge_result';
+      payload = {challenge_id: open.challenge, user_id: open.member, value};
+    } else {
+      service = action === 'result-approve' ? 'approve_challenge_result' : 'reject_challenge_result';
+      payload = {result_id: Number(data.result)};
+    }
+    if (await this.call(service, payload, `result-${open.challenge}-${open.member}`, open.member) === null) return;
+    this._result = null; this.render();
   }
   // The days a member was away during a challenge, which lowered their target.
   awayDays(days) {
@@ -1644,7 +1736,14 @@ class HoplaFamilyCard extends HTMLElement {
       .goal.done .goal-head { color: var(--dt-green); }
       .goal-head b { color: var(--primary-text-color); }
       .goal-tag { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(245,180,0,.2); }
-      .goal-line { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+      .goal-line { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+      .scale { display: flex; flex: 1; align-items: center; gap: 8px; }
+      .scale i { width: 16px; height: 16px; border-radius: 50%; background: var(--c); }
+      .scale i.now { box-shadow: 0 0 0 2px var(--card-background-color, #fff), 0 0 0 4px var(--c); }
+      .scale-n { flex: 1; font-size: 14px; font-weight: 700; }
+      .level-btn { display: block; width: 100%; margin-top: 8px; height: 48px; border-radius: 14px; color: #fff; font-size: 16px; font-weight: 800; touch-action: manipulation; }
+      .result-pair { display: flex; gap: 10px; } .result-pair .go { flex: 1; margin-top: 4px; }
+      .go.ok { background: var(--dt-green); } .go.no { background: #80868b; }
       .away-days { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; padding: 0 6px; border-radius: 999px; background: rgba(127,127,127,.14); color: var(--secondary-text-color); font-size: 11px; font-weight: 600; line-height: 16px; }
       .goal-faces { display: flex; } .goal-faces .face + .face { margin-left: -8px; }
       .goal-reward { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 14px; font-weight: 600; }
@@ -1831,10 +1930,10 @@ class HoplaFamilyCard extends HTMLElement {
       .key.small { font-size: 14px; background: none; }
       .key:not(:disabled):active { transform: scale(.94); }
     </style><ha-card>
-      ${this.renderParentButton()}${this.renderPinPad()}${this._config.show_points ? this.renderRankDetails(data.members, data.ladder) : ''}${this.renderSheet(data)}${this.renderChronoSheet(data)}
+      ${this.renderParentButton()}${this.renderPinPad()}${this._config.show_points ? this.renderRankDetails(data.members, data.ladder) : ''}${this.renderSheet(data)}${this.renderChronoSheet(data)}${this.renderResultSheet(data)}
       ${this._config.show_points && data.podium.length ? this.renderPodium(data.podium) : ''}
       ${this.renderZoneBanner()}${this.renderPeriod(data.period)}
-      ${this._config.show_goals ? this.renderChallenges(data.challenges, data.members) : ''}
+      ${this._config.show_goals ? this.renderChallenges(data.challenges, data.members, data.rated) : ''}
       ${this._config.show_todo ? this.section('todo', this.header('todo', 'todo', title,
         data.rows.length + data.routineBlocks.reduce((count, block) => count + block.rows.length, 0)
           + data.projectBlocks.reduce((count, block) => count + block.tasks.length, 0), 'todo'),
@@ -1848,7 +1947,7 @@ class HoplaFamilyCard extends HTMLElement {
         this.t('history_today', {count: data.ledger.filter(entry => sameDay(new Date(entry.created_at), now)).length}), 'history'), this.renderLedger(data.ledger, data.members)) : ''}
       ${rewards.length ? this.section('rewards', this.header('gift', 'gift', this.t('rewards'), rewards.length, 'rewards'), rewards.map(r => this.renderReward(r, data.members, data.requests)).join('')) : ''}
       ${bonus ? `<section>${this.header('plusminus', 'bonus', this.t('bonus_title'), '')}${this.renderBonusTiles(data.members, data.ledger)}</section>` : ''}
-      ${this._error && !this._sheet ? `<div class="error">${escape(this._error)}</div>` : ''}
+      ${this._error && !this._sheet && !this._result ? `<div class="error">${escape(this._error)}</div>` : ''}
     </ha-card>`;
     if (typing) {
       const field = this.shadowRoot.querySelector(`[data-field="${typing.field}"]`);

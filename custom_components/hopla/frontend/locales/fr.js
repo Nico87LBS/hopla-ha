@@ -212,6 +212,11 @@ export default {
     goal_family: 'En famille',
     challenge_away_one: 'Pas là {count} jour : objectif réduit',
     challenge_away_other: 'Pas là {count} jours : objectif réduit',
+    result_how: 'Quel résultat ?',
+    result_number: 'Nombre',
+    result_send: 'Envoyer',
+    result_give: 'Donner le résultat de {name}',
+    result_check: 'Regarder le résultat de {name}',
     goal_to_win: 'À gagner : {reward}',
     goal_won: 'Gagné : {reward} !',
     errors: {

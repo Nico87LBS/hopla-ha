@@ -494,6 +494,60 @@
           "description": "The Hopla integration to use (optional, the first one by default)"
         }
       }
+    },
+    "submit_challenge_result": {
+      "name": "Give a challenge result",
+      "description": "Give a member's result in a running rated challenge: a level of its scale, or a number. A parent validates it afterwards.",
+      "fields": {
+        "challenge_id": {
+          "name": "Challenge ID",
+          "description": "The challenge (see the rated challenges of the games sensor)"
+        },
+        "user_id": {
+          "name": "Member ID",
+          "description": "The member the result is for"
+        },
+        "level_key": {
+          "name": "Level",
+          "description": "The key of a level of the scale (for a challenge by levels)"
+        },
+        "value": {
+          "name": "Number",
+          "description": "The number reached (for a challenge by number)"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
+    },
+    "approve_challenge_result": {
+      "name": "Validate a challenge result",
+      "description": "Validate a result: its milestones are paid. Parents only.",
+      "fields": {
+        "result_id": {
+          "name": "Result ID",
+          "description": "The ID of the result waiting for a parent (see the rated challenges and notifications)"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
+    },
+    "reject_challenge_result": {
+      "name": "Refuse a challenge result",
+      "description": "Refuse a result: the member can give it again. Parents only.",
+      "fields": {
+        "result_id": {
+          "name": "Result ID",
+          "description": "The ID of the result waiting for a parent (see the rated challenges and notifications)"
+        },
+        "config_entry_id": {
+          "name": "Hopla integration",
+          "description": "The Hopla integration to use (optional, the first one by default)"
+        }
+      }
     }
   }
 }

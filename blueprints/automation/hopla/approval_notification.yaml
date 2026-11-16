@@ -2,7 +2,8 @@ blueprint:
   name: Hopla - demandes à valider
   description: >
     Envoie une notification au téléphone d'un parent quand une tâche Hopla attend
-    sa validation, ou quand un enfant demande une récompense, avec les boutons
+    sa validation, quand un enfant demande une récompense, ou quand il donne le
+    résultat d'un défi noté, avec les boutons
     Valider et Refuser. La notification disparaît dès que la demande est traitée,
     depuis le téléphone, le tableau de bord ou Hopla.
   domain: automation
@@ -30,6 +31,12 @@ blueprint:
       default: true
       selector:
         boolean:
+    include_challenges:
+      name: Résultats de défis
+      description: Notifier aussi les résultats de défis notés donnés par les enfants.
+      default: true
+      selector:
+        boolean:
 
 mode: queued
 max: 20
@@ -48,6 +55,12 @@ triggers:
     event_type: hopla_reward_request_resolved
     id: reward_resolved
   - trigger: event
+    event_type: hopla_challenge_result_pending
+    id: challenge
+  - trigger: event
+    event_type: hopla_challenge_result_resolved
+    id: challenge_resolved
+  - trigger: event
     event_type: mobile_app_notification_action
     id: answer
 
@@ -55,6 +68,7 @@ variables:
   approve_title: !input approve_title
   reject_title: !input reject_title
   include_rewards: !input include_rewards
+  include_challenges: !input include_challenges
   answer: "{{ trigger.event.data.action | default('') if trigger.id == 'answer' else '' }}"
 
 conditions:
@@ -62,7 +76,8 @@ conditions:
     value_template: >-
       {{ (trigger.id in ['pending', 'resolved'])
          or (trigger.id in ['reward', 'reward_resolved'] and include_rewards)
-         or (trigger.id == 'answer' and answer is match('HOPLA_(REWARD_)?(APPROVE|REJECT)_[0-9]+$')) }}
+         or (trigger.id in ['challenge', 'challenge_resolved'] and include_challenges)
+         or (trigger.id == 'answer' and answer is match('HOPLA_(REWARD_|CHALLENGE_)?(APPROVE|REJECT)_[0-9]+$')) }}
 
 actions:
   - choose:
@@ -102,6 +117,33 @@ actions:
                   title: "{{ reject_title }}"
       - conditions:
           - condition: trigger
+            id: challenge
+        sequence:
+          - domain: mobile_app
+            type: notify
+            device_id: !input notify_device
+            title: "🏆 {{ trigger.event.data.user_name or 'Hopla' }}"
+            message: >-
+              {{ trigger.event.data.challenge_name }} : {{ trigger.event.data.text }}
+            data:
+              tag: "hopla_challenge_{{ trigger.event.data.result_id }}"
+              actions:
+                - action: "HOPLA_CHALLENGE_APPROVE_{{ trigger.event.data.result_id }}"
+                  title: "{{ approve_title }}"
+                - action: "HOPLA_CHALLENGE_REJECT_{{ trigger.event.data.result_id }}"
+                  title: "{{ reject_title }}"
+      - conditions:
+          - condition: trigger
+            id: challenge_resolved
+        sequence:
+          - domain: mobile_app
+            type: notify
+            device_id: !input notify_device
+            message: clear_notification
+            data:
+              tag: "hopla_challenge_{{ trigger.event.data.result_id }}"
+      - conditions:
+          - condition: trigger
             id: resolved
         sequence:
           - domain: mobile_app
@@ -127,6 +169,13 @@ actions:
           - action: "hopla.{{ 'approve_reward' if answer.startswith('HOPLA_REWARD_APPROVE_') else 'reject_reward' }}"
             data:
               redemption_id: "{{ answer.split('_')[-1] | int }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ answer.startswith('HOPLA_CHALLENGE_') }}"
+        sequence:
+          - action: "hopla.{{ 'approve_challenge_result' if answer.startswith('HOPLA_CHALLENGE_APPROVE_') else 'reject_challenge_result' }}"
+            data:
+              result_id: "{{ answer.split('_')[-1] | int }}"
       - conditions:
           - condition: trigger
             id: answer
