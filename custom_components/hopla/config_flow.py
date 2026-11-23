@@ -15,9 +15,10 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (DOMAIN, CONF_URL, CONF_TOKEN, CONF_SHOW_DUE_IN, CONF_SHOW_NO_DUE_DATE,
-                    CONF_CREATE_UNIFIED_LIST, CONF_CREATE_ASSIGNEE_LISTS, CONF_PARENT_USERS, CONF_PARENT_PIN,
+                    CONF_CREATE_UNIFIED_LIST, CONF_CREATE_ASSIGNEE_LISTS, CONF_NOTICE_MINUTES, CONF_PARENT_USERS, CONF_PARENT_PIN,
                     CONF_PARENT_PIN_HASH, CONF_PARENT_PIN_SALT)
 from .api import HoplaApiClient
+from .notices import DEFAULT_MINUTES_BEFORE
 from .parental import hash_pin, valid_pin
 
 _LOGGER = logging.getLogger(__name__)
@@ -128,6 +129,7 @@ class HoplaOptionsFlowHandler(config_entries.OptionsFlow):
                 CONF_SHOW_NO_DUE_DATE: user_input.get(CONF_SHOW_NO_DUE_DATE, True),
                 CONF_CREATE_UNIFIED_LIST: user_input.get(CONF_CREATE_UNIFIED_LIST, True),
                 CONF_CREATE_ASSIGNEE_LISTS: user_input.get(CONF_CREATE_ASSIGNEE_LISTS, False),
+                CONF_NOTICE_MINUTES: user_input.get(CONF_NOTICE_MINUTES, DEFAULT_MINUTES_BEFORE),
             }
 
             # Workaround to being able to use the same parameters in both config and options flow. 
@@ -171,5 +173,9 @@ class HoplaOptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_CREATE_ASSIGNEE_LISTS,
                     default=self.entry.data.get(CONF_CREATE_ASSIGNEE_LISTS, False)
                 ): bool,
+                vol.Optional(
+                    CONF_NOTICE_MINUTES,
+                    default=self.entry.data.get(CONF_NOTICE_MINUTES, DEFAULT_MINUTES_BEFORE)
+                ): str,
             }),
         )

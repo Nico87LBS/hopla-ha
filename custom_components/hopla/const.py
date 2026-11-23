@@ -8,6 +8,8 @@ CONF_SHOW_DUE_IN = "show_due_in"
 CONF_SHOW_NO_DUE_DATE = "show_no_due_date"
 CONF_CREATE_UNIFIED_LIST = "create_unified_list"
 CONF_CREATE_ASSIGNEE_LISTS = "create_assignee_lists"
+# Minutes before a routine, a moment or a task starts or ends at which Hopla fires an event, e.g. "10,5".
+CONF_NOTICE_MINUTES = "notice_minutes"
 # Home Assistant users who may approve, edit and spend points, and the hashed
 # four-digit code that opens parent mode on a shared tablet.
 CONF_PARENT_USERS = "parent_users"
