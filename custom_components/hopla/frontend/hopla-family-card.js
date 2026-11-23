@@ -273,6 +273,14 @@ export function activeRoutines(routines, members, tasks) {
 // red (steps missed); null while a child still has something to do or wait
 // for. `children` is [{finished, missed, states}], `states` the face of each
 // open step ('pending' when it waits for approval).
+// A project with nothing left to tick: every open task waits for a parent's
+// approval (null while one is still to do, or while the project waits on a
+// task that is not open yet).
+export function settledProject(states) {
+  if (!states?.length || states.some(state => state !== 'pending')) return null;
+  return {tone: 'orange', pending: states.length};
+}
+
 export function settledRoutine(children) {
   if (!children?.length) return null;
   let pending = 0;
@@ -552,6 +560,7 @@ class HoplaFamilyCard extends HTMLElement {
     this._history = new Map(); // member id -> the points history loaded for the window
     this._open = {};          // section -> folded open or not, once touched
     this._routineOpen = new Set(); // routines settled, opened by a touch
+    this._projectOpen = new Map(); // project -> opened or folded by hand, once touched
     this.shadowRoot.addEventListener('click', event => this.onClick(event));
     this.shadowRoot.addEventListener('input', event => {
       if (event.target.dataset?.field === 'reason' && this._sheet) this._sheet.reason = event.target.value;
@@ -624,6 +633,7 @@ class HoplaFamilyCard extends HTMLElement {
     if (action.startsWith('result-')) { await this.onResult(action, button.dataset); return; }
     if (action.startsWith('chrono-')) { await this.onChrono(action, button.dataset); return; }
     if (action === 'routine-fold') { const id = Number(button.dataset.routine); if (this._routineOpen.has(id)) this._routineOpen.delete(id); else this._routineOpen.add(id); this.render(); return; }
+    if (action === 'project-fold') { const id = Number(button.dataset.project); this._projectOpen.set(id, button.getAttribute('aria-expanded') !== 'true'); this.render(); return; }
     if (action === 'fold') { const {section} = button.dataset; this._open[section] = !this.isOpen(section); this.render(); return; }
     if (action === 'games-open') { await this.onGames(Number(member)); return; }
     if (action === 'adjust-open') { await this.openAdjust(Number(member), button.dataset.tab || 'bonus'); return; }
@@ -1314,9 +1324,21 @@ class HoplaFamilyCard extends HTMLElement {
     const lines = open.length ? open.map(task => `<div class="rb-stepline"><span class="rb-step">${escape(task.name)}</span>
       <span class="faces">${faces(tasks.find(row => row.id === task.chore_id), task)}</span></div>`).join('')
       : `<div class="rb-next">${escape(this.t('project_waiting'))}</div>`;
+    // As a routine: folded on its own once nothing is left to tick, and the
+    // chevron folds or opens it by hand at any time.
+    const settled = settledProject(open.map(task => tasks.find(row => row.id === task.chore_id)?.pending ? 'pending' : 'todo'));
+    const folded = this._projectOpen.has(project.id) ? !this._projectOpen.get(project.id) : Boolean(settled);
+    if (folded) {
+      const summary = settled?.pending ? this.t('routine_to_approve', {count: settled.pending}) : this.t('project_progress', {done: project.done, total: project.total});
+      return `<button class="routine-block settled project ${settled ? settled.tone : (project.late ? 'orange' : 'green')}" data-action="project-fold" data-project="${project.id}" aria-expanded="false"
+        aria-label="${escape(this.t('project_label_folded', {name: project.name}))}">${this.icon(project.icon, 30) || svg('steps', 20)}<span class="rb-title">${escape(project.name)}</span>
+        <span class="rb-until">${escape(summary)}</span>${svg('chevron', 18)}</button>`;
+    }
+    const fold = `<button class="rb-fold" data-action="project-fold" data-project="${project.id}" aria-expanded="true"
+      aria-label="${escape(this.t('project_collapse', {name: project.name}))}">${svg('chevron', 18)}</button>`;
     return `<div class="routine-block project${project.late ? ' over' : ''}" role="group" aria-label="${escape(this.t('project_label', {name: project.name}))}">
       <div class="rb-head">${this.icon(project.icon, 30) || svg('steps', 20)}<span class="rb-title">${escape(project.name)}</span>${bonus}
-      <span class="rb-count">${escape(this.t('project_progress', {done: project.done, total: project.total}))}</span></div>
+      <span class="rb-count">${escape(this.t('project_progress', {done: project.done, total: project.total}))}</span>${fold}</div>
       <div class="rb-bar"><i style="width:${share}%"></i></div>${due}<div class="rb-main">${lines}</div></div>`;
   }
   mode(row) {

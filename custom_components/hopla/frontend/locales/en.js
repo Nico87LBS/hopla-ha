@@ -149,6 +149,8 @@ export default {
     surprise: 'Surprise task: +{n} extra {units}',
     project_label: 'Project “{name}” under way',
     project_progress: '{done}/{total}',
+    project_label_folded: 'Project “{name}” folded, tap to open',
+    project_collapse: 'Fold project “{name}”',
     project_due: 'Finish by {date}',
     project_late: 'Late: was due by {date}',
     project_waiting: 'Nothing to do for now: the next step waits for another task',
