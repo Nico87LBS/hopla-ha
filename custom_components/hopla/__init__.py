@@ -11,7 +11,7 @@ from homeassistant.helpers.event import async_call_later, async_track_point_in_u
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.util import dt as dt_util
-from .const import (DOMAIN, CONF_URL, CONF_TOKEN, CONF_SHOW_DUE_IN, LIVE_REFRESH_INTERVAL, OFFLINE_REFRESH_INTERVAL,
+from .const import (DOMAIN, CONF_NOTICE_MINUTES, CONF_URL, CONF_TOKEN, CONF_SHOW_DUE_IN, LIVE_REFRESH_INTERVAL, OFFLINE_REFRESH_INTERVAL,
                     CONF_PARENT_USERS, CONF_PARENT_PIN_HASH, CONF_PARENT_PIN_SALT)
 from .api import HoplaApiClient
 from .frontend import async_setup_frontend
@@ -22,6 +22,7 @@ from .games import (ChallengeResultTracker, GamesTracker, NextChangeRefresh, Poi
 from .realtime import RealtimeListener
 from .reminders import ReminderScheduler
 from .chrono import ChronoTracker
+from .notices import NoticeScheduler, DEFAULT_MINUTES_BEFORE
 from .presence import present_tasks
 from .parental import (ParentGuard, ParentModeError, RewardRequestTracker, pending_rewards,
                        PARENT_MODE_DURATION)
@@ -254,6 +255,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.bus.async_fire,
     )
     entry.async_on_unload(chronos.cancel_all)
+    notices = NoticeScheduler(
+        lambda when, action: async_track_point_in_utc_time(hass, callback(action), when),
+        hass.bus.async_fire,
+    )
+    entry.async_on_unload(notices.cancel_all)
     reward_requests = RewardRequestTracker(hass.bus.async_fire)
     ledger = PointsLedgerTracker(hass.bus.async_fire)
     games = GamesTracker(hass.bus.async_fire)
@@ -332,6 +338,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         approvals.update(coordinator.pending_approvals, entry.entry_id)
         reminders.update(tasks, family_members, entry.entry_id)
         chronos.update(tasks, family_members, entry.entry_id)
+        notices.update(tasks, getattr(coordinator, "games_today", None), family_members, entry.entry_id,
+                       entry.data.get(CONF_NOTICE_MINUTES, DEFAULT_MINUTES_BEFORE))
         return tasks
 
     coordinator = DataUpdateCoordinator(

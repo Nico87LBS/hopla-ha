@@ -16,7 +16,8 @@
           "show_due_in": "Days ahead to show upcoming tasks",
           "show_no_due_date": "Show tasks with no due date",
           "create_unified_list": "Create \"All Tasks\" list",
-          "create_assignee_lists": "Create individual task lists per person"
+          "create_assignee_lists": "Create individual task lists per person",
+          "notice_minutes": "Minutes before a start or an end to announce"
         }
       }
     },
@@ -37,11 +38,13 @@
           "show_due_in": "Days ahead to show upcoming tasks",
           "show_no_due_date": "Show tasks with no due date",
           "create_unified_list": "Create \"All Tasks\" list",
-          "create_assignee_lists": "Create individual task lists per person"
+          "create_assignee_lists": "Create individual task lists per person",
+          "notice_minutes": "Minutes before a start or an end to announce"
         },
         "data_description": {
           "parent_users": "Home Assistant users who may approve, edit tasks and spend points. Leave empty to let everyone do it.",
-          "parent_pin": "Four digits that open parent mode for two minutes on the family tablet. Leave empty to keep the current code."
+          "parent_pin": "Four digits that open parent mode for two minutes on the family tablet. Leave empty to keep the current code.",
+          "notice_minutes": "Minutes before a routine, a moment or a task starts or ends, separated by commas (e.g. 10,5). Hopla fires the hopla_time_notice event at each of them and right at the start or the end."
         }
       }
     },
