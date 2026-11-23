@@ -15,6 +15,7 @@ from homeassistant.helpers.update_coordinator import (
 
 from .const import CONF_URL, DOMAIN
 from .games import RECENT_LIMIT
+from .icons import REWARD_DEFAULT, resolve_icon
 from .model import HoplaMember
 
 _LOGGER = logging.getLogger(__name__)
@@ -248,6 +249,7 @@ class HoplaRewardsSensor(_FamilySensor):
                 "id": r.id,
                 "name": r.name,
                 "points_cost": r.points_cost,
+                "icon": resolve_icon(r.icon, REWARD_DEFAULT),
                 "description": r.description,
                 "quota_count": r.quota_count,
                 "quota_period": r.quota_period,

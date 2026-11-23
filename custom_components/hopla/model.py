@@ -83,6 +83,8 @@ class HoplaReward:
     quota_period: Optional[str] = None
     quota_used: dict[int, int] = field(default_factory=dict)
     quota_resets_at: Optional[datetime] = None
+    # Id of the reward's icon in the Hopla catalogue.
+    icon: Optional[str] = None
 
     @classmethod
     def from_json(cls, data: dict) -> "HoplaReward":
@@ -97,6 +99,7 @@ class HoplaReward:
             quota_period=data.get("quotaPeriod") or None,
             quota_used={int(user): used for user, used in (data.get("quotaUsed") or {}).items()},
             quota_resets_at=_parse_datetime(data.get("quotaResetsAt")),
+            icon=data.get("icon") or None,
         )
 
 
@@ -166,6 +169,8 @@ class HoplaTask:
     flash: Optional[dict] = None
     # Minutes after the due time the task is missed.
     deadline_minutes: Optional[int] = None
+    # Id of the task's icon in the Hopla catalogue.
+    icon: Optional[str] = None
 
     @property
     def together(self) -> bool:
@@ -241,6 +246,7 @@ class HoplaTask:
             assign_strategy=data.get("assignStrategy"),
             flash=data.get("flash") if isinstance(data.get("flash"), dict) else None,
             deadline_minutes=data.get("deadlineMinutes") if isinstance(data.get("deadlineMinutes"), int) else None,
+            icon=data.get("icon") or None,
         )
     
     @classmethod
