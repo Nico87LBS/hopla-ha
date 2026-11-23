@@ -16,7 +16,8 @@
           "show_due_in": "Nombre de jours de tâches à venir à afficher",
           "show_no_due_date": "Afficher les tâches sans échéance",
           "create_unified_list": "Créer la liste « Toutes les tâches »",
-          "create_assignee_lists": "Créer une liste par personne"
+          "create_assignee_lists": "Créer une liste par personne",
+          "notice_minutes": "Annoncer avant un début ou une fin (minutes)"
         }
       }
     },
@@ -37,11 +38,13 @@
           "show_due_in": "Nombre de jours de tâches à venir à afficher",
           "show_no_due_date": "Afficher les tâches sans échéance",
           "create_unified_list": "Créer la liste « Toutes les tâches »",
-          "create_assignee_lists": "Créer une liste par personne"
+          "create_assignee_lists": "Créer une liste par personne",
+          "notice_minutes": "Annoncer avant un début ou une fin (minutes)"
         },
         "data_description": {
           "parent_users": "Les utilisateurs Home Assistant qui peuvent valider, modifier les tâches et dépenser les points. Laisse vide pour que tout le monde le puisse.",
-          "parent_pin": "Quatre chiffres qui ouvrent le mode parent pour deux minutes sur la tablette familiale. Laisse vide pour garder le code actuel."
+          "parent_pin": "Quatre chiffres qui ouvrent le mode parent pour deux minutes sur la tablette familiale. Laisse vide pour garder le code actuel.",
+          "notice_minutes": "Minutes avant le début ou la fin d'une routine, d'un moment ou d'une tâche, séparées par des virgules (ex. 10,5). Hopla envoie l'événement hopla_time_notice à chacune, et pile au début ou à la fin."
         }
       }
     },
