@@ -124,7 +124,7 @@ class GamesTodayTests(unittest.TestCase):
                                                  "taskIds": [1, 2, 4],
                                                  "members": [{"userId": 2, "current": 2, "step": 2, "done": 1,
                                                               "total": 2, "finished": False}]}]})
-        self.assertEqual(today["routines"], [{"id": 3, "name": "Matin", "bonus": 5, "task_ids": [1, 2, 4],
+        self.assertEqual(today["routines"], [{"id": 3, "name": "Matin", "icon": None, "bonus": 5, "task_ids": [1, 2, 4],
                                               "chore_ids": [1, 2], "window": "", "opens_at": None, "closes_at": None,
                                               "members": [
             {"user_id": 2, "current": 2, "available": [], "step": 2, "done": 1, "total": 2, "finished": False,

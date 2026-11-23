@@ -17,7 +17,8 @@ CARDS = ((CARD_URL, CARD_FILE), (FAMILY_CARD_URL, FAMILY_CARD_FILE))
 # the drawn rank badges.
 SHARED = (("/hopla/hopla-i18n.js", FRONTEND_DIR / "hopla-i18n.js"),
           ("/hopla/locales", FRONTEND_DIR / "locales"),
-          ("/hopla/ranks", FRONTEND_DIR / "ranks"))
+          ("/hopla/ranks", FRONTEND_DIR / "ranks"),
+          ("/hopla/icons", FRONTEND_DIR / "icons"))
 DATA_FRONTEND = "hopla_frontend"
 
 
