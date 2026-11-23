@@ -22,6 +22,7 @@ from .games import (ChallengeResultTracker, GamesTracker, NextChangeRefresh, Poi
 from .realtime import RealtimeListener
 from .reminders import ReminderScheduler
 from .chrono import ChronoTracker
+from .icons import with_icons
 from .notices import NoticeScheduler, DEFAULT_MINUTES_BEFORE
 from .presence import present_tasks
 from .parental import (ParentGuard, ParentModeError, RewardRequestTracker, pending_rewards,
@@ -322,6 +323,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.debug("Failed to refresh the family's time zone: %s", err)
         try:
             coordinator.games_today = games_today(await client.async_get_games_today())
+            with_icons(coordinator.games_today, None)
             games.update(coordinator.games_today, entry.entry_id, family_members)
             next_change.update(coordinator.games_today)
         except Exception as err:
@@ -329,6 +331,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             board = await client.async_get_challenge_board()
             coordinator.challenge_board = rated_challenges(board)
+            with_icons(None, coordinator.challenge_board)
             coordinator.pending_challenge_results = pending_results(board, family_members)
             challenge_results.update(coordinator.pending_challenge_results, entry.entry_id)
         except Exception as err:

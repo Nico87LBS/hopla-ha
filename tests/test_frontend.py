@@ -45,7 +45,8 @@ class FrontendTests(unittest.IsolatedAsyncioTestCase):
             ("/hopla/hopla-family-card.js", str(self.family_card_file), False),
             ("/hopla/hopla-i18n.js", str(frontend / "hopla-i18n.js"), False),
             ("/hopla/locales", str(frontend / "locales"), False),
-        ("/hopla/ranks", str(frontend / "ranks"), False)])
+        ("/hopla/ranks", str(frontend / "ranks"), False),
+            ("/hopla/icons", str(frontend / "icons"), False)])
         version = self.version()
         self.assertEqual(self.add_url.call_args_list, [
             unittest.mock.call(self.hass, f"/hopla/hopla-user-todo-card.js?v={version}"),

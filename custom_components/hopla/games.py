@@ -143,6 +143,7 @@ def _challenge(challenge):
     return {
         "id": challenge["id"],
         "name": challenge["name"],
+        "icon": challenge.get("icon"),
         "kind": challenge["kind"],
         "task_id": challenge.get("choreId"),
         "target": challenge["target"],
@@ -197,6 +198,7 @@ def _routine(routine):
     return {
         "id": routine["id"],
         "name": routine.get("name"),
+        "icon": routine.get("icon"),
         "bonus": routine.get("bonus", 0),
         "task_ids": routine.get("taskIds") or [],
         "chore_ids": routine.get("choreIds") or [],
@@ -225,6 +227,7 @@ def _project(project):
     return {
         "id": project["id"],
         "name": project.get("name"),
+        "icon": project.get("icon"),
         "bonus": project.get("bonus", 0),
         "due_on": project.get("dueOn") or None,
         "late": bool(project.get("late")),
@@ -463,6 +466,7 @@ def rated_challenges(board):
         challenges.append({
             "id": challenge["id"],
             "name": challenge["name"],
+            "icon": challenge.get("icon"),
             "kind": "levels" if goal.get("type") == "levels" else "value",
             "unit": goal.get("unit") or "",
             "target": goal.get("targetValue"),

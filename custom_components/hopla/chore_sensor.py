@@ -15,6 +15,7 @@ from homeassistant.helpers.update_coordinator import (
 from .approval import STATUS_PENDING_APPROVAL, slot_attributes
 from .games import chrono_attributes
 from .const import DOMAIN
+from .icons import TASK_DEFAULT, resolve_icon
 from .model import HoplaMember, HoplaTask
 
 _LOGGER = logging.getLogger(__name__)
@@ -169,6 +170,7 @@ class HoplaChoreSensor(CoordinatorEntity, SensorEntity):
             "assigned_to_user_id": task.assigned_to,
             "next_due_date": task.next_due_date.isoformat() if task.next_due_date else None,
             "frequency_type": task.frequency_type,
+            "icon": resolve_icon(task.icon, TASK_DEFAULT),
             "frequency": task.frequency,
             "interval_type": task.interval_type,
             "points": task.points,

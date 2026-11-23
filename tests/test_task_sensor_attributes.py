@@ -1,5 +1,6 @@
 """Check task metadata parsing and sensor exposure without an HA installation."""
 import ast
+import importlib.util
 from dataclasses import dataclass
 from datetime import datetime
 import logging
@@ -29,7 +30,10 @@ class CoordinatorStub:
 class TaskSensorAttributeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        namespace = dict(dataclass=dataclass, datetime=datetime, Any=Any, List=List,
+        icons_spec = importlib.util.spec_from_file_location("hopla_icons", ROOT / "icons.py")
+        icons = importlib.util.module_from_spec(icons_spec)
+        icons_spec.loader.exec_module(icons)
+        namespace = dict(resolve_icon=icons.resolve_icon, TASK_DEFAULT=icons.TASK_DEFAULT, dataclass=dataclass, datetime=datetime, Any=Any, List=List,
                          Optional=Optional, _LOGGER=logging.getLogger(__name__),
                          CoordinatorEntity=CoordinatorStub, SensorEntity=type("SensorStub", (), {}),
                          STATUS_PENDING_APPROVAL=3, UNIQUE_ID_PREFIX="hopla_chore_")
