@@ -126,4 +126,9 @@ assert.equal(settledRoutine([{finished: false, missed: 0, states: ['todo']}]), n
 assert.equal(settledRoutine([{finished: false, missed: 0, states: []}]), null);
 assert.deepEqual(settledRoutine([{finished: true, missed: 0, states: []}]), {tone: 'green', pending: 0, missed: 0});
 assert.equal(settledRoutine([{finished: false, missed: 1, states: ['pending']}]).tone, 'red');
+// Un projet dont tout attend la validation se réduit ; sinon il reste ouvert.
+const {settledProject} = await import('../custom_components/hopla/frontend/hopla-family-card.js');
+assert.deepEqual(settledProject(['pending', 'pending']), {tone: 'orange', pending: 2});
+assert.equal(settledProject(['pending', 'todo']), null);
+assert.equal(settledProject([]), null);
 console.log('ok');
