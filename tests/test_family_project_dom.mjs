@@ -47,7 +47,16 @@ const parentCard = document.createElement('hopla-family-card');
 parentCard.setConfig({show_points: false, show_approval: true});
 parentCard.hass = {...hass, user: {id: 'parent', is_admin: true}, states: pendingStates};
 document.body.append(parentCard);
+// Everything waits for approval: folded on its own, a touch opens it.
+const foldedBlock = parentCard.shadowRoot.querySelector('.routine-block.project.settled');
+assert.ok(foldedBlock, 'folded once nothing is left to tick');
+assert.equal(foldedBlock.getAttribute('aria-expanded'), 'false');
+foldedBlock.click();
 const pendingBlock = parentCard.shadowRoot.querySelector('.routine-block.project');
+assert.ok(!pendingBlock.classList.contains('settled'), 'opened by a touch');
+parentCard.shadowRoot.querySelector('[data-action="project-fold"]').click();
+assert.ok(parentCard.shadowRoot.querySelector('.routine-block.project.settled'), 'folded again by the chevron');
+parentCard.shadowRoot.querySelector('.routine-block.project.settled').click();
 assert.equal(pendingBlock.querySelectorAll('.faces .slot.waiting').length, 1, 'the clock on the face');
 assert.equal(pendingBlock.querySelectorAll('.faces button.slot.tap').length, 0, 'nothing to tick while it waits');
 parentCard.remove();
