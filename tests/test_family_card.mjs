@@ -155,10 +155,10 @@ assert.equal(boardData(hass, {}, now).period, null);
 const quest = {id: 7, name: 'Mettre la table', target: 5, progress: 3, reward: 8, done: false};
 const withProgress = {...hass, states: {...hass.states,
   'sensor.hopla_points_elena': {state: '5', attributes: {hopla_member_id: 2, display_name: 'Elena', role: 'member', total_points: 140,
-    rank: 'Hop Hop', rank_icon: '🐸', rank_level: 2, rank_points: 100, next_rank: 'Super Hop', next_rank_icon: '🦘', next_rank_points: 300,
+    rank: 'Hop Hop', rank_level: 2, rank_points: 100, next_rank: 'Super Hop', next_rank_points: 300,
     quests: [quest]}},
   'sensor.hopla_jeux_du_jour': {state: 'unknown', attributes: {hopla_games: true,
-    ranks: [{name: 'Lapineau', icon: '🐰', image: 'hopla-1', min_points: 0}, {name: 'Bizarre', icon: '', image: '../evil', min_points: 100}],
+    ranks: [{name: 'Lapineau', image: 'hopla-1', min_points: 0}, {name: 'Bizarre', image: '../evil', min_points: 100}],
     challenges: [
     {id: 1, name: 'Piscine', shared: true, members: [2, 3], progress: {2: 15, 3: 5}, total: 20, target: 200, done: false, winners: [], ends_at: '2026-10-25T00:00:00Z'},
     {id: 2, name: 'Fini', shared: false, members: [2], progress: {2: 3}, total: 3, target: 3, done: true, winners: [2], ends_at: '2026-10-19T00:00:00Z'},
@@ -166,11 +166,11 @@ const withProgress = {...hass, states: {...hass.states,
   ]}}}};
 const progress = boardData(withProgress, {members: [2, 3]}, now);
 const elenaProgress = progress.members.find(m => m.id === 2);
-assert.deepEqual(elenaProgress.rank, {name: 'Hop Hop', icon: '🐸', image: null, level: 2, from: 100, next: {name: 'Super Hop', icon: '🦘', image: null, points: 300},
+assert.deepEqual(elenaProgress.rank, {name: 'Hop Hop', image: null, level: 2, from: 100, next: {name: 'Super Hop', image: null, points: 300},
   stars: 0, points: 140, starAt: 0});
 assert.equal(elenaProgress.earned, 140);
 // Every rank of the family, for the rank details.
-assert.deepEqual(progress.ladder, [{name: 'Lapineau', icon: '🐰', image: 'hopla-1', points: 0}, {name: 'Bizarre', icon: '', image: null, points: 100}]);
+assert.deepEqual(progress.ladder, [{name: 'Lapineau', image: 'hopla-1', points: 0}, {name: 'Bizarre', image: null, points: 100}]);
 assert.deepEqual(boardData(hass, {}, now).ladder, []);
 // A drawn badge is kept only when the integration ships it.
 const withBadge = image => boardData({...withProgress, states: {...withProgress.states, 'sensor.hopla_points_elena': {

@@ -98,12 +98,10 @@ def _rank(item):
     return {
         "level": item.get("level", 1),
         "name": rank.get("name"),
-        "icon": rank.get("icon"),
         "image": rank.get("image") or None,
         "earned": item.get("earned", 0),
         "min_points": rank.get("minPoints", 0),
         "next_name": following.get("name") if following else None,
-        "next_icon": following.get("icon") if following else None,
         "next_image": (following.get("image") or None) if following else None,
         "next_points": following.get("minPoints") if following else None,
         "stars": item.get("stars", 0),
@@ -278,7 +276,6 @@ def games_today(data):
         # Every rank of the family, lowest first, for the card's rank details.
         "rank_ladder": [{
             "name": rank.get("name"),
-            "icon": rank.get("icon"),
             "image": rank.get("image") or None,
             "min_points": rank.get("minPoints", 0),
         } for rank in sorted(data.get("ranks") or [], key=lambda rank: rank.get("minPoints", 0))],
