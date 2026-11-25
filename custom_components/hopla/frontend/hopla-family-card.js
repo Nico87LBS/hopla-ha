@@ -366,7 +366,7 @@ export function boardData(hass, config, now = new Date()) {
         assignees: a.assignee_ids || [], assignedTo: a.assigned_to_user_id ?? null,
         together: a.assign_strategy === 'together', pending: a.pending_approval === true, slots: a.slots_today || [],
         frequencyType: a.frequency_type,
-        icon: a.icon || null,
+        icon: a.icon || null, pointsPending: a.points_pending === true,
         chrono: a.chrono?.ends_at ? {points: Number(a.chrono.points) || 0, endsAt: new Date(a.chrono.ends_at), live: a.chrono.live_id ?? null} : null,
         deadline: a.deadline ? new Date(a.deadline) : null});
     } else if (a.hopla_games) {
@@ -835,6 +835,10 @@ class HoplaFamilyCard extends HTMLElement {
   badge(kind, iconName, text = '') {
     return `<span class="badge ${kind}${text ? ' wide' : ''}">${svg(iconName, 11)}${escape(text)}</span>`;
   }
+  // The hops of a task chosen by a child wait for a parent: a small tag says so.
+  pointsWait(row) {
+    return row.tasks.some(task => task.pointsPending) ? `<span class="pts-wait" title="${escape(this.t('points_pending_title'))}">${svg('hourglass', 12)}${escape(this.t('points_pending'))}</span>` : '';
+  }
   points(value, muted = false, cost = false) {
     return value ? `<span class="pts${muted ? ' muted' : ''}${cost ? ' cost' : ''}">${svg('star', 14)}${cost ? '' : '+'}${value}</span>` : '';
   }
@@ -1107,7 +1111,7 @@ class HoplaFamilyCard extends HTMLElement {
       const summary = [pendingCount ? this.t('to_approve', {count: pendingCount}) : '', missedCount ? this.t('missed_slots', {count: missedCount}) : ''].filter(Boolean).join(' · ');
       const waiting = [...new Set(row.slots.filter(entry => entry.slots.some(slot => slot.state === 'pending')).map(entry => entry.task.id))];
       const approveAll = pendingCount > 1 ? `<button class="approve-all" data-action="approve-all" data-tasks="${waiting.join(',')}" ${busy ? 'disabled' : ''}>${svg('check', 16)}${escape(this.t('approve_all', {count: pendingCount}))}</button>` : '';
-      return `<div class="row slotted open-grid"><div class="grid-top">${this.icon(row.tasks[0]?.icon)}<span class="name"><span>${escape(row.name)}</span>${this.mode(row)}${this.routine(row)}${this.chrono(row)}</span>${this.points(row.points)}${sparkle}</div>
+      return `<div class="row slotted open-grid"><div class="grid-top">${this.icon(row.tasks[0]?.icon)}<span class="name"><span>${escape(row.name)}</span>${this.mode(row)}${this.routine(row)}${this.chrono(row)}</span>${this.points(row.points)}${this.pointsWait(row)}${sparkle}</div>
         <div class="grid" style="grid-template-columns: minmax(80px, 110px) repeat(${row.columns.length}, minmax(0, 1fr))"><span></span>${head}${lines}</div>
         <div class="gfoot"><span>${escape(summary)}</span>${approveAll}</div></div>`;
     }
@@ -1127,7 +1131,7 @@ class HoplaFamilyCard extends HTMLElement {
       return `<button class="ringbtn${busy && this._busy.get(busy.id) === m.id ? ' busy' : ''}" ${action} data-task="${task.id}" data-member="${m.id}"
         ${(open || catchUp) && !busy ? '' : 'disabled'} aria-label="${escape(label)}" title="${escape(label)}">${this.ring(slots)}<span class="ring-face">${this.face(m, 48)}</span>${waiting ? this.badge('amber', 'hourglass') : missed ? this.badge('orange', 'replay') : ''}</button>`;
     }).join('');
-    return `<div class="row slotted${surprise ? ' is-surprise' : ''}">${this.icon(row.tasks[0]?.icon)}<span class="name"><span>${escape(row.name)}</span>${this.mode(row)}${this.routine(row)}<span class="slot-pills">${pills}</span>${this.chrono(row)}</span>${this.points(row.points)}${sparkle}<span class="faces">${right}</span></div>`;
+    return `<div class="row slotted${surprise ? ' is-surprise' : ''}">${this.icon(row.tasks[0]?.icon)}<span class="name"><span>${escape(row.name)}</span>${this.mode(row)}${this.routine(row)}<span class="slot-pills">${pills}</span>${this.chrono(row)}</span>${this.points(row.points)}${this.pointsWait(row)}${sparkle}<span class="faces">${right}</span></div>`;
   }
   // The deadline of a row: when it is, then the time left once late.
   deadline(row) {
@@ -1366,7 +1370,7 @@ class HoplaFamilyCard extends HTMLElement {
     const waiting = row.pending ? `<span class="hourglass">${svg('hourglass', 18, this.t('pending'))}</span>` : '';
     const surprise = row.tasks.find(task => task.surprise);
     const sparkle = surprise ? `<span class="surprise" title="${escape(this.t('surprise', {n: surprise.surprise}))}">${svg('sparkle', 14)}+${surprise.surprise}</span>` : '';
-    return `<div class="row${row.pending ? ' is-pending' : ''}${surprise ? ' is-surprise' : ''}">${this.icon(row.tasks[0]?.icon)}<span class="name"><span>${escape(row.name)}</span>${this.mode(row)}${this.routine(row)}${this.chrono(row)}${this.deadline(row)}</span>${this.points(row.points)}${sparkle}${waiting}<span class="faces">${right}</span></div>`;
+    return `<div class="row${row.pending ? ' is-pending' : ''}${surprise ? ' is-surprise' : ''}">${this.icon(row.tasks[0]?.icon)}<span class="name"><span>${escape(row.name)}</span>${this.mode(row)}${this.routine(row)}${this.chrono(row)}${this.deadline(row)}</span>${this.points(row.points)}${this.pointsWait(row)}${sparkle}${waiting}<span class="faces">${right}</span></div>`;
   }
   renderDone(row) {
     const faces = row.items.map(item => `<span class="slot" title="${escape(item.member.name)}">${this.face(item.member, 40)}${this.badge('done', 'check')}</span>`).join('');
@@ -1656,6 +1660,7 @@ class HoplaFamilyCard extends HTMLElement {
       .pts { display: inline-flex; align-items: center; gap: 3px; padding: 4px 10px 4px 8px; border-radius: 999px; font-size: 14px; font-weight: 800;
         background: rgba(79,70,229,.12); color: #4f46e5; white-space: nowrap; }
       .pts svg { color: var(--dt-gold); }
+      .pts-wait { display: inline-flex; align-items: center; gap: 3px; padding: 3px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #F59E0B; color: #fff; white-space: nowrap; }
       .pts.muted { background: rgba(127,127,127,.12); color: var(--secondary-text-color); font-weight: 700; } .pts.muted svg { color: rgba(127,127,127,.5); }
       .pts.cost { background: rgba(245,180,0,.16); color: #8a5a00; }
       .pts.bonus { background: rgba(30,142,62,.14); color: var(--dt-green); }

@@ -174,6 +174,7 @@ class HoplaChoreSensor(CoordinatorEntity, SensorEntity):
             "frequency": task.frequency,
             "interval_type": task.interval_type,
             "points": task.points,
+            "points_pending": task.points_pending,
             "labels": task.labels,
             "is_active": task.is_active,
             "description": task.description,

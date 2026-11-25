@@ -41,6 +41,8 @@ export default {
     all_done: "Tout est fait pour aujourd'hui, bravo !",
     no_tasks: 'Aucune tâche à afficher',
     pending: 'En attente de validation',
+    points_pending: "Hops à valider",
+    points_pending_title: "Les hops de cette tâche attendent la validation d'un parent",
     done: "Déjà fait aujourd'hui",
     rewards: 'Récompenses',
     approve: 'Valider',
