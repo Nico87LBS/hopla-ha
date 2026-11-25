@@ -1,14 +1,43 @@
-# hopla-ha sur GitLab : les vérifications et les versions restent sur GitHub
-# (dépôt public, Actions gratuites, nécessaires à HACS). GitLab ne fait que
-# rapatrier les PR GitHub en merge requests, toutes les 15 minutes.
+# hopla-ha sur GitLab : les vérifications et les releases restent sur GitHub
+# (dépôt public, Actions gratuites, nécessaires à HACS). GitLab rapatrie les PR
+# GitHub en merge requests, toutes les 15 minutes, et crée l'étiquette de
+# chaque nouvelle version.
 # Variables CI/CD : GITHUB_DEPOT, GITHUB_TOKEN_PR, GITLAB_TOKEN_PR.
 
 workflow:
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"
+
+# La copie vers GitHub efface les étiquettes que GitHub crée seul, et une release
+# sans étiquette redevient un brouillon que HACS ne voit pas. L'étiquette vX.Y.Z
+# naît donc ici ; à son arrivée sur GitHub, le workflow release.yml publie la
+# release.
+etiqueter-version:
+  tags: [docker]
+  image: python:3.12
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"
+      changes: [custom_components/hopla/manifest.json]
+  variables:
+    GIT_DEPTH: 1
+  script:
+    - VERSION=$(python3 -c 'import json; print(json.load(open("custom_components/hopla/manifest.json"))["version"])')
+    - >
+      if curl -fsS -o /dev/null -H "JOB-TOKEN: $CI_JOB_TOKEN"
+      "$CI_API_V4_URL/projects/$CI_PROJECT_ID/repository/tags/v$VERSION"; then
+      echo "v$VERSION existe déjà"; exit 0; fi
+    - >
+      python3 -c 'import json,os; v=os.environ["VERSION"]; print(json.dumps({"tag_name": "v" + v, "ref": os.environ["CI_COMMIT_SHA"], "name": "Hopla " + v, "description": "Version " + v + " : la release complète est sur GitHub."}))'
+      > release.json
+    - >
+      curl -fsS -X POST -H "JOB-TOKEN: $CI_JOB_TOKEN" -H "Content-Type: application/json"
+      --data @release.json "$CI_API_V4_URL/projects/$CI_PROJECT_ID/releases"
 
 rapatrier-pr-github:
   tags: [docker]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
   image: python:3.12
   variables:
     GIT_DEPTH: 1

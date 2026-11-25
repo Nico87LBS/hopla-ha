@@ -2,10 +2,14 @@ name: Release
 
 # A new version in manifest.json on main becomes a GitHub release, which
 # HACS offers as an update in Home Assistant.
+# GitLab is the source and mirrors to GitHub, removing any tag GitHub creates
+# alone: GitLab creates the version tag (job etiqueter-version), and its arrival
+# here runs this workflow again to publish the release.
 on:
   push:
     branches: [main]
     paths: [custom_components/hopla/manifest.json]
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
