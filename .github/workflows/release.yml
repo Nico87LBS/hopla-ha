@@ -18,14 +18,28 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Create the release for the manifest version
+      - name: Create and publish the release for the manifest version
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=$(jq -r .version custom_components/hopla/manifest.json)
           tag="v$version"
-          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-            echo "$tag already released"
-            exit 0
+          # GitHub answers 500 now and then: try a few times.
+          retry() {
+            for attempt in 1 2 3 4 5; do
+              "$@" && return 0
+              echo "Attempt $attempt failed, retrying"
+              sleep $((attempt * 10))
+            done
+            return 1
+          }
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            retry gh release create "$tag" --target "$GITHUB_SHA" --title "Hopla $version" --generate-notes
           fi
-          gh release create "$tag" --target "$GITHUB_SHA" --title "Hopla $version" --generate-notes
+          # A release can be left as a draft (no tag, invisible to HACS):
+          # publish every draft release, this one included.
+          for draft in $(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.draft) | .tag_name'); do
+            echo "Publishing draft $draft"
+            retry gh release edit "$draft" --draft=false --latest=false
+          done
+          retry gh release edit "$tag" --latest
