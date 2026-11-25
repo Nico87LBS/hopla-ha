@@ -171,6 +171,8 @@ class HoplaTask:
     deadline_minutes: Optional[int] = None
     # Id of the task's icon in the Hopla catalogue.
     icon: Optional[str] = None
+    # The hops a child chose for this task wait for a parent to approve them.
+    points_pending: bool = False
 
     @property
     def together(self) -> bool:
@@ -247,6 +249,7 @@ class HoplaTask:
             flash=data.get("flash") if isinstance(data.get("flash"), dict) else None,
             deadline_minutes=data.get("deadlineMinutes") if isinstance(data.get("deadlineMinutes"), int) else None,
             icon=data.get("icon") or None,
+            points_pending=data.get("pointsPending") is True,
         )
     
     @classmethod

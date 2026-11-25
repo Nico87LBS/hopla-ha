@@ -41,6 +41,8 @@ export default {
     all_done: 'All done for today, well done!',
     no_tasks: 'No tasks to show',
     pending: 'Waiting for approval',
+    points_pending: "Hops to approve",
+    points_pending_title: "The hops for this task wait for a parent to approve them",
     done: 'Done today',
     rewards: 'Rewards',
     approve: 'Approve',
