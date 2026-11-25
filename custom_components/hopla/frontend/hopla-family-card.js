@@ -354,8 +354,8 @@ export function boardData(hass, config, now = new Date()) {
       members.push({id: a.hopla_member_id, name: a.display_name || a.friendly_name, role: a.role, away: a.away === true,
         picture: a.entity_picture || null, points: Number(state.state) || 0, recent: a.recent_completions || [],
         streak: Number(a.streak) || 0, streakToday: a.streak_done_today === true,
-        rank: a.rank ? {name: a.rank, icon: a.rank_icon || '', image: rankImage(a.rank_image), level: Number(a.rank_level) || 1, from: Number(a.rank_points) || 0,
-          next: a.next_rank ? {name: a.next_rank, icon: a.next_rank_icon || '', image: rankImage(a.next_rank_image), points: Number(a.next_rank_points) || 0} : null,
+        rank: a.rank ? {name: a.rank, image: rankImage(a.rank_image), level: Number(a.rank_level) || 1, from: Number(a.rank_points) || 0,
+          next: a.next_rank ? {name: a.next_rank, image: rankImage(a.next_rank_image), points: Number(a.next_rank_points) || 0} : null,
           stars: Number(a.rank_stars) || 0, points: Number(a.rank_round_points ?? a.total_points) || 0,
           starAt: Number(a.next_star_points) || 0} : null,
         earned: Number(a.total_points) || 0, quests: Array.isArray(a.quests) ? a.quests : []});
@@ -377,7 +377,7 @@ export function boardData(hass, config, now = new Date()) {
       parentsOnPodium = a.parents_on_podium === true;
       routines = Array.isArray(a.routines) ? a.routines : [];
       projects = Array.isArray(a.projects) ? a.projects : [];
-      ladder = Array.isArray(a.ranks) ? a.ranks.map(r => ({name: r.name || '', icon: r.icon || '', image: rankImage(r.image), points: Number(r.min_points) || 0})) : [];
+      ladder = Array.isArray(a.ranks) ? a.ranks.map(r => ({name: r.name || '', image: rankImage(r.image), points: Number(r.min_points) || 0})) : [];
     } else if (Array.isArray(a.points_presets)) {
       presets = a.points_presets;
       presetsEntry = a.config_entry_id || null;
@@ -885,10 +885,9 @@ class HoplaFamilyCard extends HTMLElement {
     const label = this.t('streak', {count: member.streak});
     return `<span class="streak${member.streakToday ? '' : ' at-risk'}" title="${escape(member.streakToday ? label : `${label} · ${this.t('streak_at_risk')}`)}">${svg('flame', 14)}${member.streak}</span>`;
   }
-  // A drawn badge, or the rank's emoji when the family chose its own ranks.
+  // The drawn badge of a rank.
   rankBadge(rank, size, extra = '') {
-    return rank.image ? `<img class="rank-img${extra}" style="width:${size}px;height:${size}px" src="${badgeUrl(rank.image)}" alt="">`
-      : `<span class="rank-img${extra}" style="width:${size}px;height:${size}px;font-size:${Math.round(size * .7)}px">${escape(rank.icon)}</span>`;
+    return rank.image ? `<img class="rank-img${extra}" style="width:${size}px;height:${size}px" src="${badgeUrl(rank.image)}" alt="">` : '';
   }
   rankProgress(rank) {
     // Past the last rank, the bar leads to the next prestige star.
@@ -908,7 +907,7 @@ class HoplaFamilyCard extends HTMLElement {
     const next = rank.next ? this.rankBadge(rank.next, 22, ' next') : rank.starAt ? '<span class="rank-img next star">⭐</span>' : '';
     const label = `${this.rankStars(rank)} ${rank.name}`.trim();
     return `<button class="rank" data-action="rank" data-member="${member.id}" title="${escape(title)}" aria-label="${escape(`${this.t('rank_open', {name: member.name})} · ${title}`)}">
-      <span class="rank-chip">${rank.image || rank.icon ? this.rankBadge(rank, 30) : ''}<span>${escape(label)}</span></span>
+      <span class="rank-chip">${this.rankBadge(rank, 30)}<span>${escape(label)}</span></span>
       <span class="rank-prog"><span class="bar"><i style="width:${pct}%"></i></span>${next}</span></button>`;
   }
   // The rank details, over the card: where the member stands and every rank.

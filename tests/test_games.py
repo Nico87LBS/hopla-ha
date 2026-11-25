@@ -176,8 +176,8 @@ class GamesTodayTests(unittest.TestCase):
 
 
 def progress(level=1, quest_done=False, solo_winners=(), goal_done=False, total=20):
-    rank = [{"name": "Petit Hop", "icon": "🐣", "minPoints": 0}, {"name": "Hop Hop", "icon": "🐸", "minPoints": 100},
-            {"name": "Super Hop", "icon": "🦘", "minPoints": 300}]
+    rank = [{"name": "Petit Hop", "minPoints": 0}, {"name": "Hop Hop", "minPoints": 100},
+            {"name": "Super Hop", "minPoints": 300}]
     return {**TODAY,
             "ranks": [rank[2], rank[0], rank[1]],
             "members": [{"userId": 2, "earned": 120 if level == 2 else 40, "level": level, "rank": rank[level - 1],
@@ -202,8 +202,8 @@ def progress(level=1, quest_done=False, solo_winners=(), goal_done=False, total=
 class ProgressionTests(unittest.TestCase):
     def test_shape(self):
         today = games.games_today(progress())
-        self.assertEqual(today["ranks"][2], {"level": 1, "name": "Petit Hop", "icon": "🐣", "image": None, "earned": 40, "min_points": 0,
-                                             "next_name": "Hop Hop", "next_icon": "🐸", "next_image": None,
+        self.assertEqual(today["ranks"][2], {"level": 1, "name": "Petit Hop", "image": None, "earned": 40, "min_points": 0,
+                                             "next_name": "Hop Hop", "next_image": None,
                                              "next_points": 100,
                                              "stars": 0, "round_points": 40, "star_at": None})
         quest = today["quests"][2][0]
@@ -217,7 +217,7 @@ class ProgressionTests(unittest.TestCase):
         self.assertEqual((goal["targets"], goal["days_away"]), ({}, {}))
         self.assertEqual([(rank["name"], rank["min_points"]) for rank in today["rank_ladder"]],
                          [("Petit Hop", 0), ("Hop Hop", 100), ("Super Hop", 300)])
-        self.assertEqual(today["rank_ladder"][0], {"name": "Petit Hop", "icon": "🐣", "image": None, "min_points": 0})
+        self.assertEqual(today["rank_ladder"][0], {"name": "Petit Hop", "image": None, "min_points": 0})
         quiet = games.games_today({"rules": {}})
         self.assertEqual((quiet["ranks"], quiet["quests"], quiet["challenges"], quiet["rank_ladder"]), ({}, {}, [], []))
 
