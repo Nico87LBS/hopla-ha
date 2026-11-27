@@ -58,7 +58,7 @@ async def async_setup_family_sensors(
     coordinator = config["coordinator"]
     members: list[HoplaMember] = config["family_members"]
 
-    async_add_entities([HoplaPendingApprovalSensor(coordinator, config_entry)])
+    async_add_entities([HoplaPendingApprovalSensor(coordinator, config_entry), HoplaBriefingSensor(coordinator, config_entry)])
 
     known: set[int] = set()
     # The rewards, bonus and games sensors appear once Hopla first answers for
@@ -158,6 +158,7 @@ class HoplaPointsSensor(_FamilySensor):
             "total_points": member.points,
             "points_redeemed": member.points_redeemed,
             "away": member.away,
+            "hops_pending": (getattr(self.coordinator, "held_hops", None) or {}).get(member.user_id, 0),
             "recent_completions": recent_completions(
                 getattr(self.coordinator, "completed_tasks", []), member.user_id),
             **self._streak(member.user_id),
@@ -219,6 +220,30 @@ class HoplaPendingApprovalSensor(_FamilySensor):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return {"tasks": self.coordinator.pending_approvals}
+
+
+class HoplaBriefingSensor(_FamilySensor):
+    """Today's open tasks that no reminder or time notice announces, for the briefing's people."""
+
+    _attr_icon = "mdi:clipboard-text-clock"
+    _attr_translation_key = "briefing"
+
+    def __init__(self, coordinator: DataUpdateCoordinator, config_entry: ConfigEntry) -> None:
+        super().__init__(coordinator, config_entry)
+        self._attr_unique_id = f"dt_briefing_{config_entry.entry_id}"
+
+    @property
+    def _briefing(self) -> dict[str, Any]:
+        return getattr(self.coordinator, "briefing", None) or {"count": 0, "tasks": [], "members": [], "unassigned": []}
+
+    @property
+    def native_value(self) -> int:
+        return self._briefing["count"]
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        briefing = self._briefing
+        return {"tasks": briefing["tasks"], "members": briefing["members"], "unassigned": briefing["unassigned"]}
 
 
 class HoplaRewardsSensor(_FamilySensor):

@@ -353,7 +353,7 @@ export function boardData(hass, config, now = new Date()) {
     if (a.hopla_member_id !== undefined) {
       members.push({id: a.hopla_member_id, name: a.display_name || a.friendly_name, role: a.role, away: a.away === true,
         picture: a.entity_picture || null, points: Number(state.state) || 0, recent: a.recent_completions || [],
-        streak: Number(a.streak) || 0, streakToday: a.streak_done_today === true,
+        held: Number(a.hops_pending) || 0, streak: Number(a.streak) || 0, streakToday: a.streak_done_today === true,
         rank: a.rank ? {name: a.rank, image: rankImage(a.rank_image), level: Number(a.rank_level) || 1, from: Number(a.rank_points) || 0,
           next: a.next_rank ? {name: a.next_rank, image: rankImage(a.next_rank_image), points: Number(a.next_rank_points) || 0} : null,
           stars: Number(a.rank_stars) || 0, points: Number(a.rank_round_points ?? a.total_points) || 0,
@@ -857,7 +857,7 @@ class HoplaFamilyCard extends HTMLElement {
     const step = (group, rank) => {
       const size = rank === 0 ? 76 : 60;
       const faces = group.length
-        ? group.map(m => `<div class="podium-member">${rank === 0 && podiumScore(m) > 0 ? `<span class="crown">${svg('crown', 30)}</span>` : ''}<button class="podium-face" data-action="sheet-rewards" data-member="${m.id}" aria-label="${escape(this.t('common.on_task', {action: this.t('rewards'), task: m.name}))}">${this.face(m, size, `${rank === 0 && podiumScore(m) > 0 ? ' leader' : ''}${m.away ? ' away' : ''}`)}${this.coin(m)}${this.away(m)}</button><div class="podium-name">${escape(m.name)}${this.streak(m)}</div>${this.rank(m)}</div>`).join('')
+        ? group.map(m => `<div class="podium-member">${rank === 0 && podiumScore(m) > 0 ? `<span class="crown">${svg('crown', 30)}</span>` : ''}<button class="podium-face" data-action="sheet-rewards" data-member="${m.id}" aria-label="${escape(this.t('common.on_task', {action: this.t('rewards'), task: m.name}))}">${this.face(m, size, `${rank === 0 && podiumScore(m) > 0 ? ' leader' : ''}${m.away ? ' away' : ''}`)}${this.coin(m)}${this.held(m)}${this.away(m)}</button><div class="podium-name">${escape(m.name)}${this.streak(m)}</div>${this.rank(m)}</div>`).join('')
         : `<div class="podium-member"><span class="face empty" style="width:${size}px;height:${size}px"></span><div class="podium-name">&nbsp;</div></div>`;
       const score = group.length ? `<span class="score">${podiumScore(group[0])}</span><span class="unit">${escape(this.t('earned', {count: podiumScore(group[0])}))}</span>` : '';
       // The step opens its first member's history; with a tie, the window's menu switches to the others.
@@ -873,6 +873,12 @@ class HoplaFamilyCard extends HTMLElement {
   coin(member) {
     const label = this.t('to_spend', {count: member.points});
     return `<span class="coin" title="${escape(label)}" aria-label="${escape(label)}">${svg('star', 12)}${member.points}</span>`;
+  }
+  // The hops a parent has yet to approve: an amber hourglass pastille on the face.
+  held(member) {
+    if (!member.held) return '';
+    const label = this.t(this._access.parent ? 'held_parent' : 'held_child', {count: member.held});
+    return `<span class="hold" title="${escape(label)}" aria-label="${escape(label)}">${svg('hourglass', 11)}${member.held}</span>`;
   }
   // Away, such as at the other parent's home: a grey suitcase on the face.
   away(member) {
@@ -1625,6 +1631,8 @@ class HoplaFamilyCard extends HTMLElement {
       .coin { position: absolute; right: -10px; bottom: -4px; display: inline-flex; align-items: center; gap: 2px; padding: 2px 7px 2px 5px; border-radius: 999px;
         background: #fff4cc; color: #8a5d00; font-size: 13px; font-weight: 800; line-height: 1.2; border: 2px solid var(--card-background-color, #fff); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
       .coin svg { color: var(--dt-gold); }
+      .hold { position: absolute; right: -6px; top: -4px; display: inline-flex; align-items: center; gap: 2px; height: 22px; min-width: 22px; box-sizing: border-box; padding: 0 6px 0 4px;
+        border-radius: 11px; background: #F59E0B; color: #fff; font-size: 12px; font-weight: 700; line-height: 1; border: 2px solid var(--card-background-color, #fff); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
       .podium-name { margin-top: 6px; font-weight: 700; font-size: 16px; display: flex; align-items: center; gap: 6px; }
       .step { width: 100%; margin-top: 10px; border-radius: 14px 14px 0 0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 800; }
       .step .score { font-size: 24px; line-height: 1; }

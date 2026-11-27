@@ -43,6 +43,8 @@ export default {
     pending: 'En attente de validation',
     points_pending: "Hops à valider",
     points_pending_title: "Les hops de cette tâche attendent la validation d'un parent",
+    held_parent: '{count} hops à valider',
+    held_child: '{count} hops retenus',
     done: "Déjà fait aujourd'hui",
     rewards: 'Récompenses',
     approve: 'Valider',

@@ -10,6 +10,10 @@ CONF_CREATE_UNIFIED_LIST = "create_unified_list"
 CONF_CREATE_ASSIGNEE_LISTS = "create_assignee_lists"
 # Minutes before a routine, a moment or a task starts or ends at which Hopla fires an event, e.g. "10,5".
 CONF_NOTICE_MINUTES = "notice_minutes"
+# The morning briefing: its time ("07:30", empty = off) and whose tasks it lists
+# (user ids and "none" for the tasks of nobody; empty = everybody).
+CONF_BRIEFING_TIME = "briefing_time"
+CONF_BRIEFING_MEMBERS = "briefing_members"
 # Home Assistant users who may approve, edit and spend points, and the hashed
 # four-digit code that opens parent mode on a shared tablet.
 CONF_PARENT_USERS = "parent_users"

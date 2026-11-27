@@ -15,10 +15,11 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (DOMAIN, CONF_URL, CONF_TOKEN, CONF_SHOW_DUE_IN, CONF_SHOW_NO_DUE_DATE,
-                    CONF_CREATE_UNIFIED_LIST, CONF_CREATE_ASSIGNEE_LISTS, CONF_NOTICE_MINUTES, CONF_PARENT_USERS, CONF_PARENT_PIN,
+                    CONF_CREATE_UNIFIED_LIST, CONF_CREATE_ASSIGNEE_LISTS, CONF_NOTICE_MINUTES, CONF_BRIEFING_TIME, CONF_BRIEFING_MEMBERS, CONF_PARENT_USERS, CONF_PARENT_PIN,
                     CONF_PARENT_PIN_HASH, CONF_PARENT_PIN_SALT)
 from .api import HoplaApiClient
 from .notices import DEFAULT_MINUTES_BEFORE
+from .briefing import NOBODY
 from .parental import hash_pin, valid_pin
 
 _LOGGER = logging.getLogger(__name__)
@@ -130,6 +131,8 @@ class HoplaOptionsFlowHandler(config_entries.OptionsFlow):
                 CONF_CREATE_UNIFIED_LIST: user_input.get(CONF_CREATE_UNIFIED_LIST, True),
                 CONF_CREATE_ASSIGNEE_LISTS: user_input.get(CONF_CREATE_ASSIGNEE_LISTS, False),
                 CONF_NOTICE_MINUTES: user_input.get(CONF_NOTICE_MINUTES, DEFAULT_MINUTES_BEFORE),
+                CONF_BRIEFING_TIME: (user_input.get(CONF_BRIEFING_TIME) or "").strip(),
+                CONF_BRIEFING_MEMBERS: user_input.get(CONF_BRIEFING_MEMBERS, []),
             }
 
             # Workaround to being able to use the same parameters in both config and options flow. 
@@ -146,6 +149,11 @@ class HoplaOptionsFlowHandler(config_entries.OptionsFlow):
         users = [user for user in await self.hass.auth.async_get_users()
                  if user.is_active and not user.system_generated]
         user_options = [{"value": user.id, "label": user.name or user.id} for user in users]
+        # Whose tasks the morning briefing lists: each member, and the tasks of nobody.
+        members = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id, {}).get("family_members", [])
+        nobody = "Tâches sans personne" if self.hass.config.language.startswith("fr") else "Tasks for nobody"
+        briefing_options = [{"value": str(m.user_id), "label": m.display_name or m.username}
+                            for m in members if m.is_active] + [{"value": NOBODY, "label": nobody}]
 
         return self.async_show_form(
             step_id="init",
@@ -177,5 +185,14 @@ class HoplaOptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_NOTICE_MINUTES,
                     default=self.entry.data.get(CONF_NOTICE_MINUTES, DEFAULT_MINUTES_BEFORE)
                 ): str,
+                vol.Optional(
+                    CONF_BRIEFING_TIME,
+                    default=self.entry.data.get(CONF_BRIEFING_TIME, "")
+                ): str,
+                vol.Optional(
+                    CONF_BRIEFING_MEMBERS,
+                    default=[str(v) for v in self.entry.data.get(CONF_BRIEFING_MEMBERS, [])]
+                ): SelectSelector(SelectSelectorConfig(
+                    options=briefing_options, multiple=True, mode=SelectSelectorMode.LIST)),
             }),
         )
