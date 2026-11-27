@@ -70,6 +70,23 @@ def pending_approvals(tasks, history, members):
     return pending
 
 
+def held_hops(tasks, history):
+    """Hops that wait for a parent, per member: {user_id: hops}.
+
+    Each completion kept back (pointsHeld) is worth the points of its task,
+    since nothing is credited until a parent validates the task.
+    """
+    points = {task.id: max(0, task.points or 0) for task in tasks}
+    held = {}
+    for occurrence in history:
+        if not occurrence.points_held or occurrence.status != 1 or occurrence.completed_by is None:
+            continue
+        hops = points.get(occurrence.chore_id, 0)
+        if hops:
+            held[occurrence.completed_by] = held.get(occurrence.completed_by, 0) + hops
+    return held
+
+
 class ApprovalTracker:
     """Fire one event when a task starts waiting for approval and one when it stops.
 

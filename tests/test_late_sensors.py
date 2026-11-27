@@ -40,7 +40,7 @@ class LateSensorTests(unittest.TestCase):
         self.namespace = {
             "DOMAIN": "hopla", "callback": lambda f: f, "SensorEntity": object, "HoplaMember": object,
             "HomeAssistant": object, "ConfigEntry": object, "AddEntitiesCallback": object,
-            **{name: sensor_class(name) for name in ("HoplaPendingApprovalSensor", "HoplaRewardsSensor",
+            **{name: sensor_class(name) for name in ("HoplaPendingApprovalSensor", "HoplaBriefingSensor", "HoplaRewardsSensor",
                                                      "HoplaBonusSensor", "HoplaGamesSensor", "HoplaPointsSensor")},
         }
         exec(compile(ast.Module(body=[setup], type_ignores=[]), "family_sensor", "exec"), self.namespace)
@@ -58,7 +58,7 @@ class LateSensorTests(unittest.TestCase):
         coordinator.rewards = []
         members = [SimpleNamespace(user_id=2, is_active=True)]
         added = self.run_setup(coordinator, members)
-        self.assertEqual(sorted(added), ["HoplaPendingApprovalSensor", "HoplaPointsSensor", "HoplaRewardsSensor"])
+        self.assertEqual(sorted(added), ["HoplaBriefingSensor", "HoplaPendingApprovalSensor", "HoplaPointsSensor", "HoplaRewardsSensor"])
         added.clear()
         coordinator.refresh()
         self.assertEqual(added, [], "nothing new without games data")

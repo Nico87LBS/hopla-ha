@@ -275,6 +275,7 @@ class HoplaChoreHistory:
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     timer_updated_at: Optional[datetime] = None
+    points_held: bool = False
 
     @classmethod
     def from_json(cls, data: dict) -> "HoplaChoreHistory":
@@ -294,6 +295,7 @@ class HoplaChoreHistory:
             start_time=_parse_datetime(data.get("startTime")),
             end_time=_parse_datetime(data.get("endTime")),
             timer_updated_at=_parse_datetime(data.get("timerUpdatedAt")),
+            points_held=data.get("pointsHeld") is True,
         )
 
     @classmethod

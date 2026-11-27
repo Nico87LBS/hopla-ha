@@ -1,22 +1,23 @@
 """The Hopla integration."""
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse, callback
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.event import async_call_later, async_track_point_in_utc_time
+from homeassistant.helpers.event import async_call_later, async_track_point_in_utc_time, async_track_time_change
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.util import dt as dt_util
-from .const import (DOMAIN, CONF_NOTICE_MINUTES, CONF_URL, CONF_TOKEN, CONF_SHOW_DUE_IN, LIVE_REFRESH_INTERVAL, OFFLINE_REFRESH_INTERVAL,
+from .const import (DOMAIN, CONF_NOTICE_MINUTES, CONF_BRIEFING_TIME, CONF_BRIEFING_MEMBERS, CONF_URL, CONF_TOKEN, CONF_SHOW_DUE_IN, LIVE_REFRESH_INTERVAL, OFFLINE_REFRESH_INTERVAL,
                     CONF_PARENT_USERS, CONF_PARENT_PIN_HASH, CONF_PARENT_PIN_SALT)
 from .api import HoplaApiClient
 from .frontend import async_setup_frontend
 from .completion_history import async_completed_occurrences
-from .approval import ApprovalTracker, STATUS_PENDING_APPROVAL, pending_approvals, member_name
+from .approval import ApprovalTracker, STATUS_PENDING_APPROVAL, held_hops, pending_approvals, member_name
 from .games import (ChallengeResultTracker, GamesTracker, NextChangeRefresh, PointsLedgerTracker, games_today,
                     pending_results, rated_challenges, history_page, journal_page, presets as points_presets)
 from .realtime import RealtimeListener
@@ -24,6 +25,7 @@ from .reminders import ReminderScheduler
 from .chrono import ChronoTracker
 from .icons import with_icons
 from .notices import NoticeScheduler, DEFAULT_MINUTES_BEFORE
+from .briefing import EVENT_DAILY_BRIEFING, briefing_tasks, parse_time
 from .presence import present_tasks
 from .parental import (ParentGuard, ParentModeError, RewardRequestTracker, pending_rewards,
                        PARENT_MODE_DURATION)
@@ -339,11 +341,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # What she did before leaving can still be approved.
         coordinator.pending_approvals = pending_approvals(all_tasks, history, family_members)
         approvals.update(coordinator.pending_approvals, entry.entry_id)
+        coordinator.held_hops = held_hops(all_tasks, history)
         reminders.update(tasks, family_members, entry.entry_id)
         chronos.update(tasks, family_members, entry.entry_id)
         notices.update(tasks, getattr(coordinator, "games_today", None), family_members, entry.entry_id,
                        entry.data.get(CONF_NOTICE_MINUTES, DEFAULT_MINUTES_BEFORE))
+        coordinator.present_tasks = tasks
+        coordinator.briefing = compute_briefing()
         return tasks
+
+    def compute_briefing() -> dict:
+        # Today's tasks without an hour, in the family's zone and for the chosen people.
+        zone = (getattr(coordinator, "family_timezone", None) or {}).get("timezone")
+        try:
+            tz = ZoneInfo(zone) if zone else dt_util.get_default_time_zone()
+        except (ZoneInfoNotFoundError, ValueError):
+            tz = dt_util.get_default_time_zone()
+        names = {member.user_id: member.display_name or member.username for member in family_members}
+        return briefing_tasks(getattr(coordinator, "present_tasks", []), names, datetime.now(tz).date(), tz,
+                              entry.data.get(CONF_BRIEFING_MEMBERS, []))
 
     coordinator = DataUpdateCoordinator(
         hass,
@@ -354,6 +370,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     coordinator.rewards = None
     coordinator.pending_approvals = []
+    coordinator.held_hops = {}
     coordinator.pending_rewards = []
     coordinator.points_presets = None
     coordinator.points_history = []
@@ -362,7 +379,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator.pending_challenge_results = []
     coordinator.family_timezone = None
     coordinator.all_tasks = []
+    coordinator.present_tasks = []
+    coordinator.briefing = None
     await coordinator.async_config_entry_first_refresh()
+
+    # The morning briefing: one event a day, only when there is something to say.
+    briefing_at = parse_time(entry.data.get(CONF_BRIEFING_TIME))
+    if briefing_at:
+        @callback
+        def fire_briefing(_now) -> None:
+            briefing = compute_briefing()
+            coordinator.briefing = briefing
+            coordinator.async_update_listeners()
+            if briefing["count"]:
+                hass.bus.async_fire(EVENT_DAILY_BRIEFING, {**briefing, "config_entry_id": entry.entry_id})
+        entry.async_on_unload(async_track_time_change(hass, fire_briefing, hour=briefing_at[0], minute=briefing_at[1], second=0))
 
     @callback
     def live_status_changed(connected: bool) -> None:

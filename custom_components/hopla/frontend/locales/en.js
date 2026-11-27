@@ -43,6 +43,8 @@ export default {
     pending: 'Waiting for approval',
     points_pending: "Hops to approve",
     points_pending_title: "The hops for this task wait for a parent to approve them",
+    held_parent: '{count} hops to approve',
+    held_child: '{count} hops held back',
     done: 'Done today',
     rewards: 'Rewards',
     approve: 'Approve',
